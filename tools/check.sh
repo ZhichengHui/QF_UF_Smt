@@ -3,10 +3,10 @@
 # Each call works in its own directory on the host, so calls can run concurrently.
 # TIMEOUT (seconds, default 400) bounds each proof file in mode proof.
 # Usage:
-#   tools/check.sh build            build the heaps QFUF and QFUF_Spec (needed after urust/ or spec/ change)
-#   tools/check.sh proof [FILE...]  process proof theories (default proof/QFUF_Proof.thy; a directory
-#                                   stands for its */*.thy) on the QFUF_Spec
-#                                   heap and print their messages; files are paths relative to the repo
+#   tools/check.sh build            build the heaps QFUF, QFUF_Spec and QFUF_Pure
+#   tools/check.sh proof [FILE...]  process proof theories on the QFUF_Pure heap and print their messages
+#                                   (default proof/QFUF_Proof.thy; paths relative to the repo; a directory
+#                                   stands for its */*.thy). The heaps are rebuilt first if needed.
 #   tools/check.sh session          build the session QFUF_Proof without quick_and_dirty (final check)
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -14,12 +14,12 @@ SSH="ssh -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=8
 R=/disk/scratch/s2982359/qfuf
 I='~/isabelle/Isabelle2026/bin/isabelle'
 B=$R/base
-DIRS="-d ~/builds/AutoCorrode -d $B/urust -d $B/spec -d proof"
-BUILD="$I build -b -o threads=16 -d ~/builds/AutoCorrode -d $B/urust -d $B/spec QFUF_Spec"
+DIRS="-d ~/builds/AutoCorrode -d $B/urust -d $B/spec -d $B/pure -d proof"
+BUILD="$I build -b -o threads=16 -d ~/builds/AutoCorrode -d $B/urust -d $B/spec -d $B/pure QFUF_Pure"
 mode=${1:-proof}; shift || true
 case $mode in
-  build) cmd="$BUILD 2>&1 | tail -40" ;;
-  session) cmd="$I build -o threads=16 $DIRS QFUF_Proof 2>&1 | tail -60" ;;
+  build) cmd="$BUILD 2>&1 | tail -40; " ;;
+  session) cmd="$I build -o threads=16 $DIRS QFUF_Proof 2>&1 | tail -60; " ;;
   proof)
     files=""
     for a in ${*:-proof/QFUF_Proof.thy}; do
@@ -29,7 +29,7 @@ case $mode in
     n=0
     for f in $files; do
       n=$((n+1))
-      cmd+="(timeout ${TIMEOUT:-400} $I process_theories -l QFUF_Spec $DIRS -O -U -m 150 -o threads=4 -o quick_and_dirty -f $f > out$n.txt 2>&1; echo \"EXIT \$?\" >> out$n.txt) & "
+      cmd+="(timeout ${TIMEOUT:-400} $I process_theories -l QFUF_Pure $DIRS -O -U -m 150 -o threads=4 -o quick_and_dirty -f $f > out$n.txt 2>&1; echo \"EXIT \$?\" >> out$n.txt) & "
     done
     cmd+="wait; "
     n=0
@@ -40,4 +40,4 @@ case $mode in
   *) echo "unknown mode $mode"; exit 2 ;;
 esac
 W=$R/run-$$-$RANDOM
-tar -C "$ROOT" -czf - urust spec proof | $SSH "mkdir -p $W $B && tar -C $W -xzf - && rsync -a --delete $W/urust/ $B/urust/ && rsync -a --delete $W/spec/ $B/spec/ && cd $W && { $cmd true; }; rm -rf $W" 2>&1 | grep -v 'post-quantum\|store now, decrypt\|server may need\|openssh.com/pq'
+tar -C "$ROOT" -czf - urust spec pure proof | $SSH "mkdir -p $W $B && tar -C $W -xzf - && rsync -a --delete $W/urust/ $B/urust/ && rsync -a --delete $W/spec/ $B/spec/ && rsync -a --delete $W/pure/ $B/pure/ && cd $W && { $cmd true; }; rm -rf $W" 2>&1 | grep -v 'post-quantum\|store now, decrypt\|server may need\|openssh.com/pq'
