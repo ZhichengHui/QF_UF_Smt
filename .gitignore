@@ -1,1 +1,4 @@
 target/
+scratch/
+proof/v/
+proof/Scratch.thy

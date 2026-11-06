@@ -1,0 +1,4 @@
+session "QFUF_Spec" = "QFUF" +
+  options [document = false]
+  theories
+    QFUF_Spec
