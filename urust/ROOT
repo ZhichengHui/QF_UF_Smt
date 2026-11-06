@@ -1,0 +1,4 @@
+session "QFUF" = "AutoCorrode" +
+  options [document = false]
+  theories
+    QFUF_Funs
