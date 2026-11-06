@@ -11,7 +11,12 @@
 #   tools/check.sh session          build the session QFUF_Proof without quick_and_dirty (final check)
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-SSH="ssh -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=8 -J s2982359@ssh.inf.ed.ac.uk s2982359@s2982359.pgr.inf.ed.ac.uk"
+# The gateway forwards to the host's IPv6 address, which is unreachable; nc -4 goes over IPv4.
+host() {
+  ssh -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=8 \
+    -o ProxyCommand='ssh -q s2982359@ssh.inf.ed.ac.uk nc -4 s2982359.pgr.inf.ed.ac.uk 22' \
+    s2982359@s2982359.pgr.inf.ed.ac.uk "$@"
+}
 R=/disk/scratch/s2982359/qfuf
 I='~/isabelle/Isabelle2026/bin/isabelle'
 B=$R/base
@@ -41,4 +46,4 @@ case $mode in
   *) echo "unknown mode $mode"; exit 2 ;;
 esac
 W=$R/run-$$-$RANDOM
-tar -C "$ROOT" -czf - urust spec pure proof | $SSH "mkdir -p $W $B && tar -C $W -xzf - && rsync -a --delete $W/urust/ $B/urust/ && rsync -a --delete $W/spec/ $B/spec/ && rsync -a --delete $W/pure/ $B/pure/ && cd $W && { $cmd true; }; rm -rf $W" 2>&1 | grep -v 'post-quantum\|store now, decrypt\|server may need\|openssh.com/pq'
+tar -C "$ROOT" -czf - urust spec pure proof | host "mkdir -p $W $B && tar -C $W -xzf - && rsync -a --delete $W/urust/ $B/urust/ && rsync -a --delete $W/spec/ $B/spec/ && rsync -a --delete $W/pure/ $B/pure/ && cd $W && { $cmd true; }; rm -rf $W" 2>&1 | grep -v 'post-quantum\|store now, decrypt\|server may need\|openssh.com/pq'

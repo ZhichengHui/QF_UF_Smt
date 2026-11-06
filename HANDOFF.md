@@ -37,7 +37,7 @@
   - 前置条件：`wf_problem`、`sizes_ok`（各个 Vec 的长度小于 2^63）、`length atoms < urust_fuel`。
 - `pure/QFUF_Pure.thy`：完整通过，没有 sorry。
 - `proof/QFUF_Proof.thy` 中已逐个检查通过的契约（检查时其余引理换成 sorry）：`clause_holds`、`prop_holds`、`merge`、`congruent`、`scan_row`、`scan`、`close`、`rep_args`、`build_model`、`init_rep`、`diseqs_ok`，以及 `search_rec_spec`、`solve_unsat_any_domain` 和所有辅助引理。
-- 证明已写好但还没检查：`assert_eqs_spec`、`finish_spec`、`theory_check_spec`、`search_rec_step_spec`、`solve_spec`（在提交 `9dccbe3` 中）。写好时计算主机失联，所以这几个能否通过还未知，可能还需要再调一两轮。
+- 证明已写好但还没检查：`assert_eqs_spec`、`finish_spec`、`theory_check_spec`、`search_rec_step_spec`、`solve_spec`（在提交 `9dccbe3` 中）。写好时计算主机失联（原因是 `-J` 走 IPv6，现已改用上面的命令），所以这几个能否通过还未知，可能还需要再调一两轮。
 - 文件中没有 `sorry`、`oops` 或 `apply fail`。整个会话还没有不带 quick_and_dirty 完整构建过。
 
 ## 下一步
@@ -52,7 +52,7 @@
 
 ## 检查环境与经验
 
-- 证明都在计算主机上检查：`ssh -J s2982359@ssh.inf.ed.ac.uk s2982359@s2982359.pgr.inf.ed.ac.uk`，Isabelle2026，AutoCorrode 在 `~/builds/AutoCorrode`（提交 `d15effd`，与本地 `~/Work/AutoCorrode` main 一致）。本机内存不足，不在本机跑 Isabelle。本地的 isabelle-pool-server MCP 连不上，未使用。
+- 证明都在计算主机上检查：`ssh -o ProxyCommand='ssh -q s2982359@ssh.inf.ed.ac.uk nc -4 s2982359.pgr.inf.ed.ac.uk 22' s2982359@s2982359.pgr.inf.ed.ac.uk`（`-J` 方式会走不通的 IPv6），Isabelle2026，AutoCorrode 在 `~/builds/AutoCorrode`（提交 `d15effd`，与本地 `~/Work/AutoCorrode` main 一致）。本机内存不足，不在本机跑 Isabelle。本地的 isabelle-pool-server MCP 连不上，未使用。
 - `tools/check.sh` 的模式：
   - `build`：构建三层 heap；
   - `proof [FILE|DIR...]`：在 `QFUF_Pure` heap 上并行运行 `process_theories` 并打印消息，目录参数代表其下的 `*/*.thy`；
@@ -71,4 +71,4 @@
 
 ## 计算主机上的遗留进程
 
-早期检查脚本超时时只结束了外层进程，留下了 19 个 QFUF 的 `poly` 进程。它们的工作目录是 `/tmp/isabelle-s2982359/private*/Draft`，目录中的文件含 "QFUF"。识别方法：`readlink /proc/<pid>/cwd` 在该路径下，并且 `grep -rqs QFUF <cwd>` 能匹配。用户已授权结束这些进程。同一主机上 `explore-postcond-proof`、`frontend-corpus` 等任务的进程不属于本任务，不能动。
+早期检查遗留的 19 个 QFUF `poly` 进程已经结束（用户授权，结束后剩余 0 个）。
