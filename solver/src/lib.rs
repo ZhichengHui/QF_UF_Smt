@@ -135,39 +135,65 @@ fn close(p: &Problem, rep: &mut Vec<usize>) {
     }
 }
 
+/// The representatives of the terms `args`.
+fn rep_args(rep: &[usize], args: &[usize]) -> Vec<usize> {
+    let mut out = args.to_vec();
+    for k in 0..out.len() {
+        out[k] = rep[out[k]];
+    }
+    out
+}
+
 /// The model of a congruence-closed partition: each term's value is its representative.
 fn build_model(p: &Problem, rep: &[usize]) -> Model {
-    let n = p.terms.len();
-    let mut entries = vec![Entry { fun: 0, args: Vec::new(), val: 0 }; n];
-    for i in 0..n {
-        let mut args = p.terms[i].args.clone();
-        for k in 0..args.len() {
-            args[k] = rep[args[k]];
-        }
-        entries[i] = Entry { fun: p.terms[i].fun, args: args, val: rep[i] };
+    let mut entries = vec![Entry { fun: 0, args: Vec::new(), val: 0 }; p.terms.len()];
+    for i in 0..p.terms.len() {
+        entries[i] = Entry { fun: p.terms[i].fun, args: rep_args(rep, &p.terms[i].args), val: rep[i] };
     }
     Model { entries: entries }
 }
 
-/// A model in which exactly the atoms `k` with `a[k]` hold, if there is one.
-fn theory_check(p: &Problem, a: &[bool]) -> Option<Model> {
-    let n = p.terms.len();
+/// The partition of `n` terms into singletons.
+fn init_rep(n: usize) -> Vec<usize> {
     let mut rep = vec![0; n];
     for i in 0..n {
         rep[i] = i;
     }
+    rep
+}
+
+/// Merges the two sides of every atom `k` with `a[k]`.
+fn assert_eqs(p: &Problem, a: &[bool], rep: &mut Vec<usize>) {
     for k in 0..p.atoms.len() {
         if a[k] {
-            merge(&mut rep, p.atoms[k].lhs, p.atoms[k].rhs);
+            merge(rep, p.atoms[k].lhs, p.atoms[k].rhs);
         }
     }
-    close(p, &mut rep);
+}
+
+/// Are the two sides of every atom `k` without `a[k]` in different classes?
+fn diseqs_ok(p: &Problem, a: &[bool], rep: &[usize]) -> bool {
     for k in 0..p.atoms.len() {
         if !a[k] && rep[p.atoms[k].lhs] == rep[p.atoms[k].rhs] {
-            return None;
+            return false;
         }
     }
-    Some(build_model(p, &rep))
+    true
+}
+
+/// The model of the closed partition `rep` if it keeps the sides of every unset atom apart.
+/// `rep` is `&mut` although `finish` only reads it: then `theory_check` passes `rep` on without
+/// reading it after `close`, which AutoCorrode's `crush` could not handle.
+fn finish(p: &Problem, a: &[bool], rep: &mut Vec<usize>) -> Option<Model> {
+    if diseqs_ok(p, a, rep) { Some(build_model(p, rep)) } else { None }
+}
+
+/// A model in which exactly the atoms `k` with `a[k]` hold, if there is one.
+fn theory_check(p: &Problem, a: &[bool]) -> Option<Model> {
+    let mut rep = init_rep(p.terms.len());
+    assert_eqs(p, a, &mut rep);
+    close(p, &mut rep);
+    finish(p, a, &mut rep)
 }
 
 /// Tries every completion of the assignment `a` of atoms `k..`.

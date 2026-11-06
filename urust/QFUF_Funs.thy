@@ -92,41 +92,74 @@ definition "close" :: \<open>Problem \<Rightarrow> (('addr, 'gv, (64 word) list)
     }
   \<rbrakk>\<close>
 
+(* Rust: rep_args *)
+definition "rep_args" :: \<open>((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, (64 word) list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>rep_args \<equiv> \<lambda>rep args. FunctionBody \<lbrakk>
+    let mut out = args;
+    for k in 0_usize .. len(*out) {
+      *(out[k]) = rep[(*out)[k]];
+    };
+    *out
+  \<rbrakk>\<close>
+
 (* Rust: build_model *)
 definition "build_model" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, Model, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>build_model \<equiv> \<lambda>p rep. FunctionBody \<lbrakk>
-    let n = len(p.Problem_terms);
-    let mut entries = vec_from_elem(Entry_mk { Entry_fun: 0_usize, Entry_args: [], Entry_val: 0_usize }, n);
-    for i in 0_usize .. n {
-      let mut args = p.Problem_terms[i].Term_args;
-      for k in 0_usize .. len(*args) {
-        *(args[k]) = rep[(*args)[k]];
-      };
-      *(entries[i]) = Entry_mk { Entry_fun: p.Problem_terms[i].Term_fun, Entry_args: *args, Entry_val: rep[i] };
+    let mut entries = vec_from_elem(Entry_mk { Entry_fun: 0_usize, Entry_args: [], Entry_val: 0_usize }, len(p.Problem_terms));
+    for i in 0_usize .. len(p.Problem_terms) {
+      *(entries[i]) = Entry_mk { Entry_fun: p.Problem_terms[i].Term_fun, Entry_args: rep_args(rep, p.Problem_terms[i].Term_args), Entry_val: rep[i] };
     };
     Model_mk { Model_entries: *entries }
+  \<rbrakk>\<close>
+
+(* Rust: init_rep *)
+definition "init_rep" :: \<open>(64 word) \<Rightarrow> ('s, (64 word) list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>init_rep \<equiv> \<lambda>n. FunctionBody \<lbrakk>
+    let mut rep = vec_from_elem(0_usize, n);
+    for i in 0_usize .. n {
+      *(rep[i]) = i;
+    };
+    *rep
+  \<rbrakk>\<close>
+
+(* Rust: assert_eqs *)
+definition "assert_eqs" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>assert_eqs \<equiv> \<lambda>p a rep. FunctionBody \<lbrakk>
+    for k in 0_usize .. len(p.Problem_atoms) {
+      if a[k] {
+        merge(rep, p.Problem_atoms[k].Atom_lhs, p.Problem_atoms[k].Atom_rhs);
+      }
+    }
+  \<rbrakk>\<close>
+
+(* Rust: diseqs_ok *)
+definition "diseqs_ok" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>diseqs_ok \<equiv> \<lambda>p a rep. FunctionBody \<lbrakk>
+    for k in 0_usize .. len(p.Problem_atoms) {
+      if (!(a[k])) && ((rep[p.Problem_atoms[k].Atom_lhs]) == (rep[p.Problem_atoms[k].Atom_rhs])) {
+        return false;
+      }
+    };
+    true
+  \<rbrakk>\<close>
+
+(* Rust: finish *)
+definition "finish" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, Model option, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>finish \<equiv> \<lambda>p a rep. FunctionBody \<lbrakk>
+    if diseqs_ok(p, a, *rep) {
+      Some(build_model(p, *rep))
+    } else {
+      None
+    }
   \<rbrakk>\<close>
 
 (* Rust: theory_check *)
 definition "theory_check" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ('s, Model option, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>theory_check \<equiv> \<lambda>p a. FunctionBody \<lbrakk>
-    let n = len(p.Problem_terms);
-    let mut rep = vec_from_elem(0_usize, n);
-    for i in 0_usize .. n {
-      *(rep[i]) = i;
-    };
-    for k in 0_usize .. len(p.Problem_atoms) {
-      if a[k] {
-        merge(rep, p.Problem_atoms[k].Atom_lhs, p.Problem_atoms[k].Atom_rhs);
-      }
-    };
+    let mut rep = init_rep(len(p.Problem_terms));
+    assert_eqs(p, a, rep);
     close(p, rep);
-    for k in 0_usize .. len(p.Problem_atoms) {
-      if (!(a[k])) && (((*rep)[p.Problem_atoms[k].Atom_lhs]) == ((*rep)[p.Problem_atoms[k].Atom_rhs])) {
-        return None;
-      }
-    };
-    Some(build_model(p, *rep))
+    finish(p, a, rep)
   \<rbrakk>\<close>
 
 text \<open>Recursive group search: defined by iterating search_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>

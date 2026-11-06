@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Checks the Isabelle theories on the compute host (Isabelle2026, AutoCorrode in ~/builds/AutoCorrode).
 # Each call works in its own directory on the host, so calls can run concurrently.
-# TIMEOUT (seconds, default 400) bounds each proof file in mode proof.
+# TIMEOUT (seconds, default 400) bounds each proof file in mode proof; each check runs in its own process
+# group, which is killed (prover included) when the time is up.
 # Usage:
 #   tools/check.sh build            build the heaps QFUF, QFUF_Spec and QFUF_Pure
 #   tools/check.sh proof [FILE...]  process proof theories on the QFUF_Pure heap and print their messages
@@ -29,7 +30,7 @@ case $mode in
     n=0
     for f in $files; do
       n=$((n+1))
-      cmd+="(timeout ${TIMEOUT:-400} $I process_theories -l QFUF_Pure $DIRS -O -U -m 150 -o threads=4 -o quick_and_dirty -f $f > out$n.txt 2>&1; echo \"EXIT \$?\" >> out$n.txt) & "
+      cmd+="( setsid $I process_theories -l QFUF_Pure $DIRS -O -U -m 150 -o threads=4 -o quick_and_dirty -f $f < /dev/null > out$n.txt 2>&1 & J=\$!; ( sleep ${TIMEOUT:-400}; kill -- -\$J 2>/dev/null && echo TIMEOUT >> out$n.txt ) < /dev/null > /dev/null 2>&1 & T=\$!; wait \$J; echo \"EXIT \$?\" >> out$n.txt; kill \$T 2>/dev/null ) & "
     done
     cmd+="wait; "
     n=0
