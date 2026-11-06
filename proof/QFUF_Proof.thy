@@ -470,8 +470,9 @@ lemma assert_eqs_spec:
       and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
     in wp_raw_for_loop_framedI'\<close>)
   apply (crush_base specs add: merge_spec contracts add: merge_contract_def
-      simp add: unat_of_nat_eq less_Suc_eq)
-  apply fail
+      simp add: unat_of_nat_lt63 unat_of_nat_eq less_Suc_eq)
+  apply (auto simp add: asserted_Suc intro: cc_inv_assert cc_inv_atom_lt cc_inv_len64)
+  apply (auto simp add: cc_inv_def sizes_ok_def)
   done
 
 definition diseqs_ok_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word list \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
@@ -507,14 +508,35 @@ definition theory_check_contract :: \<open>Problem \<Rightarrow> bool list \<Rig
          | Some m \<Rightarrow> atom_vals (model_interp m) p = a\<rangle> in
      make_function_contract pre post\<close>
 
+definition finish_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow>
+      64 word list \<Rightarrow> ('s, Model option, 'abort) function_contract\<close> where
+  \<open>finish_contract p a rep g rs \<equiv>
+     let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star>
+        \<langle>cc_inv p (asserted p a (length (Problem_atoms p))) rs \<and> closed p rs \<and>
+         length a = length (Problem_atoms p) \<and> wf_problem p \<and> sizes_ok p \<and>
+         length rs = length (Problem_terms p)\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star>
+        \<langle>case r of
+           None \<Rightarrow> \<forall>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. atom_vals I p \<noteq> a
+         | Some m \<Rightarrow> atom_vals (model_interp m) p = a\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma finish_spec:
+  shows \<open>\<Gamma>; finish p a rep \<Turnstile>\<^sub>F finish_contract p a rep g rs\<close>
+  apply (crush_boot f: finish_def contract: finish_contract_def)
+  apply (crush_base specs add: diseqs_ok_spec build_model_spec
+      contracts add: diseqs_ok_contract_def build_model_contract_def
+      simp add: sizes_ok_def)
+  apply (auto intro: theory_none theory_some simp add: sizes_ok_def)
+  done
+
 lemma theory_check_spec:
   shows \<open>\<Gamma>; theory_check p a \<Turnstile>\<^sub>F theory_check_contract p a\<close>
   apply (crush_boot f: theory_check_def contract: theory_check_contract_def)
-  apply (crush_base specs add: init_rep_spec assert_eqs_spec close_spec diseqs_ok_spec build_model_spec
-      contracts add: init_rep_contract_def assert_eqs_contract_def close_contract_def diseqs_ok_contract_def
-        build_model_contract_def
-      simp add: unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq)
-  apply fail
+  apply (crush_base specs add: init_rep_spec assert_eqs_spec close_spec finish_spec
+      contracts add: init_rep_contract_def assert_eqs_contract_def close_contract_def finish_contract_def
+      simp add: unat_of_nat_lt63 unat_of_nat_eq)
+  apply (auto intro: cc_inv_init cc_inv_length)
   done
 
 subsection \<open>Search\<close>
@@ -542,7 +564,9 @@ lemma search_rec_step_spec:
   apply (auto simp add: unat_word_Suc63 unat_of_nat_eq Option.is_none_def split: option.splits
       intro: search_step_none)
   apply (auto dest: search_leaf_none search_leaf_theory_none search_leaf_some)
-  apply fail
+  apply (metis ext_ok_step le_neq_implies_less)
+  apply (metis ext_ok_all)
+  apply (blast dest: wf_lit)
   done
 
 lemma search_rec_spec:
@@ -571,7 +595,6 @@ lemma solve_spec:
   apply (crush_boot f: solve_def contract: solve_contract_def)
   apply (crush_base specs add: search_spec contracts add: search_contract_def split!: option.splits
       simp add: unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq ext_ok_start Answer_Sat_mk_def)
-  apply fail
   done
 
 text \<open>With \<^verbatim>\<open>Unsat\<close>, no interpretation over any domain makes the problem true.\<close>
