@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Checks the Isabelle theories on the compute host (Isabelle2026, AutoCorrode in ~/builds/AutoCorrode).
 # Each call works in its own directory on the host, so calls can run concurrently.
-# TIMEOUT (seconds, default 400) bounds each proof file in mode proof; each check runs in its own process
-# group, which is killed (prover included) when the time is up.
+# TIMEOUT (seconds, default 600) bounds each proof file in mode proof; each check runs in its own session
+# (setsid), and the whole session, poly included, is killed when the time is up or the check ends.
 # Usage:
 #   tools/check.sh build            build the heaps QFUF, QFUF_Spec and QFUF_Pure
 #   tools/check.sh proof [FILE...]  process proof theories on the QFUF_Pure heap and print their messages
@@ -31,11 +31,11 @@ case $mode in
     for a in ${*:-proof/QFUF_Proof.thy}; do
       if [ -d "$ROOT/$a" ]; then for f in "$ROOT/$a"/*/*.thy; do files+=" ${f#$ROOT/}"; done; else files+=" $a"; fi
     done
-    cmd="$BUILD > build.log 2>&1 || { tail -40 build.log; exit 1; }; "
+    cmd="kt() { for c in \$(pgrep -P \$1); do kt \$c; done; kill -KILL \$1 2>/dev/null; }; $BUILD > build.log 2>&1 || { tail -40 build.log; exit 1; }; "
     n=0
     for f in $files; do
       n=$((n+1))
-      cmd+="( setsid $I process_theories -l QFUF_Pure $DIRS -O -U -m 150 -o threads=4 -o quick_and_dirty -f $f < /dev/null > out$n.txt 2>&1 & J=\$!; ( sleep ${TIMEOUT:-400}; kill -- -\$J 2>/dev/null && echo TIMEOUT >> out$n.txt ) < /dev/null > /dev/null 2>&1 & T=\$!; wait \$J; echo \"EXIT \$?\" >> out$n.txt; kill \$T 2>/dev/null ) & "
+      cmd+="( setsid $I process_theories -l QFUF_Pure $DIRS -O -U -m 150 -o threads=4 -o quick_and_dirty -f $f < /dev/null > out$n.txt 2>&1 & J=\$!; ( sleep ${TIMEOUT:-600} && { echo TIMEOUT >> out$n.txt; kt \$J; pkill -KILL -s \$J; } ) < /dev/null > /dev/null 2>&1 & T=\$!; wait \$J; echo \"EXIT \$?\" >> out$n.txt; pkill -P \$T; kill \$T 2>/dev/null; pkill -KILL -s \$J; true ) & "
     done
     cmd+="wait; "
     n=0
