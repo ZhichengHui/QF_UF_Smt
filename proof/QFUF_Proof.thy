@@ -656,6 +656,11 @@ lemma solve_spec:
       simp add: unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq ext_ok_start Answer_Sat_mk_def)
   done
 
+text \<open>The statement of the specification, \<^const>\<open>solve_correct\<close> in \<^verbatim>\<open>QFUF_Spec\<close>.\<close>
+theorem solve_correct:
+  shows \<open>solve_correct \<Gamma>\<close>
+  unfolding solve_correct_def using solve_spec by blast
+
 end
 
 end
