@@ -656,12 +656,6 @@ lemma solve_spec:
       simp add: unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq ext_ok_start Answer_Sat_mk_def)
   done
 
-text \<open>With \<^verbatim>\<open>Unsat\<close>, no interpretation over any domain makes the problem true.\<close>
-lemma solve_unsat_any_domain:
-  assumes \<open>wf_problem p\<close> \<open>\<not> satisfiable p\<close>
-  shows \<open>\<not> problem_true (I :: nat \<Rightarrow> 'd list \<Rightarrow> 'd) p\<close>
-  using satisfiable_of_any_domain[OF assms(1)] assms(2) by blast
-
 end
 
 end

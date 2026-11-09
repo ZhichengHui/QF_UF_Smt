@@ -26,9 +26,6 @@ text \<open>
   Transcription choices (to check):
   \<^item> An interpretation of the sort and the symbols is a function \<open>I f vs\<close> giving the value of
     symbol \<open>f\<close> applied to the values \<open>vs\<close>. The domain in \<open>satisfiable\<close> is \<^typ>\<open>nat\<close>.
-    For the answer \<^verbatim>\<open>Unsat\<close> this loses nothing: a problem has finitely many terms, so a model
-    over any domain maps injectively into \<^typ>\<open>nat\<close>. The proof theories prove this (lemma
-    \<open>satisfiable_of_any_domain\<close>) and the corollary \<open>solve_unsat_any_domain\<close>.
     A symbol has no fixed arity: the same number applied to different numbers of arguments
     denotes different functions of the interpretation \<open>I f\<close> (a function on lists).
   \<^item> \<open>model_interp\<close> reads the model as the solver's documentation describes it: the sort is
