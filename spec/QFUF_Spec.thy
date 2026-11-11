@@ -109,8 +109,7 @@ begin
 
 definition solve_contract :: \<open>Problem \<Rightarrow> ('s, Answer, 'abort) function_contract\<close> where
   \<open>solve_contract p \<equiv>
-     let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length (Problem_atoms p) < urust_fuel\<rangle> in
+     let pre = can_alloc_reference \<star> \<langle>wf_problem p \<and> sizes_ok p\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
         \<langle>case r of
            Answer_Sat m \<Rightarrow> problem_true (model_interp m) p
@@ -118,11 +117,9 @@ definition solve_contract :: \<open>Problem \<Rightarrow> ('s, Answer, 'abort) f
      make_function_contract pre post\<close>
 
 text \<open>\<^const>\<open>solve_contract\<close> \<open>p\<close>:
-  \<^item> Precondition: \<^const>\<open>wf_problem\<close> \<open>p\<close>, \<^const>\<open>sizes_ok\<close> \<open>p\<close>, and fewer atoms than
-    \<^term>\<open>urust_fuel\<close>. The translation defines the recursive function \<^verbatim>\<open>search\<close> by unfolding
-    it \<^term>\<open>urust_fuel\<close> times (a locale parameter). \<^verbatim>\<open>search\<close> is called with
-    \<open>k = 0, 1, \<dots>, n\<close> for \<open>n\<close> atoms, so the calls are nested \<open>n + 1\<close> deep and need more fuel than
-    there are atoms.
+  \<^item> Precondition: \<^const>\<open>wf_problem\<close> \<open>p\<close> and \<^const>\<open>sizes_ok\<close> \<open>p\<close>. The contract does not mention
+    the fuel \<^term>\<open>urust_fuel\<close>; how much fuel \<^verbatim>\<open>solve\<close> needs is part of the specification
+    \<open>solve_correct\<close> below, not of the contract.
   \<^item> Answer \<^verbatim>\<open>Sat(m)\<close>: \<^const>\<open>model_interp\<close> \<open>m\<close> makes the problem true.
   \<^item> Answer \<^verbatim>\<open>Unsat\<close>: no interpretation over \<^typ>\<open>nat\<close> makes the problem true.
   \<^item> \<^const>\<open>make_function_contract\<close> makes the abort postcondition false, so the translated program
@@ -131,11 +128,60 @@ text \<open>\<^const>\<open>solve_contract\<close> \<open>p\<close>:
   \<^item> \<^term>\<open>can_alloc_reference\<close> is AutoCorrode's permission to allocate the solver's mutable
     locals; the postcondition returns it to the caller.\<close>
 
-definition solve_correct where
-  \<open>solve_correct \<Gamma> \<equiv> \<forall>p. \<Gamma>; solve p \<Turnstile>\<^sub>F solve_contract p\<close>
+end
 
-text \<open>\<^const>\<open>solve_correct\<close> \<open>\<Gamma>\<close> is the statement to prove: \<^verbatim>\<open>solve\<close> satisfies
-  \<^const>\<open>solve_contract\<close> for every problem. \<^verbatim>\<open>QFUF_Proof\<close> proves it as the theorem
+subsection \<open>The specification\<close>
+
+text \<open>The translation defines the recursive function \<^verbatim>\<open>search\<close> by unfolding it
+  \<open>urust_fuel\<close> times, where \<open>urust_fuel\<close> is the last parameter of the locale
+  \<^locale>\<open>QFUF_ctx\<close>; the innermost unfolding panics. \<^verbatim>\<open>solve\<close> therefore satisfies
+  \<^const>\<open>QFUF_ctx.solve_contract\<close> only when the fuel is large enough for the problem, and the specification
+  says that enough fuel exists: for every problem that satisfies the precondition there is a bound
+  such that \<^verbatim>\<open>solve\<close> satisfies the contract in every instance of \<^locale>\<open>QFUF_ctx\<close> whose fuel
+  is at least the bound.
+
+  The fuel is a parameter of \<^locale>\<open>QFUF_ctx\<close>, so this statement ranges over instances of the
+  locale and is made outside it. The assumptions of \<^locale>\<open>QFUF_ctx\<close> do not mention the fuel, so
+  its instances that differ only in the fuel share their assumptions. The locale \<^verbatim>\<open>QFUF_heap\<close>
+  below has the parameters and assumptions of \<^locale>\<open>QFUF_ctx\<close> except the fuel (it repeats the
+  locale \<^verbatim>\<open>QFUF_ctx\<close> of \<^verbatim>\<open>urust/QFUF_Locale.thy\<close> without its last line); each value of the
+  fuel gives an instance of \<^locale>\<open>QFUF_ctx\<close> with the parameters of \<^verbatim>\<open>QFUF_heap\<close>.\<close>
+
+locale QFUF_heap =
+  reference reference_types
+  + ref_1: reference_allocatable reference_types _ _ _ _ _ _ _ prism_1 \<comment> \<open>bool\<close>
+  + ref_2: reference_allocatable reference_types _ _ _ _ _ _ _ prism_2 \<comment> \<open>(64 word) list\<close>
+  + ref_3: reference_allocatable reference_types _ _ _ _ _ _ _ prism_3 \<comment> \<open>Entry list\<close>
+  + ref_4: reference_allocatable reference_types _ _ _ _ _ _ _ prism_4 \<comment> \<open>bool list\<close>
+  for reference_types :: \<open>'s::{sepalg} \<Rightarrow> 'addr \<Rightarrow> 'gv \<Rightarrow> 'abort \<Rightarrow> 'i prompt \<Rightarrow> 'o prompt_output \<Rightarrow> unit\<close>
+  and prism_1 :: \<open>('gv, bool) prism\<close>
+  and prism_2 :: \<open>('gv, (64 word) list) prism\<close>
+  and prism_3 :: \<open>('gv, Entry list) prism\<close>
+  and prism_4 :: \<open>('gv, bool list) prism\<close>
+begin
+
+abbreviation solve :: \<open>nat \<Rightarrow> Problem \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>solve fuel \<equiv>
+     QFUF_ctx.solve update_raw_fun dereference_raw_fun reference_raw_fun prism_1 prism_2 prism_3 prism_4 fuel\<close>
+
+abbreviation solve_contract :: \<open>Problem \<Rightarrow> ('s, Answer, 'abort) function_contract\<close> where
+  \<open>solve_contract \<equiv> QFUF_ctx.solve_contract can_alloc_reference\<close>
+
+text \<open>\<open>solve fuel\<close> is the translation's \<^verbatim>\<open>solve\<close> in the instance of \<^locale>\<open>QFUF_ctx\<close> with the
+  parameters of \<^verbatim>\<open>QFUF_heap\<close> and the fuel \<open>fuel\<close>; \<open>solve_contract\<close> is \<^const>\<open>QFUF_ctx.solve_contract\<close>
+  of that instance, which is the same for every fuel. Outside its locale, a constant defined in
+  \<^locale>\<open>QFUF_ctx\<close> takes as its first arguments the locale parameters on which its definition
+  depends: \<^verbatim>\<open>solve\<close> depends on the three reference operations, the four prisms and the fuel,
+  \<^const>\<open>QFUF_ctx.solve_contract\<close> only on \<^term>\<open>can_alloc_reference\<close>.\<close>
+
+definition solve_correct where
+  \<open>solve_correct \<Gamma> \<equiv>
+     \<forall>p. wf_problem p \<and> sizes_ok p \<longrightarrow> (\<exists>N. \<forall>fuel \<ge> N. \<Gamma>; solve fuel p \<Turnstile>\<^sub>F solve_contract p)\<close>
+
+text \<open>\<^const>\<open>solve_correct\<close> \<open>\<Gamma>\<close> is the statement to prove: for every problem \<open>p\<close> that satisfies
+  the precondition of \<^const>\<open>QFUF_ctx.solve_contract\<close> there is a bound \<open>N\<close> such that, in every
+  instance of \<^locale>\<open>QFUF_ctx\<close> with fuel at least \<open>N\<close>, \<^verbatim>\<open>solve\<close> \<open>p\<close> satisfies
+  \<^const>\<open>QFUF_ctx.solve_contract\<close> \<open>p\<close>. \<^verbatim>\<open>QFUF_Proof\<close> proves it as the theorem
   \<open>solve_correct\<close>.\<close>
 
 end

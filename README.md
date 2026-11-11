@@ -26,9 +26,11 @@ cargo test --release
 
 ## 规约与证明
 
-规约是 `spec/QFUF_Spec.thy` 中的定义 `solve_correct`：在前置条件 `wf_problem`、`sizes_ok`、原子数小于 `urust_fuel` 下，`solve` 回答 `Sat m` 时 `m` 使问题成立，回答 `Unsat` 时不存在论域为 `nat` 的模型，并且不 panic。各定义的含义和写法理由见该文件中的注释。
+合约是 `spec/QFUF_Spec.thy` 中 locale `QFUF_ctx` 内的定义 `solve_contract`：在前置条件 `wf_problem`、`sizes_ok` 下，`solve` 回答 `Sat m` 时 `m` 使问题成立，回答 `Unsat` 时不存在论域为 `nat` 的模型，并且不 panic。合约不涉及 fuel。
 
-`proof/QFUF_Proof.thy` 中的定理 `solve_correct` 证明了这一定义。
+翻译把递归函数 `search` 展开 `urust_fuel` 次，`urust_fuel` 是 locale `QFUF_ctx` 的参数，fuel 不够时最内层展开 panic。所以规约在 locale 之外对各 fuel 值的实例量化：`spec/QFUF_Spec.thy` 定义了 locale `QFUF_heap`（`QFUF_ctx` 去掉 fuel 参数，其余参数和假设相同），其中的定义 `solve_correct` 说：对每个满足前置条件的问题 `p`，存在 `N`，使得对所有 `fuel ≥ N`，fuel 为 `fuel` 的 `QFUF_ctx` 实例中的 `solve p` 满足 `solve_contract p`。各定义的含义和写法理由见该文件中的注释。
+
+`proof/QFUF_Proof.thy` 中的定理 `solve_correct`（locale `QFUF_heap` 内）证明了这一定义，取 `N = length (Problem_atoms p) + 1`。
 
 检查证明需要 Isabelle2026 和 AutoCorrode（`ZhichengHui/AutoCorrode` 的提交 `d15effd`）：
 

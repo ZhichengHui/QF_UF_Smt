@@ -650,16 +650,42 @@ lemma search_spec:
 subsection \<open>The top-level contract\<close>
 
 lemma solve_spec:
+  assumes fuel: \<open>length (Problem_atoms p) < urust_fuel\<close>
   shows \<open>\<Gamma>; solve p \<Turnstile>\<^sub>F solve_contract p\<close>
   apply (crush_boot f: solve_def contract: solve_contract_def)
   apply (crush_base specs add: search_spec contracts add: search_contract_def split!: option.splits
-      simp add: unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq ext_ok_start Answer_Sat_mk_def)
+      simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq ext_ok_start Answer_Sat_mk_def)
   done
 
-text \<open>The statement of the specification, \<^const>\<open>solve_correct\<close> in \<^verbatim>\<open>QFUF_Spec\<close>.\<close>
+text \<open>\<open>solve_spec\<close> needs fewer atoms than fuel: \<^verbatim>\<open>search\<close> is called with
+  \<open>k = 0, 1, \<dots>, n\<close> for \<open>n\<close> atoms, so the calls are nested \<open>n + 1\<close> deep.\<close>
+
+end
+
+subsection \<open>The specification\<close>
+
+context QFUF_heap
+begin
+
+lemma QFUF_ctxI:
+  \<open>QFUF_ctx update_raw_fun dereference_raw_fun reference_raw_fun points_to_raw' gref_can_store
+     new_gref_can_store can_alloc_reference prism_1 prism_2 prism_3 prism_4\<close>
+  by intro_locales
+
+text \<open>\<^verbatim>\<open>QFUF_heap\<close> has the assumptions of \<^locale>\<open>QFUF_ctx\<close>, so its parameters with any fuel
+  form an instance of \<^locale>\<open>QFUF_ctx\<close>, and the contract lemmas of \<^locale>\<open>QFUF_ctx\<close> apply.\<close>
+
+text \<open>The statement of the specification, \<^const>\<open>solve_correct\<close> in \<^verbatim>\<open>QFUF_Spec\<close>. The bound
+  is \<open>length (Problem_atoms p) + 1\<close>, the fuel that \<open>QFUF_ctx.solve_spec\<close> needs.\<close>
 theorem solve_correct:
   shows \<open>solve_correct \<Gamma>\<close>
-  unfolding solve_correct_def using solve_spec by blast
+proof (unfold solve_correct_def, intro allI impI)
+  fix p
+  have \<open>\<Gamma>; solve fuel p \<Turnstile>\<^sub>F solve_contract p\<close> if \<open>length (Problem_atoms p) < fuel\<close> for fuel
+    by (rule QFUF_ctx.solve_spec[OF QFUF_ctxI that])
+  then show \<open>\<exists>N. \<forall>fuel \<ge> N. \<Gamma>; solve fuel p \<Turnstile>\<^sub>F solve_contract p\<close>
+    by (intro exI[of _ \<open>length (Problem_atoms p) + 1\<close>]) simp
+qed
 
 end
 
