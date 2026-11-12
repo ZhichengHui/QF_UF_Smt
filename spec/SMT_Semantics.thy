@@ -122,6 +122,7 @@ fun smt_op_sort :: \<open>SmtOp \<Rightarrow> SmtSort list \<Rightarrow> SmtSort
 | \<open>smt_op_sort SmtOp_Bvor ss = (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)\<close>
 | \<open>smt_op_sort SmtOp_Bvadd ss = (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)\<close>
 | \<open>smt_op_sort SmtOp_Bvmul ss = (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)\<close>
+| \<open>smt_op_sort SmtOp_Bvxor ss = (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)\<close>
 | \<open>smt_op_sort SmtOp_Bvcomp ss = (if smt_bin_width ss \<noteq> None then Some (SmtSort_BitVec 1) else None)\<close>
 | \<open>smt_op_sort SmtOp_Bvult ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
 | \<open>smt_op_sort SmtOp_Bvule ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
