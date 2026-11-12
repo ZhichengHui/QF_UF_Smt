@@ -1,4 +1,5 @@
-session "QFUF_Proof" = "QFUF_Pure" +
+session "QFUF_Proof" = "QFUF_Spec" +
   options [document = false]
   theories
+    QFUF_Pure
     QFUF_Proof

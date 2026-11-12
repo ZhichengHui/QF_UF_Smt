@@ -5,7 +5,7 @@ begin
 section \<open>The top-level specification of the QF\_UF solver\<close>
 
 text \<open>
-  Source: \<^verbatim>\<open>solver/src/lib.rs\<close>. The specified function is \<^verbatim>\<open>pub fn solve(p: &Problem) -> Answer\<close>;
+  Source: \<^verbatim>\<open>core/src/lib.rs\<close>. The specified function is \<^verbatim>\<open>pub fn solve(p: &Problem) -> Answer\<close>;
   the translation passes \<^verbatim>\<open>p\<close> by value.
 
   A problem is a CNF formula over equalities between ground terms of one uninterpreted sort. Term

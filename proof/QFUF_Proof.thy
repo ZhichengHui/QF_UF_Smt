@@ -1,5 +1,5 @@
 theory QFUF_Proof
-  imports QFUF_Pure.QFUF_Pure
+  imports QFUF_Pure
 begin
 
 section \<open>Contracts of the solver's functions\<close>
