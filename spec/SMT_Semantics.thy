@@ -287,7 +287,7 @@ fun smt_op_sem :: \<open>SmtOp \<Rightarrow> sval list \<Rightarrow> sval\<close
 | \<open>smt_op_sem SmtOp_Bvsge vs = VBool (smt_bv_cmp SmtOp_Bvsge (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
 | \<open>smt_op_sem op vs =
      (let w = smt_bv_width (hd vs) in
-      foldl (\<lambda>a b. VBv w (smt_bv_bin op w (smt_bv_val a) (smt_bv_val b))) (hd vs) (tl vs))\<close>
+      VBv w (foldl (\<lambda>x v. smt_bv_bin op w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
 
 text \<open>The last case: the binary functions of \<^const>\<open>smt_bv_bin\<close>, and the left-associative ones with
   any number of arguments (for two arguments the fold is one application).\<close>
