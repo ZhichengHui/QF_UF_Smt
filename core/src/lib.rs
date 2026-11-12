@@ -221,3 +221,655 @@ pub fn solve(p: &Problem) -> Answer {
         None => Answer::Unsat,
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// The general problem structure: the interface to the SMT-LIB front end. These definitions are,
+// word for word, those of the front end (`frontend/src/problem.rs`); see there for their meaning.
+
+/// A sort.
+pub enum SmtSort {
+    Bool,
+    /// `(_ BitVec w)`, `w >= 1`.
+    BitVec(usize),
+    /// The uninterpreted sort with this number.
+    Uninterpreted(usize),
+}
+
+/// The theory function symbols of Core and FixedSizeBitVectors/QF_BV (SMT-LIB 2.6).
+pub enum SmtOp {
+    // Core
+    Not,
+    And,
+    Or,
+    Xor,
+    Implies,
+    Eq,
+    Distinct,
+    Ite,
+    // FixedSizeBitVectors
+    Concat,
+    /// `(_ extract i j)`.
+    Extract(usize, usize),
+    Bvnot,
+    Bvand,
+    Bvor,
+    Bvneg,
+    Bvadd,
+    Bvmul,
+    Bvudiv,
+    Bvurem,
+    Bvshl,
+    Bvlshr,
+    Bvult,
+    // QF_BV extensions
+    Bvnand,
+    Bvnor,
+    Bvxor,
+    Bvxnor,
+    Bvcomp,
+    Bvsub,
+    Bvsdiv,
+    Bvsrem,
+    Bvsmod,
+    Bvashr,
+    /// `(_ repeat i)`.
+    Repeat(usize),
+    /// `(_ zero_extend i)`.
+    ZeroExtend(usize),
+    /// `(_ sign_extend i)`.
+    SignExtend(usize),
+    /// `(_ rotate_left i)`.
+    RotateLeft(usize),
+    /// `(_ rotate_right i)`.
+    RotateRight(usize),
+    Bvule,
+    Bvugt,
+    Bvuge,
+    Bvslt,
+    Bvsle,
+    Bvsgt,
+    Bvsge,
+}
+
+/// A term.
+pub enum SmtTerm {
+    BoolConst(bool),
+    /// A bit-vector constant, least significant bit first.
+    BvConst(Vec<bool>),
+    /// The parameter with this number of the enclosing definition.
+    Param(usize),
+    /// A declared function symbol applied to arguments (none for a constant).
+    Fun(usize, Vec<SmtTerm>),
+    /// A defined function applied to arguments (one per parameter).
+    Def(usize, Vec<SmtTerm>),
+    /// A theory function symbol applied to arguments.
+    App(SmtOp, Vec<SmtTerm>),
+}
+
+/// A declared function symbol: the sorts of its arguments and of its result.
+pub struct SmtFun {
+    pub args: Vec<SmtSort>,
+    pub ret: SmtSort,
+}
+
+/// A defined function: the sorts of its parameters and of its result, and its body.
+pub struct SmtDef {
+    pub params: Vec<SmtSort>,
+    pub ret: SmtSort,
+    pub body: SmtTerm,
+}
+
+pub struct SmtProblem {
+    pub num_sorts: usize,
+    pub funs: Vec<SmtFun>,
+    pub defs: Vec<SmtDef>,
+    pub asserts: Vec<SmtTerm>,
+}
+
+/// A value: a truth value, a bit-vector (least significant bit first) or an element of an
+/// uninterpreted sort (an index into its domain).
+pub enum SmtValue {
+    Bool(bool),
+    Bv(Vec<bool>),
+    Elem(usize),
+}
+
+/// One point of a function table: the arguments and the value there.
+pub struct SmtEntry {
+    pub args: Vec<SmtValue>,
+    pub val: SmtValue,
+}
+
+/// The interpretation of a declared function symbol: at given arguments, the value of the first
+/// entry with these arguments, and `default` if there is none (for a constant: the first entry, if
+/// there is one).
+pub struct SmtInterp {
+    pub entries: Vec<SmtEntry>,
+    pub default: SmtValue,
+}
+
+/// A model: the size of the domain of every uninterpreted sort (at least 1; the elements are
+/// `Elem(0)` to `Elem(size - 1)`) and the interpretation of every declared function symbol.
+pub struct SmtModel {
+    pub domains: Vec<usize>,
+    pub funs: Vec<SmtInterp>,
+}
+
+/// The answer to `check-sat`. `Unknown` is the answer for a problem the solver does not handle.
+pub enum SmtAnswer {
+    Sat(SmtModel),
+    Unsat,
+    Unknown,
+}
+
+// ---------------------------------------------------------------------------------------------
+// Translation of a general problem into a problem of this solver.
+//
+// A general problem is in the fragment of this solver if no bit-vector sort, constant or function
+// occurs in it. For a well-sorted problem (as the front end produces), every sort is then Bool or
+// uninterpreted. All uninterpreted sorts become the one sort of this solver, and Booleans are
+// encoded:
+// * Two new constants TRUE and FALSE (terms 0 and 1), with the atoms `TRUE = TRUE` (atom 0,
+//   always true; the truth values are its two literals) and `TRUE = FALSE` (atom 1, false by a
+//   unit clause).
+// * A Boolean term becomes a literal: an application of a declared symbol `p` of result sort Bool
+//   is the atom `p(..) = TRUE`; the connectives, and `=`, `distinct`, `ite` on Booleans, get a new
+//   literal (a new constant `v` and the atom `v = TRUE`) defined by clauses (Tseitin encoding).
+// * A term of an uninterpreted sort becomes a term. A Boolean argument of a declared symbol is a
+//   new constant `c` with the clauses `l -> c = TRUE` and `not l -> c = FALSE`; an `ite` of an
+//   uninterpreted sort is a new constant `c` with `cond -> c = a` and `not cond -> c = b`.
+// * Each assertion is a unit clause.
+// Declared symbol `f` keeps its number; TRUE, FALSE and the new constants are numbered after the
+// declared symbols. A definition without parameters is translated once; a definition with
+// parameters is expanded where it is applied.
+
+/// A translated term: a term of this solver, or a literal (an atom with a polarity).
+pub enum Enc {
+    Term(usize),
+    Lit(usize, bool),
+}
+
+/// The state of the translation: the terms, atoms and clauses built so far, and the next unused
+/// function symbol.
+pub struct Tr {
+    pub terms: Vec<Term>,
+    pub atoms: Vec<Atom>,
+    pub clauses: Vec<Clause>,
+    pub next_fun: usize,
+}
+
+fn copy_enc(e: &Enc) -> Enc {
+    match e {
+        Enc::Term(i) => Enc::Term(*i),
+        Enc::Lit(a, pos) => Enc::Lit(*a, *pos),
+    }
+}
+
+fn add_term(s: Tr, fun: usize, args: Vec<usize>) -> (Tr, usize) {
+    let k = s.terms.len();
+    let mut terms = s.terms;
+    terms.push(Term { fun, args });
+    (Tr { terms, atoms: s.atoms, clauses: s.clauses, next_fun: s.next_fun }, k)
+}
+
+fn add_atom(s: Tr, lhs: usize, rhs: usize) -> (Tr, usize) {
+    let k = s.atoms.len();
+    let mut atoms = s.atoms;
+    atoms.push(Atom { lhs, rhs });
+    (Tr { terms: s.terms, atoms, clauses: s.clauses, next_fun: s.next_fun }, k)
+}
+
+fn add_clause(s: Tr, lits: Vec<Lit>) -> Tr {
+    let mut clauses = s.clauses;
+    clauses.push(Clause { lits });
+    Tr { terms: s.terms, atoms: s.atoms, clauses, next_fun: s.next_fun }
+}
+
+/// A new constant (a new function symbol applied to nothing); returns its term.
+fn new_const(s: Tr) -> (Tr, usize) {
+    let f = s.next_fun;
+    let (s, t) = add_term(Tr { terms: s.terms, atoms: s.atoms, clauses: s.clauses, next_fun: f + 1 }, f, Vec::new());
+    (s, t)
+}
+
+/// A new literal: a new constant `v` and the atom `v = TRUE`.
+fn new_lit(s: Tr) -> (Tr, usize) {
+    let (s, v) = new_const(s);
+    add_atom(s, v, 0)
+}
+
+fn lit(a: usize, pos: bool) -> Lit {
+    Lit { atom: a, pos }
+}
+
+/// The literal of a translated Boolean term.
+fn enc_lit(e: &Enc) -> (usize, bool) {
+    match e {
+        Enc::Lit(a, pos) => (*a, *pos),
+        Enc::Term(_) => (0, true),
+    }
+}
+
+/// The term of a translated term of an uninterpreted sort, or for a Boolean term a new constant
+/// equal to TRUE or FALSE as the literal holds.
+fn enc_term(s: Tr, e: &Enc) -> (Tr, usize) {
+    match e {
+        Enc::Term(i) => (s, *i),
+        Enc::Lit(a, pos) => {
+            let (s, c) = new_const(s);
+            let (s, ct) = add_atom(s, c, 0);
+            let (s, cf) = add_atom(s, c, 1);
+            let s = add_clause(s, vec![lit(*a, !*pos), lit(ct, true)]);
+            let s = add_clause(s, vec![lit(*a, *pos), lit(cf, true)]);
+            (s, c)
+        }
+    }
+}
+
+/// A new literal equivalent to the conjunction (`conj`) or disjunction of the literals `ls`.
+fn gate_andor(s: Tr, ls: &Vec<(usize, bool)>, conj: bool) -> (Tr, Enc) {
+    let (s, v) = new_lit(s);
+    let mut s = s;
+    // conj: v -> l_i for every i, and (all l_i) -> v. disj: l_i -> v, and v -> (some l_i).
+    let mut big = vec![lit(v, conj)];
+    let mut i: usize = 0;
+    while i < ls.len() {
+        let (a, pos) = ls[i];
+        if conj {
+            s = add_clause(s, vec![lit(v, false), lit(a, pos)]);
+        } else {
+            s = add_clause(s, vec![lit(v, true), lit(a, !pos)]);
+        }
+        big.push(lit(a, if conj { !pos } else { pos }));
+        i += 1;
+    }
+    let s = add_clause(s, big);
+    (s, Enc::Lit(v, true))
+}
+
+/// A new literal equivalent to `x xor y`.
+fn gate_xor(s: Tr, x: (usize, bool), y: (usize, bool)) -> (Tr, (usize, bool)) {
+    let (s, v) = new_lit(s);
+    let (a, pa) = x;
+    let (b, pb) = y;
+    let s = add_clause(s, vec![lit(v, false), lit(a, pa), lit(b, pb)]);
+    let s = add_clause(s, vec![lit(v, false), lit(a, !pa), lit(b, !pb)]);
+    let s = add_clause(s, vec![lit(v, true), lit(a, !pa), lit(b, pb)]);
+    let s = add_clause(s, vec![lit(v, true), lit(a, pa), lit(b, !pb)]);
+    (s, (v, true))
+}
+
+/// A new literal equivalent to `if c then x else y`.
+fn gate_ite(s: Tr, c: (usize, bool), x: (usize, bool), y: (usize, bool)) -> (Tr, Enc) {
+    let (s, v) = new_lit(s);
+    let (kc, pc) = c;
+    let (a, pa) = x;
+    let (b, pb) = y;
+    let s = add_clause(s, vec![lit(kc, !pc), lit(a, !pa), lit(v, true)]);
+    let s = add_clause(s, vec![lit(kc, !pc), lit(a, pa), lit(v, false)]);
+    let s = add_clause(s, vec![lit(kc, pc), lit(b, !pb), lit(v, true)]);
+    let s = add_clause(s, vec![lit(kc, pc), lit(b, pb), lit(v, false)]);
+    (s, Enc::Lit(v, true))
+}
+
+fn is_lit(e: &Enc) -> bool {
+    match e {
+        Enc::Lit(_, _) => true,
+        Enc::Term(_) => false,
+    }
+}
+
+/// `=` (chainable) or `distinct` (pairwise) on the translated arguments `es`.
+fn enc_eq(s: Tr, es: &Vec<Enc>, distinct: bool) -> (Tr, Enc) {
+    let mut s = s;
+    let mut ls = Vec::new();
+    let mut i: usize = 0;
+    while i < es.len() {
+        let mut j: usize = i + 1;
+        while j < es.len() {
+            if distinct || j == i + 1 {
+                // The literal of es[i] = es[j].
+                if is_lit(&es[i]) {
+                    let (s1, (x, px)) = gate_xor(s, enc_lit(&es[i]), enc_lit(&es[j]));
+                    s = s1;
+                    ls.push((x, if distinct { px } else { !px }));
+                } else {
+                    let (s1, ti) = enc_term(s, &es[i]);
+                    let (s2, tj) = enc_term(s1, &es[j]);
+                    let (s3, k) = add_atom(s2, ti, tj);
+                    s = s3;
+                    ls.push((k, !distinct));
+                }
+            }
+            j += 1;
+        }
+        i += 1;
+    }
+    gate_andor(s, &ls, true)
+}
+
+/// A theory function of Core applied to the translated arguments `es`.
+fn enc_app(s: Tr, o: &SmtOp, es: &Vec<Enc>) -> (Tr, Enc) {
+    match o {
+        SmtOp::Not => {
+            let (a, pos) = enc_lit(&es[0]);
+            (s, Enc::Lit(a, !pos))
+        }
+        SmtOp::And | SmtOp::Or => {
+            let mut ls = Vec::new();
+            let mut i: usize = 0;
+            while i < es.len() {
+                ls.push(enc_lit(&es[i]));
+                i += 1;
+            }
+            gate_andor(s, &ls, match o {
+                SmtOp::And => true,
+                _ => false,
+            })
+        }
+        SmtOp::Xor => {
+            let mut s = s;
+            let mut acc = enc_lit(&es[0]);
+            let mut i: usize = 1;
+            while i < es.len() {
+                let (s1, x) = gate_xor(s, acc, enc_lit(&es[i]));
+                s = s1;
+                acc = x;
+                i += 1;
+            }
+            let (a, pos) = acc;
+            (s, Enc::Lit(a, pos))
+        }
+        SmtOp::Implies => {
+            // Right associative: (=> a b c) is (or (not a) (not b) c).
+            let mut ls = Vec::new();
+            let mut i: usize = 0;
+            while i < es.len() {
+                let (a, pos) = enc_lit(&es[i]);
+                ls.push((a, if i + 1 < es.len() { !pos } else { pos }));
+                i += 1;
+            }
+            gate_andor(s, &ls, false)
+        }
+        SmtOp::Eq => enc_eq(s, es, false),
+        SmtOp::Distinct => enc_eq(s, es, true),
+        SmtOp::Ite => {
+            if is_lit(&es[1]) {
+                gate_ite(s, enc_lit(&es[0]), enc_lit(&es[1]), enc_lit(&es[2]))
+            } else {
+                let (kc, pc) = enc_lit(&es[0]);
+                let (s, c) = new_const(s);
+                let (s, ta) = enc_term(s, &es[1]);
+                let (s, tb) = enc_term(s, &es[2]);
+                let (s, ka) = add_atom(s, c, ta);
+                let (s, kb) = add_atom(s, c, tb);
+                let s = add_clause(s, vec![lit(kc, !pc), lit(ka, true)]);
+                let s = add_clause(s, vec![lit(kc, pc), lit(kb, true)]);
+                (s, Enc::Term(c))
+            }
+        }
+        _ => (s, Enc::Lit(0, true)),
+    }
+}
+
+/// The translated arguments `ts`.
+fn enc_args(p: &SmtProblem, dm: &Vec<Enc>, env: &Vec<Enc>, s: Tr, ts: &Vec<SmtTerm>) -> (Tr, Vec<Enc>) {
+    let mut s = s;
+    let mut es = Vec::new();
+    let mut i: usize = 0;
+    while i < ts.len() {
+        let (s1, e) = enc(p, dm, env, s, &ts[i]);
+        s = s1;
+        es.push(e);
+        i += 1;
+    }
+    (s, es)
+}
+
+/// The translation of `t`. `env` gives the translation of each parameter of the enclosing
+/// definition, `dm` that of each definition without parameters of `p` translated so far.
+fn enc(p: &SmtProblem, dm: &Vec<Enc>, env: &Vec<Enc>, s: Tr, t: &SmtTerm) -> (Tr, Enc) {
+    match t {
+        SmtTerm::BoolConst(b) => (s, Enc::Lit(0, *b)),
+        SmtTerm::BvConst(_) => (s, Enc::Lit(0, true)),
+        SmtTerm::Param(k) => (s, copy_enc(&env[*k])),
+        SmtTerm::Fun(f, args) => {
+            let (s, es) = enc_args(p, dm, env, s, args);
+            let mut s = s;
+            let mut ts = Vec::new();
+            let mut i: usize = 0;
+            while i < es.len() {
+                let (s1, ti) = enc_term(s, &es[i]);
+                s = s1;
+                ts.push(ti);
+                i += 1;
+            }
+            let (s, k) = add_term(s, *f, ts);
+            match &p.funs[*f].ret {
+                SmtSort::Bool => {
+                    let (s, a) = add_atom(s, k, 0);
+                    (s, Enc::Lit(a, true))
+                }
+                _ => (s, Enc::Term(k)),
+            }
+        }
+        SmtTerm::Def(d, args) => {
+            if p.defs[*d].params.is_empty() {
+                (s, copy_enc(&dm[*d]))
+            } else {
+                let (s, es) = enc_args(p, dm, env, s, args);
+                enc(p, dm, &es, s, &p.defs[*d].body)
+            }
+        }
+        SmtTerm::App(o, args) => {
+            let (s, es) = enc_args(p, dm, env, s, args);
+            enc_app(s, o, &es)
+        }
+    }
+}
+
+fn sort_in_fragment(s: &SmtSort) -> bool {
+    match s {
+        SmtSort::BitVec(_) => false,
+        _ => true,
+    }
+}
+
+/// Whether no bit-vector constant or function occurs in `t`.
+fn term_in_fragment(t: &SmtTerm) -> bool {
+    match t {
+        SmtTerm::BoolConst(_) | SmtTerm::Param(_) => true,
+        SmtTerm::BvConst(_) => false,
+        SmtTerm::Fun(_, args) | SmtTerm::Def(_, args) => terms_in_fragment(args),
+        SmtTerm::App(o, args) => {
+            match o {
+                SmtOp::Not | SmtOp::And | SmtOp::Or | SmtOp::Xor | SmtOp::Implies | SmtOp::Eq | SmtOp::Distinct | SmtOp::Ite => {
+                    terms_in_fragment(args)
+                }
+                _ => false,
+            }
+        }
+    }
+}
+
+fn terms_in_fragment(ts: &Vec<SmtTerm>) -> bool {
+    let mut i: usize = 0;
+    while i < ts.len() {
+        if !term_in_fragment(&ts[i]) {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
+fn sorts_in_fragment(ss: &Vec<SmtSort>) -> bool {
+    let mut i: usize = 0;
+    while i < ss.len() {
+        if !sort_in_fragment(&ss[i]) {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
+/// Whether no bit-vector sort, constant or function occurs in `p`.
+fn in_fragment(p: &SmtProblem) -> bool {
+    let mut i: usize = 0;
+    while i < p.funs.len() {
+        if !sorts_in_fragment(&p.funs[i].args) || !sort_in_fragment(&p.funs[i].ret) {
+            return false;
+        }
+        i += 1;
+    }
+    let mut d: usize = 0;
+    while d < p.defs.len() {
+        if !sorts_in_fragment(&p.defs[d].params) || !sort_in_fragment(&p.defs[d].ret) || !term_in_fragment(&p.defs[d].body) {
+            return false;
+        }
+        d += 1;
+    }
+    terms_in_fragment(&p.asserts)
+}
+
+/// The problem of this solver for `p`.
+fn tr_problem(p: &SmtProblem) -> Problem {
+    let nf = p.funs.len();
+    let s = Tr { terms: Vec::new(), atoms: Vec::new(), clauses: Vec::new(), next_fun: nf + 2 };
+    let (s, _) = add_term(s, nf, Vec::new());
+    let (s, _) = add_term(s, nf + 1, Vec::new());
+    let (s, _) = add_atom(s, 0, 0);
+    let (s, _) = add_atom(s, 0, 1);
+    let mut s = add_clause(s, vec![lit(1, false)]);
+    let mut dm = Vec::new();
+    let no_params = Vec::new();
+    let mut d: usize = 0;
+    while d < p.defs.len() {
+        if p.defs[d].params.is_empty() {
+            let (s1, e) = enc(p, &dm, &no_params, s, &p.defs[d].body);
+            s = s1;
+            dm.push(e);
+        } else {
+            dm.push(Enc::Lit(0, true));
+        }
+        d += 1;
+    }
+    let mut j: usize = 0;
+    while j < p.asserts.len() {
+        let (s1, e) = enc(p, &dm, &no_params, s, &p.asserts[j]);
+        let (a, pos) = enc_lit(&e);
+        s = add_clause(s1, vec![lit(a, pos)]);
+        j += 1;
+    }
+    Problem { terms: s.terms, atoms: s.atoms, clauses: s.clauses }
+}
+
+/// The value of the constant with function symbol `f` in the model `m`: the value of the first
+/// entry for `f` without arguments, 0 if there is none (as the documentation of `Model` says).
+fn const_value(m: &Model, f: usize) -> usize {
+    let mut i: usize = 0;
+    while i < m.entries.len() {
+        if m.entries[i].fun == f && m.entries[i].args.is_empty() {
+            return m.entries[i].val;
+        }
+        i += 1;
+    }
+    0
+}
+
+/// One more than the largest value in the entries of `m` (at least 1).
+fn domain_size(m: &Model) -> usize {
+    let mut n: usize = 1;
+    let mut i: usize = 0;
+    while i < m.entries.len() {
+        if m.entries[i].val >= n {
+            n = m.entries[i].val + 1;
+        }
+        let mut k: usize = 0;
+        while k < m.entries[i].args.len() {
+            if m.entries[i].args[k] >= n {
+                n = m.entries[i].args[k] + 1;
+            }
+            k += 1;
+        }
+        i += 1;
+    }
+    n
+}
+
+/// The value of sort `s` for the element `v` of the model of the translation; `t` is the value
+/// of TRUE.
+fn value_of(s: &SmtSort, v: usize, t: usize) -> SmtValue {
+    match s {
+        SmtSort::Bool => SmtValue::Bool(v == t),
+        _ => SmtValue::Elem(v),
+    }
+}
+
+/// The table of declared symbol `f` of `p` from the entries of `m`: the entries for `f` with the
+/// right number of arguments whose Boolean arguments are the value `t` of TRUE or `u` of FALSE.
+fn tr_interp(p: &SmtProblem, m: &Model, f: usize, t: usize, u: usize) -> SmtInterp {
+    let sig = &p.funs[f];
+    let mut entries = Vec::new();
+    let mut i: usize = 0;
+    while i < m.entries.len() {
+        let e = &m.entries[i];
+        if e.fun == f && e.args.len() == sig.args.len() {
+            let mut ok = true;
+            let mut args = Vec::new();
+            let mut k: usize = 0;
+            while k < e.args.len() {
+                match &sig.args[k] {
+                    SmtSort::Bool => {
+                        if e.args[k] != t && e.args[k] != u {
+                            ok = false;
+                        }
+                    }
+                    _ => {}
+                }
+                args.push(value_of(&sig.args[k], e.args[k], t));
+                k += 1;
+            }
+            if ok {
+                entries.push(SmtEntry { args, val: value_of(&sig.ret, e.val, t) });
+            }
+        }
+        i += 1;
+    }
+    SmtInterp { entries, default: value_of(&sig.ret, 0, t) }
+}
+
+/// The model of `p` for the model `m` of its translation. Every uninterpreted sort has the
+/// domain of `m`.
+fn tr_model(p: &SmtProblem, m: &Model) -> SmtModel {
+    let nf = p.funs.len();
+    let t = const_value(m, nf);
+    let u = const_value(m, nf + 1);
+    let n = domain_size(m);
+    let mut domains = Vec::new();
+    let mut i: usize = 0;
+    while i < p.num_sorts {
+        domains.push(n);
+        i += 1;
+    }
+    let mut funs = Vec::new();
+    let mut f: usize = 0;
+    while f < nf {
+        funs.push(tr_interp(p, m, f, t, u));
+        f += 1;
+    }
+    SmtModel { domains, funs }
+}
+
+/// The solver on a general problem: `Unknown` outside the fragment; otherwise the problem is
+/// translated into this solver's problem and solved.
+pub fn check_sat(p: &SmtProblem) -> SmtAnswer {
+    if !in_fragment(p) {
+        return SmtAnswer::Unknown;
+    }
+    match solve(&tr_problem(p)) {
+        Answer::Sat(m) => SmtAnswer::Sat(tr_model(p, &m)),
+        Answer::Unsat => SmtAnswer::Unsat,
+    }
+}
