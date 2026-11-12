@@ -4,6 +4,8 @@ theory QFUF_Types
   imports QFUF_TypesExternal_Template
 begin
 
+declare [[urust_ground_body_types]]
+
 (* Rust: Term *)
 datatype_record Term =
   Term_fun :: \<open>64 word\<close>

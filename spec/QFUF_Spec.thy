@@ -217,7 +217,8 @@ text \<open>
   The Rust entry point on general problems is \<^verbatim>\<open>pub fn check_sat(p: &SmtProblem) -> SmtAnswer\<close>,
   translated to \<^verbatim>\<open>QFUF_ctx.check_sat\<close>. Its specification uses the semantics of
   \<^verbatim>\<open>SMT_Semantics\<close> (the same theory in both solvers) and differs from that of the QF\_BV solver
-  only in the fragment: this solver handles the problems without bit-vectors.\<close>
+  in the fragment (this solver handles the problems without bit-vectors) and in the size of
+  problems for which it may answer \<^verbatim>\<open>Unknown\<close>.\<close>
 
 fun smt_sort_no_bv :: \<open>SmtSort \<Rightarrow> bool\<close> where
   \<open>smt_sort_no_bv (SmtSort_BitVec w) = False\<close>
@@ -257,21 +258,25 @@ begin
 
 definition check_sat_contract :: \<open>SmtProblem \<Rightarrow> ('s, SmtAnswer, 'abort) function_contract\<close> where
   \<open>check_sat_contract p \<equiv>
-     let pre = can_alloc_reference \<star> \<langle>smt_wf p \<and> smt_sizes_ok p\<rangle> in
+     let pre = can_alloc_reference \<star> \<langle>smt_wf p \<and> smt_repr_ok p\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
         \<langle>case r of
            SmtAnswer_Sat m \<Rightarrow> smt_is_model p m
          | SmtAnswer_Unsat \<Rightarrow> \<not> smt_satisfiable p
-         | SmtAnswer_Unknown \<Rightarrow> \<not> smt_fragment p\<rangle> in
+         | SmtAnswer_Unknown \<Rightarrow> \<not> smt_fragment p \<or> \<not> smt_sizes_ok p\<rangle> in
      make_function_contract pre post\<close>
 
 text \<open>\<^const>\<open>check_sat_contract\<close> \<open>p\<close>:
-  \<^item> Precondition: \<open>p\<close> is well-sorted (\<^const>\<open>smt_wf\<close>) and its \<^const>\<open>smt_size_bound\<close> is below
-    \<open>2^64\<close> (\<^const>\<open>smt_sizes_ok\<close>).
+  \<^item> Precondition: \<open>p\<close> is well-sorted (\<^const>\<open>smt_wf\<close>), and every list in it has fewer than
+    \<open>2^63\<close> elements (\<^const>\<open>smt_repr_ok\<close>, which holds for every value of a Rust program).
   \<^item> \<^verbatim>\<open>Sat(m)\<close>: \<open>m\<close> is a model of \<open>p\<close>. \<^verbatim>\<open>Unsat\<close>: \<open>p\<close> has no model. \<^verbatim>\<open>Unknown\<close>: \<open>p\<close> is not in
-    the fragment of this solver; for a problem in the fragment the answer is \<^verbatim>\<open>Sat\<close> or
-    \<^verbatim>\<open>Unsat\<close>.
-  \<^item> No panic (the abort postcondition is false), as for \<^const>\<open>solve_contract\<close>.\<close>
+    the fragment of this solver, or it is large (\<^const>\<open>smt_size_bound\<close> \<open>p\<close> is not below
+    \<open>2^64\<close>). For a problem in the fragment with \<^const>\<open>smt_sizes_ok\<close> the answer is \<^verbatim>\<open>Sat\<close>
+    or \<^verbatim>\<open>Unsat\<close>. (The solver checks a bound on the size of the problem it translates \<open>p\<close> into,
+    so it may also answer \<^verbatim>\<open>Sat\<close> or \<^verbatim>\<open>Unsat\<close> for a larger problem.)
+  \<^item> No panic (the abort postcondition is false), as for \<^const>\<open>solve_contract\<close>. The program
+    logic does not model the exhaustion of memory or of the stack, so the contract says nothing
+    about them.\<close>
 
 end
 
@@ -289,7 +294,7 @@ abbreviation check_sat_contract :: \<open>SmtProblem \<Rightarrow> ('s, SmtAnswe
 
 definition check_sat_correct where
   \<open>check_sat_correct \<Gamma> \<equiv>
-     \<forall>p. smt_wf p \<and> smt_sizes_ok p \<longrightarrow> (\<exists>N. \<forall>fuel \<ge> N. \<Gamma>; check_sat fuel p \<Turnstile>\<^sub>F check_sat_contract p)\<close>
+     \<forall>p. smt_wf p \<and> smt_repr_ok p \<longrightarrow> (\<exists>N. \<forall>fuel \<ge> N. \<Gamma>; check_sat fuel p \<Turnstile>\<^sub>F check_sat_contract p)\<close>
 
 text \<open>\<^const>\<open>check_sat_correct\<close> \<open>\<Gamma>\<close> is the top-level statement: for every problem that satisfies the
   precondition of \<^const>\<open>QFUF_ctx.check_sat_contract\<close> there is a bound \<open>N\<close> such that, with any

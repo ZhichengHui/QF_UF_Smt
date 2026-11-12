@@ -4,6 +4,8 @@ theory QFUF_FunsForeign_Template
   imports QFUF_Locale
 begin
 
+declare [[urust_ground_body_types]]
+
 text \<open>Functions declared in \<^verbatim>\<open>extern\<close> blocks. They cannot be replaced by uRust models; their contracts must also state memory effects.\<close>
 
 context QFUF_ctx

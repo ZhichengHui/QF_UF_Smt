@@ -459,8 +459,8 @@ fn enc_term(s: Tr, e: &Enc) -> (Tr, usize) {
             let (s, c) = new_const(s);
             let (s, ct) = add_atom(s, c, 0);
             let (s, cf) = add_atom(s, c, 1);
-            let s = add_clause(s, vec![lit(*a, !*pos), lit(ct, true)]);
-            let s = add_clause(s, vec![lit(*a, *pos), lit(cf, true)]);
+            let s = add_clause(s, clause2(lit(*a, !*pos), lit(ct, true)));
+            let s = add_clause(s, clause2(lit(*a, *pos), lit(cf, true)));
             (s, c)
         }
     }
@@ -471,14 +471,14 @@ fn gate_andor(s: Tr, ls: &Vec<(usize, bool)>, conj: bool) -> (Tr, Enc) {
     let (s, v) = new_lit(s);
     let mut s = s;
     // conj: v -> l_i for every i, and (all l_i) -> v. disj: l_i -> v, and v -> (some l_i).
-    let mut big = vec![lit(v, conj)];
+    let mut big = clause1(lit(v, conj));
     let mut i: usize = 0;
     while i < ls.len() {
         let (a, pos) = ls[i];
         if conj {
-            s = add_clause(s, vec![lit(v, false), lit(a, pos)]);
+            s = add_clause(s, clause2(lit(v, false), lit(a, pos)));
         } else {
-            s = add_clause(s, vec![lit(v, true), lit(a, !pos)]);
+            s = add_clause(s, clause2(lit(v, true), lit(a, !pos)));
         }
         big.push(lit(a, if conj { !pos } else { pos }));
         i += 1;
@@ -487,15 +487,36 @@ fn gate_andor(s: Tr, ls: &Vec<(usize, bool)>, conj: bool) -> (Tr, Enc) {
     (s, Enc::Lit(v, true))
 }
 
+fn clause1(a: Lit) -> Vec<Lit> {
+    let mut c = Vec::new();
+    c.push(a);
+    c
+}
+
+fn clause2(a: Lit, b: Lit) -> Vec<Lit> {
+    let mut c = Vec::new();
+    c.push(a);
+    c.push(b);
+    c
+}
+
+fn clause3(a: Lit, b: Lit, d: Lit) -> Vec<Lit> {
+    let mut c = Vec::new();
+    c.push(a);
+    c.push(b);
+    c.push(d);
+    c
+}
+
 /// A new literal equivalent to `x xor y`.
 fn gate_xor(s: Tr, x: (usize, bool), y: (usize, bool)) -> (Tr, (usize, bool)) {
     let (s, v) = new_lit(s);
     let (a, pa) = x;
     let (b, pb) = y;
-    let s = add_clause(s, vec![lit(v, false), lit(a, pa), lit(b, pb)]);
-    let s = add_clause(s, vec![lit(v, false), lit(a, !pa), lit(b, !pb)]);
-    let s = add_clause(s, vec![lit(v, true), lit(a, !pa), lit(b, pb)]);
-    let s = add_clause(s, vec![lit(v, true), lit(a, pa), lit(b, !pb)]);
+    let s = add_clause(s, clause3(lit(v, false), lit(a, pa), lit(b, pb)));
+    let s = add_clause(s, clause3(lit(v, false), lit(a, !pa), lit(b, !pb)));
+    let s = add_clause(s, clause3(lit(v, true), lit(a, !pa), lit(b, pb)));
+    let s = add_clause(s, clause3(lit(v, true), lit(a, pa), lit(b, !pb)));
     (s, (v, true))
 }
 
@@ -505,10 +526,10 @@ fn gate_ite(s: Tr, c: (usize, bool), x: (usize, bool), y: (usize, bool)) -> (Tr,
     let (kc, pc) = c;
     let (a, pa) = x;
     let (b, pb) = y;
-    let s = add_clause(s, vec![lit(kc, !pc), lit(a, !pa), lit(v, true)]);
-    let s = add_clause(s, vec![lit(kc, !pc), lit(a, pa), lit(v, false)]);
-    let s = add_clause(s, vec![lit(kc, pc), lit(b, !pb), lit(v, true)]);
-    let s = add_clause(s, vec![lit(kc, pc), lit(b, pb), lit(v, false)]);
+    let s = add_clause(s, clause3(lit(kc, !pc), lit(a, !pa), lit(v, true)));
+    let s = add_clause(s, clause3(lit(kc, !pc), lit(a, pa), lit(v, false)));
+    let s = add_clause(s, clause3(lit(kc, pc), lit(b, !pb), lit(v, true)));
+    let s = add_clause(s, clause3(lit(kc, pc), lit(b, pb), lit(v, false)));
     (s, Enc::Lit(v, true))
 }
 
@@ -603,8 +624,8 @@ fn enc_app(s: Tr, o: &SmtOp, es: &Vec<Enc>) -> (Tr, Enc) {
                 let (s, tb) = enc_term(s, &es[2]);
                 let (s, ka) = add_atom(s, c, ta);
                 let (s, kb) = add_atom(s, c, tb);
-                let s = add_clause(s, vec![lit(kc, !pc), lit(ka, true)]);
-                let s = add_clause(s, vec![lit(kc, pc), lit(kb, true)]);
+                let s = add_clause(s, clause2(lit(kc, !pc), lit(ka, true)));
+                let s = add_clause(s, clause2(lit(kc, pc), lit(kb, true)));
                 (s, Enc::Term(c))
             }
         }
@@ -654,7 +675,7 @@ fn enc(p: &SmtProblem, dm: &Vec<Enc>, env: &Vec<Enc>, s: Tr, t: &SmtTerm) -> (Tr
             }
         }
         SmtTerm::Def(d, args) => {
-            if p.defs[*d].params.is_empty() {
+            if p.defs[*d].params.len() == 0 {
                 (s, copy_enc(&dm[*d]))
             } else {
                 let (s, es) = enc_args(p, dm, env, s, args);
@@ -741,12 +762,12 @@ fn tr_problem(p: &SmtProblem) -> Problem {
     let (s, _) = add_term(s, nf + 1, Vec::new());
     let (s, _) = add_atom(s, 0, 0);
     let (s, _) = add_atom(s, 0, 1);
-    let mut s = add_clause(s, vec![lit(1, false)]);
+    let mut s = add_clause(s, clause1(lit(1, false)));
     let mut dm = Vec::new();
     let no_params = Vec::new();
     let mut d: usize = 0;
     while d < p.defs.len() {
-        if p.defs[d].params.is_empty() {
+        if p.defs[d].params.len() == 0 {
             let (s1, e) = enc(p, &dm, &no_params, s, &p.defs[d].body);
             s = s1;
             dm.push(e);
@@ -759,7 +780,7 @@ fn tr_problem(p: &SmtProblem) -> Problem {
     while j < p.asserts.len() {
         let (s1, e) = enc(p, &dm, &no_params, s, &p.asserts[j]);
         let (a, pos) = enc_lit(&e);
-        s = add_clause(s1, vec![lit(a, pos)]);
+        s = add_clause(s1, clause1(lit(a, pos)));
         j += 1;
     }
     Problem { terms: s.terms, atoms: s.atoms, clauses: s.clauses }
@@ -770,7 +791,7 @@ fn tr_problem(p: &SmtProblem) -> Problem {
 fn const_value(m: &Model, f: usize) -> usize {
     let mut i: usize = 0;
     while i < m.entries.len() {
-        if m.entries[i].fun == f && m.entries[i].args.is_empty() {
+        if m.entries[i].fun == f && m.entries[i].args.len() == 0 {
             return m.entries[i].val;
         }
         i += 1;
@@ -862,10 +883,113 @@ fn tr_model(p: &SmtProblem, m: &Model) -> SmtModel {
     SmtModel { domains, funs }
 }
 
-/// The solver on a general problem: `Unknown` outside the fragment; otherwise the problem is
-/// translated into this solver's problem and solved.
+// Size checks. The solver (`solve`) is verified for problems all of whose vectors (terms, atoms,
+// clauses, the arguments of each term, the literals of each clause) have fewer than 2^63
+// elements, and the translation computes with `usize` (the next function symbol, the indices of
+// the terms and atoms). A definition with parameters is expanded wherever it is applied, so the
+// translation can be exponentially larger than `p`. `check_sat` answers `Unknown` when the bound
+// `uf_size` on the translation reaches 2^63. The computations below saturate at 2^63: each
+// returns the exact value if it is below 2^63, and 2^63 otherwise.
+
+/// The bound at which the size computations saturate: 2^63.
+fn cap() -> usize {
+    9223372036854775808
+}
+
+/// `a + b`, saturated at `cap()`.
+fn sat_add(a: usize, b: usize) -> usize {
+    if a >= cap() || b >= cap() - a {
+        cap()
+    } else {
+        a + b
+    }
+}
+
+/// `a * b`, saturated at `cap()`.
+fn sat_mul(a: usize, b: usize) -> usize {
+    if a == 0 || b == 0 {
+        0
+    } else if a >= cap() || b >= cap() || b > (cap() - 1) / a {
+        cap()
+    } else {
+        a * b
+    }
+}
+
+/// The weight of a node with `n` arguments: `16 * (n + 1)^2`.
+fn node_weight(n: usize) -> usize {
+    let v = sat_add(n, 1);
+    sat_mul(16, sat_mul(v, v))
+}
+
+/// The bound on the size of the translation of `t` (what `enc` adds to the state): the weight of
+/// each node, the arguments of a definition with parameters, and its body (`dc`). `dc` gives,
+/// for each definition with parameters of `p` before the current one, the bound of its body.
+fn uf_count(p: &SmtProblem, dc: &Vec<usize>, t: &SmtTerm) -> usize {
+    match t {
+        SmtTerm::Fun(_, args) => sat_add(node_weight(args.len()), uf_count_args(p, dc, args)),
+        SmtTerm::Def(d, args) => {
+            if p.defs[*d].params.len() == 0 {
+                node_weight(args.len())
+            } else {
+                sat_add(node_weight(args.len()), sat_add(uf_count_args(p, dc, args), dc[*d]))
+            }
+        }
+        SmtTerm::App(_, args) => sat_add(node_weight(args.len()), uf_count_args(p, dc, args)),
+        _ => node_weight(0),
+    }
+}
+
+/// The sum of the bounds of the arguments `ts`.
+fn uf_count_args(p: &SmtProblem, dc: &Vec<usize>, ts: &Vec<SmtTerm>) -> usize {
+    let mut n: usize = 0;
+    let mut i: usize = 0;
+    while i < ts.len() {
+        n = sat_add(n, uf_count(p, dc, &ts[i]));
+        i += 1;
+    }
+    n
+}
+
+/// A bound on the size of the translation of `p` (`tr_problem`): the sum of the numbers of its
+/// terms, atoms and clauses, the lengths of all its clauses and of the argument lists of all its
+/// terms, and the final `next_fun`. Per node of `p` with `n` arguments (counting each expansion
+/// of a definition with parameters) the encoders add at most `16 * (n + 1)^2`: a new constant
+/// costs 2 (a term and `next_fun`), a new literal 3, an atom 1, a clause of length `l` costs
+/// `1 + l`; so `enc_term` costs at most 10, `gate_andor` on `m` literals `4 m + 5`, `gate_xor`
+/// and `gate_ite` 19, `=`/`distinct` at most 25 per pair of arguments plus 5, a declared symbol
+/// `11 n + 2`, an `ite` on terms 30. The initial state costs `p.funs.len() + 8`, and each
+/// assertion 2 more for its unit clause.
+fn uf_size(p: &SmtProblem) -> usize {
+    let mut dc = Vec::new();
+    let mut n: usize = sat_add(16, p.funs.len());
+    let mut d: usize = 0;
+    while d < p.defs.len() {
+        let c = uf_count(p, &dc, &p.defs[d].body);
+        if p.defs[d].params.len() == 0 {
+            n = sat_add(n, c);
+            dc.push(0);
+        } else {
+            dc.push(c);
+        }
+        d += 1;
+    }
+    let mut j: usize = 0;
+    while j < p.asserts.len() {
+        n = sat_add(n, sat_add(uf_count(p, &dc, &p.asserts[j]), 2));
+        j += 1;
+    }
+    n
+}
+
+/// The solver on a general problem: `Unknown` outside the fragment, or if the translation may be
+/// too large (`uf_size`, see the size checks above); otherwise the problem is translated into
+/// this solver's problem and solved.
 pub fn check_sat(p: &SmtProblem) -> SmtAnswer {
     if !in_fragment(p) {
+        return SmtAnswer::Unknown;
+    }
+    if uf_size(p) >= cap() {
         return SmtAnswer::Unknown;
     }
     match solve(&tr_problem(p)) {

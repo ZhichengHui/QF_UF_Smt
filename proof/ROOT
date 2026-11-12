@@ -3,3 +3,15 @@ session "QFUF_Proof" = "QFUF_Spec" +
   theories
     QFUF_Pure
     QFUF_Proof
+
+session "QFUF_Smt" in "smt" = "QFUF_Spec" +
+  options [document = false]
+  theories
+    QFUF_SmtModel
+
+session "QFUF_Top" in "top" = "QFUF_Proof" +
+  options [document = false]
+  sessions
+    "QFUF_Smt"
+  theories
+    QFUF_SmtSize

@@ -368,7 +368,33 @@ text \<open>A model of \<open>p\<close>: well-formed, and every assertion true u
 definition smt_is_model :: \<open>SmtProblem \<Rightarrow> SmtModel \<Rightarrow> bool\<close> where
   \<open>smt_is_model p m \<equiv> smt_model_wf p m \<and> smt_satisfies p (smt_model_interp m)\<close>
 
-subsection \<open>The size of a problem\<close>
+subsection \<open>The representation condition\<close>
+
+text \<open>Every list in the term \<open>t\<close> (the bits of a constant, the arguments of an application) has
+  fewer than \<open>2^63\<close> elements.\<close>
+fun smt_term_repr :: \<open>SmtTerm \<Rightarrow> bool\<close> where
+  \<open>smt_term_repr (SmtTerm_BvConst bs) = (length bs < 2 ^ 63)\<close>
+| \<open>smt_term_repr (SmtTerm_Fun f args) = (length args < 2 ^ 63 \<and> (\<forall>a \<in> set args. smt_term_repr a))\<close>
+| \<open>smt_term_repr (SmtTerm_Def d args) = (length args < 2 ^ 63 \<and> (\<forall>a \<in> set args. smt_term_repr a))\<close>
+| \<open>smt_term_repr (SmtTerm_App op args) = (length args < 2 ^ 63 \<and> (\<forall>a \<in> set args. smt_term_repr a))\<close>
+| \<open>smt_term_repr _ = True\<close>
+
+text \<open>\<open>smt_repr_ok p\<close>: every list in \<open>p\<close> has fewer than \<open>2^63\<close> elements. Rust ensures
+  this for every \<^verbatim>\<open>Vec\<close> whose elements are not zero-sized, because an allocation has at most
+  \<^verbatim>\<open>isize::MAX\<close> \<open>= 2^63 - 1\<close> bytes; so the condition holds for every value a Rust program can
+  pass. The translation represents a \<^verbatim>\<open>Vec\<close> as a HOL list, which has no such bound, so a
+  contract states it.\<close>
+definition smt_repr_ok :: \<open>SmtProblem \<Rightarrow> bool\<close> where
+  \<open>smt_repr_ok p \<equiv>
+     length (SmtProblem_funs p) < 2 ^ 63 \<and> (\<forall>f \<in> set (SmtProblem_funs p). length (SmtFun_args f) < 2 ^ 63) \<and>
+     length (SmtProblem_defs p) < 2 ^ 63 \<and>
+     (\<forall>d \<in> set (SmtProblem_defs p). length (SmtDef_params d) < 2 ^ 63 \<and> smt_term_repr (SmtDef_body d)) \<and>
+     length (SmtProblem_asserts p) < 2 ^ 63 \<and> (\<forall>t \<in> set (SmtProblem_asserts p). smt_term_repr t)\<close>
+
+subsection \<open>A size measure\<close>
+
+text \<open>A measure of the size of a problem. A solver may use it to state for which problems it
+  gives an answer other than \<^verbatim>\<open>Unknown\<close>; it is not a condition on the input.\<close>
 
 text \<open>The weight of a node of a term of sort \<open>s\<close> (or none) with \<open>n\<close> arguments of sorts \<open>ss\<close>: the
   square of \<open>n + 1\<close> times the sum of the cubes of the widths (plus one) of the node and its
@@ -400,11 +426,9 @@ termination
   by (relation \<open>measures [\<lambda>(_, ds, _, _). length ds, \<lambda>(_, _, _, t). size t]\<close>)
      (auto intro: size_list_estimation' simp: less_Suc_eq_le)
 
-text \<open>The size of a problem, a bound on the work and the memory of a solver, and so on its
-  counters (of type \<^verbatim>\<open>usize\<close>) and on the fuel it needs: \<open>10^9\<close> times one plus the numbers of
-  declared symbols, definitions and assertions, the widths (plus one) of the result sorts of the
-  declared symbols, and the weights of the bodies of the definitions without parameters and of
-  the assertions.\<close>
+text \<open>The size of a problem: \<open>10^9\<close> times one plus the numbers of declared symbols, definitions
+  and assertions, the widths (plus one) of the result sorts of the declared symbols, and the
+  weights of the bodies of the definitions without parameters and of the assertions.\<close>
 definition smt_size_bound :: \<open>SmtProblem \<Rightarrow> nat\<close> where
   \<open>smt_size_bound p \<equiv>
      let fs = SmtProblem_funs p in let ds = SmtProblem_defs p in
@@ -415,8 +439,7 @@ definition smt_size_bound :: \<open>SmtProblem \<Rightarrow> nat\<close> where
                    [0..<length ds]) +
         sum_list (map (smt_weight fs ds []) (SmtProblem_asserts p)))\<close>
 
-text \<open>The condition on the size: it fits in a 64-bit word. The constant and the powers in
-  \<^const>\<open>smt_size_bound\<close> are generous, so this excludes some problems a solver could handle.\<close>
+text \<open>The size fits in a 64-bit word.\<close>
 definition smt_sizes_ok :: \<open>SmtProblem \<Rightarrow> bool\<close> where
   \<open>smt_sizes_ok p \<equiv> smt_size_bound p < 2 ^ 64\<close>
 

@@ -4,9 +4,8 @@ theory QFUF_TypesExternal_Template
   imports "Micro_Rust_Std_Lib.Micro_Rust_Std_Lib"
 begin
 
-text \<open>Types without a uRust model. Replace these declarations by models.\<close>
+declare [[urust_ground_body_types]]
 
-(* Rust: std::mem::MaybeUninit *)
-datatype ('t0) ext_core_mem_maybe_uninit_MaybeUninit = Opaque_ext_core_mem_maybe_uninit_MaybeUninit \<open>'t0 list\<close>
+text \<open>Types without a uRust model. Replace these declarations by models.\<close>
 
 end
