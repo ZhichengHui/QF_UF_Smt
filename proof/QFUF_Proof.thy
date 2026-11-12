@@ -294,8 +294,9 @@ lemma reps_lt_init:
 
 text \<open>Every value and every argument in the entries of the model \<open>m\<close> is a term index of \<open>p\<close>.\<close>
 definition model_vals_ok :: \<open>Problem \<Rightarrow> Model \<Rightarrow> bool\<close> where
-  \<open>model_vals_ok p m \<equiv> \<forall>e \<in> set (Model_entries m).
-     unat (Entry_val e) < length (Problem_terms p) \<and> (\<forall>a \<in> set (Entry_args e). unat a < length (Problem_terms p))\<close>
+  \<open>model_vals_ok p m \<equiv> length (Model_entries m) \<le> length (Problem_terms p) \<and> (\<forall>e \<in> set (Model_entries m).
+     unat (Entry_val e) < length (Problem_terms p) \<and> (\<forall>a \<in> set (Entry_args e). unat a < length (Problem_terms p)) \<and>
+     (\<exists>t \<in> set (Problem_terms p). length (Entry_args e) \<le> length (Term_args t)))\<close>
 
 lemma model_of_vals_ok:
   assumes \<open>cc_inv p E rs\<close>
@@ -305,18 +306,20 @@ proof -
     using assms by (simp_all add: cc_inv_def rep_ok_def)
   have rs: \<open>unat (rs ! k) < length (Problem_terms p)\<close> if \<open>k < length (Problem_terms p)\<close> for k
     using r n that unfolding reps_lt_def by (metis nth_mem)
-  show ?thesis
-    unfolding model_vals_ok_def
-  proof
-    fix e
-    assume \<open>e \<in> set (Model_entries (model_of p rs))\<close>
-    then obtain i where i: \<open>i < length (Problem_terms p)\<close> and e: \<open>e = make_Entry (Term_fun (Problem_terms p ! i))
+  have l: \<open>length (Model_entries (model_of p rs)) \<le> length (Problem_terms p)\<close> by (simp add: model_of_def)
+  have each: \<open>unat (Entry_val e) < length (Problem_terms p) \<and>
+          (\<forall>a \<in> set (Entry_args e). unat a < length (Problem_terms p)) \<and>
+          (\<exists>t \<in> set (Problem_terms p). length (Entry_args e) \<le> length (Term_args t))\<close>
+    if ein: \<open>e \<in> set (Model_entries (model_of p rs))\<close> for e
+  proof -
+    obtain i where i: \<open>i < length (Problem_terms p)\<close> and e: \<open>e = make_Entry (Term_fun (Problem_terms p ! i))
         (List.map (\<lambda>x. rs ! unat x) (Term_args (Problem_terms p ! i))) (rs ! i)\<close>
-      by (auto simp add: model_of_def)
-    show \<open>unat (Entry_val e) < length (Problem_terms p) \<and>
-          (\<forall>a \<in> set (Entry_args e). unat a < length (Problem_terms p))\<close>
-      using rs[OF i] rs wf_args_lt_length[OF wf i] by (auto simp add: e)
+      using ein by (auto simp add: model_of_def)
+    have t: \<open>\<exists>t \<in> set (Problem_terms p). length (Entry_args e) \<le> length (Term_args t)\<close>
+      using i by (auto simp add: e intro!: bexI[of _ \<open>Problem_terms p ! i\<close>])
+    show ?thesis using rs[OF i] rs wf_args_lt_length[OF wf i] t by (auto simp add: e)
   qed
+  show ?thesis using l each by (simp add: model_vals_ok_def)
 qed
 
 lemma cc_inv_init:
@@ -710,8 +713,10 @@ definition solve_contract_vals :: \<open>Problem \<Rightarrow> ('s, Answer, 'abo
      let post = \<lambda>r. can_alloc_reference \<star>
         \<langle>case r of
            Answer_Sat m \<Rightarrow> problem_true (model_interp m) p \<and>
+             length (Model_entries m) \<le> length (Problem_terms p) \<and>
              (\<forall>e \<in> set (Model_entries m). unat (Entry_val e) < length (Problem_terms p) \<and>
-                (\<forall>a \<in> set (Entry_args e). unat a < length (Problem_terms p)))
+                (\<forall>a \<in> set (Entry_args e). unat a < length (Problem_terms p)) \<and>
+                (\<exists>t \<in> set (Problem_terms p). length (Entry_args e) \<le> length (Term_args t)))
          | Answer_Unsat \<Rightarrow> \<not> satisfiable p\<rangle> in
      make_function_contract pre post\<close>
 

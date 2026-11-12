@@ -2350,7 +2350,7 @@ definition tr_fuel :: \<open>SmtProblem \<Rightarrow> nat\<close> where
      sum_list (map (\<lambda>t. Suc (dep p (length ds) t)) ts) +
      length (Problem_terms q) + sum_list (map (\<lambda>t. length (Term_args t)) (Problem_terms q))\<close>
 
-lemma le_sum_list: \<open>x \<in> set xs \<Longrightarrow> f x \<le> sum_list (map f xs)\<close>
+lemma le_sum_list: \<open>x \<in> set xs \<Longrightarrow> (f :: 'a \<Rightarrow> nat) x \<le> sum_list (map f xs)\<close>
   by (induction xs) auto
 
 lemma tr_fuel_ge:
