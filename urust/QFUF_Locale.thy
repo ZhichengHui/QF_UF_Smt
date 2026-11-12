@@ -13,11 +13,35 @@ locale QFUF_ctx =
   + ref_2: reference_allocatable reference_types _ _ _ _ _ _ _ prism_2 \<comment> \<open>(64 word) list\<close>
   + ref_3: reference_allocatable reference_types _ _ _ _ _ _ _ prism_3 \<comment> \<open>Entry list\<close>
   + ref_4: reference_allocatable reference_types _ _ _ _ _ _ _ prism_4 \<comment> \<open>bool list\<close>
+  + ref_5: reference_allocatable reference_types _ _ _ _ _ _ _ prism_5 \<comment> \<open>Term list\<close>
+  + ref_6: reference_allocatable reference_types _ _ _ _ _ _ _ prism_6 \<comment> \<open>Atom list\<close>
+  + ref_7: reference_allocatable reference_types _ _ _ _ _ _ _ prism_7 \<comment> \<open>Clause list\<close>
+  + ref_8: reference_allocatable reference_types _ _ _ _ _ _ _ prism_8 \<comment> \<open>Tr\<close>
+  + ref_9: reference_allocatable reference_types _ _ _ _ _ _ _ prism_9 \<comment> \<open>Lit list\<close>
+  + ref_10: reference_allocatable reference_types _ _ _ _ _ _ _ prism_10 \<comment> \<open>64 word\<close>
+  + ref_11: reference_allocatable reference_types _ _ _ _ _ _ _ prism_11 \<comment> \<open>((64 word) \<times> bool \<times> tnil) list\<close>
+  + ref_12: reference_allocatable reference_types _ _ _ _ _ _ _ prism_12 \<comment> \<open>((64 word) \<times> bool \<times> tnil)\<close>
+  + ref_13: reference_allocatable reference_types _ _ _ _ _ _ _ prism_13 \<comment> \<open>Enc list\<close>
+  + ref_14: reference_allocatable reference_types _ _ _ _ _ _ _ prism_14 \<comment> \<open>SmtEntry list\<close>
+  + ref_15: reference_allocatable reference_types _ _ _ _ _ _ _ prism_15 \<comment> \<open>SmtValue list\<close>
+  + ref_16: reference_allocatable reference_types _ _ _ _ _ _ _ prism_16 \<comment> \<open>SmtInterp list\<close>
   for reference_types :: \<open>'s::{sepalg} \<Rightarrow> 'addr \<Rightarrow> 'gv \<Rightarrow> 'abort \<Rightarrow> 'i prompt \<Rightarrow> 'o prompt_output \<Rightarrow> unit\<close>
   and prism_1 :: \<open>('gv, bool) prism\<close>
   and prism_2 :: \<open>('gv, (64 word) list) prism\<close>
   and prism_3 :: \<open>('gv, Entry list) prism\<close>
   and prism_4 :: \<open>('gv, bool list) prism\<close>
+  and prism_5 :: \<open>('gv, Term list) prism\<close>
+  and prism_6 :: \<open>('gv, Atom list) prism\<close>
+  and prism_7 :: \<open>('gv, Clause list) prism\<close>
+  and prism_8 :: \<open>('gv, Tr) prism\<close>
+  and prism_9 :: \<open>('gv, Lit list) prism\<close>
+  and prism_10 :: \<open>('gv, 64 word) prism\<close>
+  and prism_11 :: \<open>('gv, ((64 word) \<times> bool \<times> tnil) list) prism\<close>
+  and prism_12 :: \<open>('gv, ((64 word) \<times> bool \<times> tnil)) prism\<close>
+  and prism_13 :: \<open>('gv, Enc list) prism\<close>
+  and prism_14 :: \<open>('gv, SmtEntry list) prism\<close>
+  and prism_15 :: \<open>('gv, SmtValue list) prism\<close>
+  and prism_16 :: \<open>('gv, SmtInterp list) prism\<close>
   + fixes urust_fuel :: nat
 begin
 
@@ -25,6 +49,18 @@ adhoc_overloading store_reference_const \<rightleftharpoons> ref_1.new
 adhoc_overloading store_reference_const \<rightleftharpoons> ref_2.new
 adhoc_overloading store_reference_const \<rightleftharpoons> ref_3.new
 adhoc_overloading store_reference_const \<rightleftharpoons> ref_4.new
+adhoc_overloading store_reference_const \<rightleftharpoons> ref_5.new
+adhoc_overloading store_reference_const \<rightleftharpoons> ref_6.new
+adhoc_overloading store_reference_const \<rightleftharpoons> ref_7.new
+adhoc_overloading store_reference_const \<rightleftharpoons> ref_8.new
+adhoc_overloading store_reference_const \<rightleftharpoons> ref_9.new
+adhoc_overloading store_reference_const \<rightleftharpoons> ref_10.new
+adhoc_overloading store_reference_const \<rightleftharpoons> ref_11.new
+adhoc_overloading store_reference_const \<rightleftharpoons> ref_12.new
+adhoc_overloading store_reference_const \<rightleftharpoons> ref_13.new
+adhoc_overloading store_reference_const \<rightleftharpoons> ref_14.new
+adhoc_overloading store_reference_const \<rightleftharpoons> ref_15.new
+adhoc_overloading store_reference_const \<rightleftharpoons> ref_16.new
 adhoc_overloading store_update_const \<rightleftharpoons> update_fun
 
 end

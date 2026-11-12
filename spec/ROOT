@@ -1,4 +1,5 @@
 session "QFUF_Spec" = "QFUF" +
   options [document = false]
   theories
+    SMT_Semantics
     QFUF_Spec

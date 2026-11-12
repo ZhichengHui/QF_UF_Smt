@@ -32,11 +32,11 @@ definition "prop_holds" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow
 (* Rust: merge *)
 definition "merge" :: \<open>(('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>merge \<equiv> \<lambda>rep a b. FunctionBody \<lbrakk>
-    let ra = (*rep)[a];
-    let rb = (*rep)[b];
-    for i in 0_usize .. len(*rep) {
-      if ((*rep)[i]) == ra {
-        *(rep[i]) = rb;
+    let ra = (* rep)[a];
+    let rb = (* rep)[b];
+    for i in 0_usize .. len(* rep) {
+      if ((* rep)[i]) == ra {
+        * (rep[i]) = rb;
       }
     }
   \<rbrakk>\<close>
@@ -62,12 +62,12 @@ definition "scan_row" :: \<open>Problem \<Rightarrow> (('addr, 'gv, (64 word) li
   \<open>scan_row \<equiv> \<lambda>p rep i. FunctionBody \<lbrakk>
     let mut changed = false;
     for j in 0_usize .. len(p.Problem_terms) {
-      if (((*rep)[i]) != ((*rep)[j])) && congruent(p, *rep, i, j) {
+      if (((* rep)[i]) != ((* rep)[j])) && congruent(p, * rep, i, j) {
         merge(rep, i, j);
-        *changed = true;
+        * changed = true;
       }
     };
-    *changed
+    * changed
   \<rbrakk>\<close>
 
 (* Rust: scan *)
@@ -76,10 +76,10 @@ definition "scan" :: \<open>Problem \<Rightarrow> (('addr, 'gv, (64 word) list) 
     let mut changed = false;
     for i in 0_usize .. len(p.Problem_terms) {
       if scan_row(p, rep, i) {
-        *changed = true;
+        * changed = true;
       }
     };
-    *changed
+    * changed
   \<rbrakk>\<close>
 
 (* Rust: close *)
@@ -95,31 +95,31 @@ definition "close" :: \<open>Problem \<Rightarrow> (('addr, 'gv, (64 word) list)
 (* Rust: rep_args *)
 definition "rep_args" :: \<open>((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, (64 word) list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>rep_args \<equiv> \<lambda>rep args. FunctionBody \<lbrakk>
-    let mut out = args;
-    for k in 0_usize .. len(*out) {
-      *(out[k]) = rep[(*out)[k]];
+    let mut out = { let init_1 = args; \<llangle>init_1 :: (64 word) list\<rrangle> };
+    for k in 0_usize .. len(* out) {
+      * (out[k]) = rep[(* out)[k]];
     };
-    *out
+    * out
   \<rbrakk>\<close>
 
 (* Rust: build_model *)
 definition "build_model" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, Model, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>build_model \<equiv> \<lambda>p rep. FunctionBody \<lbrakk>
-    let mut entries = vec_from_elem(Entry_mk { Entry_fun: 0_usize, Entry_args: [], Entry_val: 0_usize }, len(p.Problem_terms));
+    let mut entries = { let init_2 = vec_from_elem(Entry_mk { Entry_fun: 0_usize, Entry_args: { let res_1 = []; \<llangle>res_1 :: (64 word) list\<rrangle> }, Entry_val: 0_usize }, len(p.Problem_terms)); \<llangle>init_2 :: Entry list\<rrangle> };
     for i in 0_usize .. len(p.Problem_terms) {
-      *(entries[i]) = Entry_mk { Entry_fun: p.Problem_terms[i].Term_fun, Entry_args: rep_args(rep, p.Problem_terms[i].Term_args), Entry_val: rep[i] };
+      * (entries[i]) = Entry_mk { Entry_fun: p.Problem_terms[i].Term_fun, Entry_args: rep_args(rep, p.Problem_terms[i].Term_args), Entry_val: rep[i] };
     };
-    Model_mk { Model_entries: *entries }
+    Model_mk { Model_entries: * entries }
   \<rbrakk>\<close>
 
 (* Rust: init_rep *)
 definition "init_rep" :: \<open>(64 word) \<Rightarrow> ('s, (64 word) list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>init_rep \<equiv> \<lambda>n. FunctionBody \<lbrakk>
-    let mut rep = vec_from_elem(0_usize, n);
+    let mut rep = { let init_1 = vec_from_elem(0_usize, n); \<llangle>init_1 :: (64 word) list\<rrangle> };
     for i in 0_usize .. n {
-      *(rep[i]) = i;
+      * (rep[i]) = i;
     };
-    *rep
+    * rep
   \<rbrakk>\<close>
 
 (* Rust: assert_eqs *)
@@ -146,8 +146,8 @@ definition "diseqs_ok" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow>
 (* Rust: finish *)
 definition "finish" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, Model option, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>finish \<equiv> \<lambda>p a rep. FunctionBody \<lbrakk>
-    if diseqs_ok(p, a, *rep) {
-      Some(build_model(p, *rep))
+    if diseqs_ok(p, a, * rep) {
+      Some(build_model(p, * rep))
     } else {
       None
     }
@@ -156,7 +156,7 @@ definition "finish" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ((
 (* Rust: theory_check *)
 definition "theory_check" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ('s, Model option, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>theory_check \<equiv> \<lambda>p a. FunctionBody \<lbrakk>
-    let mut rep = init_rep(len(p.Problem_terms));
+    let mut rep = { let init_1 = init_rep(len(p.Problem_terms)); \<llangle>init_1 :: (64 word) list\<rrangle> };
     assert_eqs(p, a, rep);
     close(p, rep);
     finish(p, a, rep)
@@ -172,15 +172,15 @@ definition "search_rec_step" :: \<open>((Problem \<Rightarrow> (bool list) \<Rig
       };
       return None;
     };
-    let mut a1 = a;
-    *(a1[k]) = true;
-    let r = \<epsilon>\<open>rec_search\<close>(p, *a1, k + 1_usize);
+    let mut a1 = { let init_1 = a; \<llangle>init_1 :: bool list\<rrangle> };
+    * (a1[k]) = true;
+    let r = \<epsilon>\<open>rec_search\<close>(p, * a1, k + 1_usize);
     if urust_func_option_is_some(r) {
       return r;
     };
-    let mut a2 = a;
-    *(a2[k]) = false;
-    \<epsilon>\<open>rec_search\<close>(p, *a2, k + 1_usize)
+    let mut a2 = { let init_2 = a; \<llangle>init_2 :: bool list\<rrangle> };
+    * (a2[k]) = false;
+    \<epsilon>\<open>rec_search\<close>(p, * a2, k + 1_usize)
   \<rbrakk>)\<close>
 
 (* Rust: search *)
@@ -196,6 +196,673 @@ definition "solve" :: \<open>Problem \<Rightarrow> ('s, Answer, 'abort, 'i promp
       },
       None \<Rightarrow> {
         Answer_Unsat
+      }
+    }
+  \<rbrakk>\<close>
+
+(* Rust: copy_enc *)
+definition "copy_enc" :: \<open>Enc \<Rightarrow> ('s, Enc, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>copy_enc \<equiv> \<lambda>e. FunctionBody \<lbrakk>
+    match e {
+      Enc_Term(i) \<Rightarrow> {
+        Enc_Term_mk(i)
+      },
+      Enc_Lit(a, pos) \<Rightarrow> {
+        Enc_Lit_mk(a, pos)
+      }
+    }
+  \<rbrakk>\<close>
+
+(* Rust: add_term *)
+definition "add_term" :: \<open>Tr \<Rightarrow> (64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, (Tr \<times> (64 word) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>add_term \<equiv> \<lambda>s fun_v args. FunctionBody \<lbrakk>
+    let k = len(s.Tr_terms);
+    let mut terms = { let init_1 = s.Tr_terms; \<llangle>init_1 :: Term list\<rrangle> };
+    vec_push(terms, Term_mk { Term_fun: fun_v, Term_args: args });
+    (Tr_mk { Tr_terms: * terms, Tr_atoms: s.Tr_atoms, Tr_clauses: s.Tr_clauses, Tr_next_fun: s.Tr_next_fun }, k)
+  \<rbrakk>\<close>
+
+(* Rust: add_atom *)
+definition "add_atom" :: \<open>Tr \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, (Tr \<times> (64 word) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>add_atom \<equiv> \<lambda>s lhs rhs. FunctionBody \<lbrakk>
+    let k = len(s.Tr_atoms);
+    let mut atoms = { let init_1 = s.Tr_atoms; \<llangle>init_1 :: Atom list\<rrangle> };
+    vec_push(atoms, Atom_mk { Atom_lhs: lhs, Atom_rhs: rhs });
+    (Tr_mk { Tr_terms: s.Tr_terms, Tr_atoms: * atoms, Tr_clauses: s.Tr_clauses, Tr_next_fun: s.Tr_next_fun }, k)
+  \<rbrakk>\<close>
+
+(* Rust: add_clause *)
+definition "add_clause" :: \<open>Tr \<Rightarrow> (Lit list) \<Rightarrow> ('s, Tr, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>add_clause \<equiv> \<lambda>s lits. FunctionBody \<lbrakk>
+    let mut clauses = { let init_1 = s.Tr_clauses; \<llangle>init_1 :: Clause list\<rrangle> };
+    vec_push(clauses, Clause_mk { Clause_lits: lits });
+    Tr_mk { Tr_terms: s.Tr_terms, Tr_atoms: s.Tr_atoms, Tr_clauses: * clauses, Tr_next_fun: s.Tr_next_fun }
+  \<rbrakk>\<close>
+
+(* Rust: new_const *)
+definition "new_const" :: \<open>Tr \<Rightarrow> ('s, (Tr \<times> (64 word) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>new_const \<equiv> \<lambda>s. FunctionBody \<lbrakk>
+    let f = s.Tr_next_fun;
+    let destr_2 = add_term(Tr_mk { Tr_terms: s.Tr_terms, Tr_atoms: s.Tr_atoms, Tr_clauses: s.Tr_clauses, Tr_next_fun: f + 1_usize }, f, { let res_1 = []; \<llangle>res_1 :: (64 word) list\<rrangle> });
+    let s = destr_2.0;
+    let t = destr_2.1;
+    (s, t)
+  \<rbrakk>\<close>
+
+(* Rust: new_lit *)
+definition "new_lit" :: \<open>Tr \<Rightarrow> ('s, (Tr \<times> (64 word) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>new_lit \<equiv> \<lambda>s. FunctionBody \<lbrakk>
+    let destr_1 = new_const(s);
+    let s = destr_1.0;
+    let v = destr_1.1;
+    add_atom(s, v, 0_usize)
+  \<rbrakk>\<close>
+
+(* Rust: lit *)
+definition "lit" :: \<open>(64 word) \<Rightarrow> bool \<Rightarrow> ('s, Lit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>lit \<equiv> \<lambda>a pos. FunctionBody \<lbrakk>
+    Lit_mk { Lit_atom: a, Lit_pos: pos }
+  \<rbrakk>\<close>
+
+(* Rust: enc_lit *)
+definition "enc_lit" :: \<open>Enc \<Rightarrow> ('s, ((64 word) \<times> bool \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>enc_lit \<equiv> \<lambda>e. FunctionBody \<lbrakk>
+    match e {
+      Enc_Lit(a, pos) \<Rightarrow> {
+        (a, pos)
+      },
+      Enc_Term(_) \<Rightarrow> {
+        (0_usize, true)
+      }
+    }
+  \<rbrakk>\<close>
+
+(* Rust: enc_term *)
+definition "enc_term" :: \<open>Tr \<Rightarrow> Enc \<Rightarrow> ('s, (Tr \<times> (64 word) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>enc_term \<equiv> \<lambda>s e. FunctionBody \<lbrakk>
+    match e {
+      Enc_Term(i) \<Rightarrow> {
+        (s, i)
+      },
+      Enc_Lit(a, pos) \<Rightarrow> {
+        let destr_1 = new_const(s);
+        let s = destr_1.0;
+        let c = destr_1.1;
+        let destr_2 = add_atom(s, c, 0_usize);
+        let s = destr_2.0;
+        let ct = destr_2.1;
+        let destr_3 = add_atom(s, c, 1_usize);
+        let s = destr_3.0;
+        let cf = destr_3.1;
+        let s = add_clause(s, ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_4 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_4 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(a, !pos), lit(ct, true)])));
+        let s = add_clause(s, ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_5 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_5 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(a, pos), lit(cf, true)])));
+        (s, c)
+      }
+    }
+  \<rbrakk>\<close>
+
+(* Rust: gate_andor *)
+definition "gate_andor" :: \<open>Tr \<Rightarrow> (((64 word) \<times> bool \<times> tnil) list) \<Rightarrow> bool \<Rightarrow> ('s, (Tr \<times> Enc \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>gate_andor \<equiv> \<lambda>s ls conj. FunctionBody \<lbrakk>
+    let destr_1 = new_lit(s);
+    let s = destr_1.0;
+    let v = destr_1.1;
+    let mut s = s;
+    let mut big = { let init_3 = ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_2 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_2 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(v, conj)])); \<llangle>init_3 :: Lit list\<rrangle> };
+    let mut i = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(ls) {
+      let destr_4 = ls[* i];
+      let a = destr_4.0;
+      let pos = destr_4.1;
+      if conj {
+        * s = add_clause(* s, ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_5 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_5 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(v, false), lit(a, pos)])));
+      } else {
+        * s = add_clause(* s, ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_6 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_6 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(v, true), lit(a, !pos)])));
+      };
+      vec_push(big, lit(a, if conj {
+        !pos
+      } else {
+        pos
+      }));
+      * i += 1_usize;
+    };
+    let s = add_clause(* s, * big);
+    (s, Enc_Lit_mk(v, true))
+  \<rbrakk>\<close>
+
+(* Rust: gate_xor *)
+definition "gate_xor" :: \<open>Tr \<Rightarrow> ((64 word) \<times> bool \<times> tnil) \<Rightarrow> ((64 word) \<times> bool \<times> tnil) \<Rightarrow> ('s, (Tr \<times> ((64 word) \<times> bool \<times> tnil) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>gate_xor \<equiv> \<lambda>s x y. FunctionBody \<lbrakk>
+    let destr_1 = new_lit(s);
+    let s = destr_1.0;
+    let v = destr_1.1;
+    let destr_2 = x;
+    let a = destr_2.0;
+    let pa = destr_2.1;
+    let destr_3 = y;
+    let b = destr_3.0;
+    let pb = destr_3.1;
+    let s = add_clause(s, ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_4 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_4 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(v, false), lit(a, pa), lit(b, pb)])));
+    let s = add_clause(s, ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_5 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_5 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(v, false), lit(a, !pa), lit(b, !pb)])));
+    let s = add_clause(s, ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_6 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_6 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(v, true), lit(a, !pa), lit(b, pb)])));
+    let s = add_clause(s, ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_7 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_7 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(v, true), lit(a, pa), lit(b, !pb)])));
+    (s, (v, true))
+  \<rbrakk>\<close>
+
+(* Rust: gate_ite *)
+definition "gate_ite" :: \<open>Tr \<Rightarrow> ((64 word) \<times> bool \<times> tnil) \<Rightarrow> ((64 word) \<times> bool \<times> tnil) \<Rightarrow> ((64 word) \<times> bool \<times> tnil) \<Rightarrow> ('s, (Tr \<times> Enc \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>gate_ite \<equiv> \<lambda>s c x y. FunctionBody \<lbrakk>
+    let destr_1 = new_lit(s);
+    let s = destr_1.0;
+    let v = destr_1.1;
+    let destr_2 = c;
+    let kc = destr_2.0;
+    let pc = destr_2.1;
+    let destr_3 = x;
+    let a = destr_3.0;
+    let pa = destr_3.1;
+    let destr_4 = y;
+    let b = destr_4.0;
+    let pb = destr_4.1;
+    let s = add_clause(s, ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_5 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_5 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(kc, !pc), lit(a, !pa), lit(v, true)])));
+    let s = add_clause(s, ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_6 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_6 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(kc, !pc), lit(a, pa), lit(v, false)])));
+    let s = add_clause(s, ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_7 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_7 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(kc, pc), lit(b, !pb), lit(v, true)])));
+    let s = add_clause(s, ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_8 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_8 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(kc, pc), lit(b, pb), lit(v, false)])));
+    (s, Enc_Lit_mk(v, true))
+  \<rbrakk>\<close>
+
+(* Rust: is_lit *)
+definition "is_lit" :: \<open>Enc \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>is_lit \<equiv> \<lambda>e. FunctionBody \<lbrakk>
+    match e {
+      Enc_Lit(_, _) \<Rightarrow> {
+        true
+      },
+      Enc_Term(_) \<Rightarrow> {
+        false
+      }
+    }
+  \<rbrakk>\<close>
+
+(* Rust: enc_eq *)
+definition "enc_eq" :: \<open>Tr \<Rightarrow> (Enc list) \<Rightarrow> bool \<Rightarrow> ('s, (Tr \<times> Enc \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>enc_eq \<equiv> \<lambda>s es distinct. FunctionBody \<lbrakk>
+    let mut s = s;
+    let mut ls = { let init_2 = { let res_1 = []; \<llangle>res_1 :: ((64 word) \<times> bool \<times> tnil) list\<rrangle> }; \<llangle>init_2 :: ((64 word) \<times> bool \<times> tnil) list\<rrangle> };
+    let mut i = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(es) {
+      let mut j = (* i) + 1_usize;
+      #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < len(es) {
+        if distinct || ((* j) == ((* i) + 1_usize)) {
+          if is_lit(es[* i]) {
+            let destr_3 = gate_xor(* s, enc_lit(es[* i]), enc_lit(es[* j]));
+            let s1 = destr_3.0;
+            let x = destr_3.1.0;
+            let px = destr_3.1.1;
+            * s = s1;
+            vec_push(ls, (x, if distinct {
+              px
+            } else {
+              !px
+            }));
+          } else {
+            let destr_4 = enc_term(* s, es[* i]);
+            let s1 = destr_4.0;
+            let ti = destr_4.1;
+            let destr_5 = enc_term(s1, es[* j]);
+            let s2 = destr_5.0;
+            let tj = destr_5.1;
+            let destr_6 = add_atom(s2, ti, tj);
+            let s3 = destr_6.0;
+            let k = destr_6.1;
+            * s = s3;
+            vec_push(ls, (k, !distinct));
+          }
+        };
+        * j += 1_usize;
+      };
+      * i += 1_usize;
+    };
+    gate_andor(* s, * ls, true)
+  \<rbrakk>\<close>
+
+(* Rust: enc_app *)
+definition "enc_app" :: \<open>Tr \<Rightarrow> SmtOp \<Rightarrow> (Enc list) \<Rightarrow> ('s, (Tr \<times> Enc \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>enc_app \<equiv> \<lambda>s o_v es. FunctionBody \<lbrakk>
+    match o_v {
+      SmtOp_Not \<Rightarrow> {
+        let destr_1 = enc_lit(es[0_usize]);
+        let a = destr_1.0;
+        let pos = destr_1.1;
+        (s, Enc_Lit_mk(a, !pos))
+      },
+      SmtOp_And | SmtOp_Or \<Rightarrow> {
+        let mut ls = { let init_3 = { let res_2 = []; \<llangle>res_2 :: ((64 word) \<times> bool \<times> tnil) list\<rrangle> }; \<llangle>init_3 :: ((64 word) \<times> bool \<times> tnil) list\<rrangle> };
+        let mut i = 0_usize;
+        #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(es) {
+          vec_push(ls, enc_lit(es[* i]));
+          * i += 1_usize;
+        };
+        gate_andor(s, * ls, match o_v {
+          SmtOp_And \<Rightarrow> {
+            true
+          },
+          _ \<Rightarrow> {
+            false
+          }
+        })
+      },
+      SmtOp_Xor \<Rightarrow> {
+        let mut s = s;
+        let mut acc = enc_lit(es[0_usize]);
+        let mut i = 1_usize;
+        #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(es) {
+          let destr_4 = gate_xor(* s, * acc, enc_lit(es[* i]));
+          let s1 = destr_4.0;
+          let x = destr_4.1;
+          * s = s1;
+          * acc = x;
+          * i += 1_usize;
+        };
+        let destr_5 = * acc;
+        let a = destr_5.0;
+        let pos = destr_5.1;
+        (* s, Enc_Lit_mk(a, pos))
+      },
+      SmtOp_Implies \<Rightarrow> {
+        let mut ls = { let init_7 = { let res_6 = []; \<llangle>res_6 :: ((64 word) \<times> bool \<times> tnil) list\<rrangle> }; \<llangle>init_7 :: ((64 word) \<times> bool \<times> tnil) list\<rrangle> };
+        let mut i = 0_usize;
+        #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(es) {
+          let destr_8 = enc_lit(es[* i]);
+          let a = destr_8.0;
+          let pos = destr_8.1;
+          vec_push(ls, (a, if ((* i) + 1_usize) < len(es) {
+            !pos
+          } else {
+            pos
+          }));
+          * i += 1_usize;
+        };
+        gate_andor(s, * ls, false)
+      },
+      SmtOp_Eq \<Rightarrow> {
+        enc_eq(s, es, false)
+      },
+      SmtOp_Distinct \<Rightarrow> {
+        enc_eq(s, es, true)
+      },
+      SmtOp_Ite \<Rightarrow> {
+        if is_lit(es[1_usize]) {
+          gate_ite(s, enc_lit(es[0_usize]), enc_lit(es[1_usize]), enc_lit(es[2_usize]))
+        } else {
+          let destr_9 = enc_lit(es[0_usize]);
+          let kc = destr_9.0;
+          let pc = destr_9.1;
+          let destr_10 = new_const(s);
+          let s = destr_10.0;
+          let c = destr_10.1;
+          let destr_11 = enc_term(s, es[1_usize]);
+          let s = destr_11.0;
+          let ta = destr_11.1;
+          let destr_12 = enc_term(s, es[2_usize]);
+          let s = destr_12.0;
+          let tb = destr_12.1;
+          let destr_13 = add_atom(s, c, ta);
+          let s = destr_13.0;
+          let ka = destr_13.1;
+          let destr_14 = add_atom(s, c, tb);
+          let s = destr_14.0;
+          let kb = destr_14.1;
+          let s = add_clause(s, ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_15 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_15 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(kc, !pc), lit(ka, true)])));
+          let s = add_clause(s, ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_16 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_16 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(kc, pc), lit(kb, true)])));
+          (s, Enc_Term_mk(c))
+        }
+      },
+      _ \<Rightarrow> {
+        (s, Enc_Lit_mk(0_usize, true))
+      }
+    }
+  \<rbrakk>\<close>
+
+text \<open>Recursive group enc_args, enc: defined by iterating enc_args_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>
+
+definition "enc_args_rec_step" :: \<open>((SmtProblem \<Rightarrow> (Enc list) \<Rightarrow> (Enc list) \<Rightarrow> Tr \<Rightarrow> (SmtTerm list) \<Rightarrow> ('s, (Tr \<times> (Enc list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body) \<times> (SmtProblem \<Rightarrow> (Enc list) \<Rightarrow> (Enc list) \<Rightarrow> Tr \<Rightarrow> SmtTerm \<Rightarrow> ('s, (Tr \<times> Enc \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> ((SmtProblem \<Rightarrow> (Enc list) \<Rightarrow> (Enc list) \<Rightarrow> Tr \<Rightarrow> (SmtTerm list) \<Rightarrow> ('s, (Tr \<times> (Enc list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body) \<times> (SmtProblem \<Rightarrow> (Enc list) \<Rightarrow> (Enc list) \<Rightarrow> Tr \<Rightarrow> SmtTerm \<Rightarrow> ('s, (Tr \<times> Enc \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
+  \<open>enc_args_rec_step \<equiv> \<lambda>(rec_enc_args, rec_enc). (\<lambda>p dm env s ts. FunctionBody \<lbrakk>
+    let mut s = s;
+    let mut es = { let init_2 = { let res_1 = []; \<llangle>res_1 :: Enc list\<rrangle> }; \<llangle>init_2 :: Enc list\<rrangle> };
+    let mut i = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(ts) {
+      let destr_3 = \<epsilon>\<open>rec_enc\<close>(p, dm, env, * s, ts[* i]);
+      let s1 = destr_3.0;
+      let e = destr_3.1;
+      * s = s1;
+      vec_push(es, e);
+      * i += 1_usize;
+    };
+    (* s, * es)
+  \<rbrakk>,
+   \<lambda>p dm env s t. FunctionBody \<lbrakk>
+    match t {
+      SmtTerm_BoolConst(b) \<Rightarrow> {
+        (s, Enc_Lit_mk(0_usize, b))
+      },
+      SmtTerm_BvConst(_) \<Rightarrow> {
+        (s, Enc_Lit_mk(0_usize, true))
+      },
+      SmtTerm_Param(k) \<Rightarrow> {
+        (s, copy_enc(env[k]))
+      },
+      SmtTerm_Fun(f, args) \<Rightarrow> {
+        let destr_1 = \<epsilon>\<open>rec_enc_args\<close>(p, dm, env, s, args);
+        let s = destr_1.0;
+        let es = destr_1.1;
+        let mut s = s;
+        let mut ts = { let init_3 = { let res_2 = []; \<llangle>res_2 :: (64 word) list\<rrangle> }; \<llangle>init_3 :: (64 word) list\<rrangle> };
+        let mut i = 0_usize;
+        #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(es) {
+          let destr_4 = enc_term(* s, es[* i]);
+          let s1 = destr_4.0;
+          let ti = destr_4.1;
+          * s = s1;
+          vec_push(ts, ti);
+          * i += 1_usize;
+        };
+        let destr_5 = add_term(* s, f, * ts);
+        let s = destr_5.0;
+        let k = destr_5.1;
+        match p.SmtProblem_funs[f].SmtFun_ret {
+          SmtSort_Bool \<Rightarrow> {
+            let destr_6 = add_atom(s, k, 0_usize);
+            let s = destr_6.0;
+            let a = destr_6.1;
+            (s, Enc_Lit_mk(a, true))
+          },
+          _ \<Rightarrow> {
+            (s, Enc_Term_mk(k))
+          }
+        }
+      },
+      SmtTerm_Def(d, args) \<Rightarrow> {
+        if ext_alloc_vec_Vec_is_empty(p.SmtProblem_defs[d].SmtDef_params) {
+          (s, copy_enc(dm[d]))
+        } else {
+          let destr_7 = \<epsilon>\<open>rec_enc_args\<close>(p, dm, env, s, args);
+          let s = destr_7.0;
+          let es = destr_7.1;
+          \<epsilon>\<open>rec_enc\<close>(p, dm, es, s, p.SmtProblem_defs[d].SmtDef_body)
+        }
+      },
+      SmtTerm_App(o_v, args) \<Rightarrow> {
+        let destr_8 = \<epsilon>\<open>rec_enc_args\<close>(p, dm, env, s, args);
+        let s = destr_8.0;
+        let es = destr_8.1;
+        enc_app(s, o_v, es)
+      }
+    }
+  \<rbrakk>)\<close>
+
+(* Rust: enc_args *)
+definition "enc_args" :: \<open>SmtProblem \<Rightarrow> (Enc list) \<Rightarrow> (Enc list) \<Rightarrow> Tr \<Rightarrow> (SmtTerm list) \<Rightarrow> ('s, (Tr \<times> (Enc list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>enc_args \<equiv> (fst ((enc_args_rec_step ^^ urust_fuel) (\<lambda>p dm env s ts. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>,
+   \<lambda>p dm env s t. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>)))\<close>
+
+(* Rust: enc *)
+definition "enc" :: \<open>SmtProblem \<Rightarrow> (Enc list) \<Rightarrow> (Enc list) \<Rightarrow> Tr \<Rightarrow> SmtTerm \<Rightarrow> ('s, (Tr \<times> Enc \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>enc \<equiv> (snd ((enc_args_rec_step ^^ urust_fuel) (\<lambda>p dm env s ts. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>,
+   \<lambda>p dm env s t. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>)))\<close>
+
+(* Rust: sort_in_fragment *)
+definition "sort_in_fragment" :: \<open>SmtSort \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>sort_in_fragment \<equiv> \<lambda>s. FunctionBody \<lbrakk>
+    match s {
+      SmtSort_BitVec(_) \<Rightarrow> {
+        false
+      },
+      _ \<Rightarrow> {
+        true
+      }
+    }
+  \<rbrakk>\<close>
+
+text \<open>Recursive group term_in_fragment, terms_in_fragment: defined by iterating term_in_fragment_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>
+
+definition "term_in_fragment_rec_step" :: \<open>((SmtTerm \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body) \<times> ((SmtTerm list) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> ((SmtTerm \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body) \<times> ((SmtTerm list) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
+  \<open>term_in_fragment_rec_step \<equiv> \<lambda>(rec_term_in_fragment, rec_terms_in_fragment). (\<lambda>t. FunctionBody \<lbrakk>
+    match t {
+      SmtTerm_BoolConst(_) | SmtTerm_Param(_) \<Rightarrow> {
+        true
+      },
+      SmtTerm_BvConst(_) \<Rightarrow> {
+        false
+      },
+      SmtTerm_Fun(_, args) | SmtTerm_Def(_, args) \<Rightarrow> {
+        \<epsilon>\<open>rec_terms_in_fragment\<close>(args)
+      },
+      SmtTerm_App(o_v, args) \<Rightarrow> {
+        match o_v {
+          SmtOp_Not | SmtOp_And | SmtOp_Or | SmtOp_Xor | SmtOp_Implies | SmtOp_Eq | SmtOp_Distinct | SmtOp_Ite \<Rightarrow> {
+            \<epsilon>\<open>rec_terms_in_fragment\<close>(args)
+          },
+          _ \<Rightarrow> {
+            false
+          }
+        }
+      }
+    }
+  \<rbrakk>,
+   \<lambda>ts. FunctionBody \<lbrakk>
+    let mut i = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(ts) {
+      if !\<epsilon>\<open>rec_term_in_fragment\<close>(ts[* i]) {
+        return false;
+      };
+      * i += 1_usize;
+    };
+    true
+  \<rbrakk>)\<close>
+
+(* Rust: term_in_fragment *)
+definition "term_in_fragment" :: \<open>SmtTerm \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>term_in_fragment \<equiv> (fst ((term_in_fragment_rec_step ^^ urust_fuel) (\<lambda>t. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>,
+   \<lambda>ts. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>)))\<close>
+
+(* Rust: terms_in_fragment *)
+definition "terms_in_fragment" :: \<open>(SmtTerm list) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>terms_in_fragment \<equiv> (snd ((term_in_fragment_rec_step ^^ urust_fuel) (\<lambda>t. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>,
+   \<lambda>ts. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>)))\<close>
+
+(* Rust: sorts_in_fragment *)
+definition "sorts_in_fragment" :: \<open>(SmtSort list) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>sorts_in_fragment \<equiv> \<lambda>ss. FunctionBody \<lbrakk>
+    let mut i = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(ss) {
+      if !sort_in_fragment(ss[* i]) {
+        return false;
+      };
+      * i += 1_usize;
+    };
+    true
+  \<rbrakk>\<close>
+
+(* Rust: in_fragment *)
+definition "in_fragment" :: \<open>SmtProblem \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>in_fragment \<equiv> \<lambda>p. FunctionBody \<lbrakk>
+    let mut i = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(p.SmtProblem_funs) {
+      if (!sorts_in_fragment(p.SmtProblem_funs[* i].SmtFun_args)) || (!sort_in_fragment(p.SmtProblem_funs[* i].SmtFun_ret)) {
+        return false;
+      };
+      * i += 1_usize;
+    };
+    let mut d = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* d) < len(p.SmtProblem_defs) {
+      if ((!sorts_in_fragment(p.SmtProblem_defs[* d].SmtDef_params)) || (!sort_in_fragment(p.SmtProblem_defs[* d].SmtDef_ret))) || (!term_in_fragment(p.SmtProblem_defs[* d].SmtDef_body)) {
+        return false;
+      };
+      * d += 1_usize;
+    };
+    terms_in_fragment(p.SmtProblem_asserts)
+  \<rbrakk>\<close>
+
+(* Rust: tr_problem *)
+definition "tr_problem" :: \<open>SmtProblem \<Rightarrow> ('s, Problem, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>tr_problem \<equiv> \<lambda>p. FunctionBody \<lbrakk>
+    let nf = len(p.SmtProblem_funs);
+    let s = Tr_mk { Tr_terms: { let res_1 = []; \<llangle>res_1 :: Term list\<rrangle> }, Tr_atoms: { let res_2 = []; \<llangle>res_2 :: Atom list\<rrangle> }, Tr_clauses: { let res_3 = []; \<llangle>res_3 :: Clause list\<rrangle> }, Tr_next_fun: nf + 2_usize };
+    let destr_5 = add_term(s, nf, { let res_4 = []; \<llangle>res_4 :: (64 word) list\<rrangle> });
+    let s = destr_5.0;
+    let destr_7 = add_term(s, nf + 1_usize, { let res_6 = []; \<llangle>res_6 :: (64 word) list\<rrangle> });
+    let s = destr_7.0;
+    let destr_8 = add_atom(s, 0_usize, 0_usize);
+    let s = destr_8.0;
+    let destr_9 = add_atom(s, 0_usize, 1_usize);
+    let s = destr_9.0;
+    let mut s = add_clause(s, ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_10 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_10 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(1_usize, false)])));
+    let mut dm = { let init_12 = { let res_11 = []; \<llangle>res_11 :: Enc list\<rrangle> }; \<llangle>init_12 :: Enc list\<rrangle> };
+    let no_params = { let res_13 = []; \<llangle>res_13 :: Enc list\<rrangle> };
+    let mut d = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* d) < len(p.SmtProblem_defs) {
+      if ext_alloc_vec_Vec_is_empty(p.SmtProblem_defs[* d].SmtDef_params) {
+        let destr_14 = enc(p, * dm, no_params, * s, p.SmtProblem_defs[* d].SmtDef_body);
+        let s1 = destr_14.0;
+        let e = destr_14.1;
+        * s = s1;
+        vec_push(dm, e);
+      } else {
+        vec_push(dm, Enc_Lit_mk(0_usize, true));
+      };
+      * d += 1_usize;
+    };
+    let mut j = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < len(p.SmtProblem_asserts) {
+      let destr_15 = enc(p, * dm, no_params, * s, p.SmtProblem_asserts[* j]);
+      let s1 = destr_15.0;
+      let e = destr_15.1;
+      let destr_16 = enc_lit(e);
+      let a = destr_16.0;
+      let pos = destr_16.1;
+      * s = add_clause(s1, ext_alloc_boxed_box_assume_init_into_vec_unsafe(ext_alloc_intrinsics_write_box_via_move({ let res_17 = ext_alloc_boxed_Box_new_uninit(); \<llangle>res_17 :: (Lit list) ext_core_mem_maybe_uninit_MaybeUninit\<rrangle> }, [lit(a, pos)])));
+      * j += 1_usize;
+    };
+    Problem_mk { Problem_terms: * (s.Tr_terms), Problem_atoms: * (s.Tr_atoms), Problem_clauses: * (s.Tr_clauses) }
+  \<rbrakk>\<close>
+
+(* Rust: const_value *)
+definition "const_value" :: \<open>Model \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>const_value \<equiv> \<lambda>m f. FunctionBody \<lbrakk>
+    let mut i = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(m.Model_entries) {
+      if ((m.Model_entries[* i].Entry_fun) == f) && ext_alloc_vec_Vec_is_empty(m.Model_entries[* i].Entry_args) {
+        return m.Model_entries[* i].Entry_val;
+      };
+      * i += 1_usize;
+    };
+    0_usize
+  \<rbrakk>\<close>
+
+(* Rust: domain_size *)
+definition "domain_size" :: \<open>Model \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>domain_size \<equiv> \<lambda>m. FunctionBody \<lbrakk>
+    let mut n = 1_usize;
+    let mut i = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(m.Model_entries) {
+      if (m.Model_entries[* i].Entry_val) >= (* n) {
+        * n = (m.Model_entries[* i].Entry_val) + 1_usize;
+      };
+      let mut k = 0_usize;
+      #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* k) < len(m.Model_entries[* i].Entry_args) {
+        if (m.Model_entries[* i].Entry_args[* k]) >= (* n) {
+          * n = (m.Model_entries[* i].Entry_args[* k]) + 1_usize;
+        };
+        * k += 1_usize;
+      };
+      * i += 1_usize;
+    };
+    * n
+  \<rbrakk>\<close>
+
+(* Rust: value_of *)
+definition "value_of" :: \<open>SmtSort \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, SmtValue, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>value_of \<equiv> \<lambda>s v t. FunctionBody \<lbrakk>
+    match s {
+      SmtSort_Bool \<Rightarrow> {
+        SmtValue_Bool_mk(v == t)
+      },
+      _ \<Rightarrow> {
+        SmtValue_Elem_mk(v)
+      }
+    }
+  \<rbrakk>\<close>
+
+(* Rust: tr_interp *)
+definition "tr_interp" :: \<open>SmtProblem \<Rightarrow> Model \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, SmtInterp, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>tr_interp \<equiv> \<lambda>p m f t u. FunctionBody \<lbrakk>
+    let sig = p.SmtProblem_funs[f];
+    let mut entries = { let init_2 = { let res_1 = []; \<llangle>res_1 :: SmtEntry list\<rrangle> }; \<llangle>init_2 :: SmtEntry list\<rrangle> };
+    let mut i = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(m.Model_entries) {
+      let e = m.Model_entries[* i];
+      if ((e.Entry_fun) == f) && (len(e.Entry_args) == len(sig.SmtFun_args)) {
+        let mut ok_v = true;
+        let mut args = { let init_4 = { let res_3 = []; \<llangle>res_3 :: SmtValue list\<rrangle> }; \<llangle>init_4 :: SmtValue list\<rrangle> };
+        let mut k = 0_usize;
+        #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* k) < len(e.Entry_args) {
+          match sig.SmtFun_args[* k] {
+            SmtSort_Bool \<Rightarrow> {
+              if ((e.Entry_args[* k]) != t) && ((e.Entry_args[* k]) != u) {
+                * ok_v = false;
+              }
+            },
+            _ \<Rightarrow> {
+              ()
+            }
+          };
+          vec_push(args, value_of(sig.SmtFun_args[* k], e.Entry_args[* k], t));
+          * k += 1_usize;
+        };
+        if * ok_v {
+          vec_push(entries, SmtEntry_mk { SmtEntry_args: * args, SmtEntry_val: value_of(sig.SmtFun_ret, e.Entry_val, t) });
+        }
+      };
+      * i += 1_usize;
+    };
+    SmtInterp_mk { SmtInterp_entries: * entries, SmtInterp_default: value_of(sig.SmtFun_ret, 0_usize, t) }
+  \<rbrakk>\<close>
+
+(* Rust: tr_model *)
+definition "tr_model" :: \<open>SmtProblem \<Rightarrow> Model \<Rightarrow> ('s, SmtModel, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>tr_model \<equiv> \<lambda>p m. FunctionBody \<lbrakk>
+    let nf = len(p.SmtProblem_funs);
+    let t = const_value(m, nf);
+    let u = const_value(m, nf + 1_usize);
+    let n = domain_size(m);
+    let mut domains = { let init_2 = { let res_1 = []; \<llangle>res_1 :: (64 word) list\<rrangle> }; \<llangle>init_2 :: (64 word) list\<rrangle> };
+    let mut i = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < (p.SmtProblem_num_sorts) {
+      vec_push(domains, n);
+      * i += 1_usize;
+    };
+    let mut funs = { let init_4 = { let res_3 = []; \<llangle>res_3 :: SmtInterp list\<rrangle> }; \<llangle>init_4 :: SmtInterp list\<rrangle> };
+    let mut f = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* f) < nf {
+      vec_push(funs, tr_interp(p, m, * f, t, u));
+      * f += 1_usize;
+    };
+    SmtModel_mk { SmtModel_domains: * domains, SmtModel_funs: * funs }
+  \<rbrakk>\<close>
+
+(* Rust: check_sat *)
+definition "check_sat" :: \<open>SmtProblem \<Rightarrow> ('s, SmtAnswer, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>check_sat \<equiv> \<lambda>p. FunctionBody \<lbrakk>
+    if !in_fragment(p) {
+      return SmtAnswer_Unknown;
+    };
+    match solve(tr_problem(p)) {
+      Answer_Sat(m) \<Rightarrow> {
+        SmtAnswer_Sat_mk(tr_model(p, m))
+      },
+      Answer_Unsat \<Rightarrow> {
+        SmtAnswer_Unsat
       }
     }
   \<rbrakk>\<close>

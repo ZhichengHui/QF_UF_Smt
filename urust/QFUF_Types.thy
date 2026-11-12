@@ -75,4 +75,210 @@ datatype Answer =
 definition "Answer_Sat_mk" :: \<open>Model \<Rightarrow> ('s, Answer, 'abort, 'i, 'o) function_body\<close> where
   [crush_inline]: \<open>Answer_Sat_mk \<equiv> \<lambda>a0. FunctionBody (literal (Answer_Sat a0))\<close>
 
+(* Rust: SmtSort *)
+datatype SmtSort =
+    SmtSort_Bool
+  | SmtSort_BitVec \<open>64 word\<close>
+  | SmtSort_Uninterpreted \<open>64 word\<close>
+
+definition "SmtSort_BitVec_mk" :: \<open>(64 word) \<Rightarrow> ('s, SmtSort, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtSort_BitVec_mk \<equiv> \<lambda>a0. FunctionBody (literal (SmtSort_BitVec a0))\<close>
+
+definition "SmtSort_Uninterpreted_mk" :: \<open>(64 word) \<Rightarrow> ('s, SmtSort, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtSort_Uninterpreted_mk \<equiv> \<lambda>a0. FunctionBody (literal (SmtSort_Uninterpreted a0))\<close>
+
+(* Rust: SmtOp *)
+datatype SmtOp =
+    SmtOp_Not
+  | SmtOp_And
+  | SmtOp_Or
+  | SmtOp_Xor
+  | SmtOp_Implies
+  | SmtOp_Eq
+  | SmtOp_Distinct
+  | SmtOp_Ite
+  | SmtOp_Concat
+  | SmtOp_Extract \<open>64 word\<close> \<open>64 word\<close>
+  | SmtOp_Bvnot
+  | SmtOp_Bvand
+  | SmtOp_Bvor
+  | SmtOp_Bvneg
+  | SmtOp_Bvadd
+  | SmtOp_Bvmul
+  | SmtOp_Bvudiv
+  | SmtOp_Bvurem
+  | SmtOp_Bvshl
+  | SmtOp_Bvlshr
+  | SmtOp_Bvult
+  | SmtOp_Bvnand
+  | SmtOp_Bvnor
+  | SmtOp_Bvxor
+  | SmtOp_Bvxnor
+  | SmtOp_Bvcomp
+  | SmtOp_Bvsub
+  | SmtOp_Bvsdiv
+  | SmtOp_Bvsrem
+  | SmtOp_Bvsmod
+  | SmtOp_Bvashr
+  | SmtOp_Repeat \<open>64 word\<close>
+  | SmtOp_ZeroExtend \<open>64 word\<close>
+  | SmtOp_SignExtend \<open>64 word\<close>
+  | SmtOp_RotateLeft \<open>64 word\<close>
+  | SmtOp_RotateRight \<open>64 word\<close>
+  | SmtOp_Bvule
+  | SmtOp_Bvugt
+  | SmtOp_Bvuge
+  | SmtOp_Bvslt
+  | SmtOp_Bvsle
+  | SmtOp_Bvsgt
+  | SmtOp_Bvsge
+
+definition "SmtOp_Extract_mk" :: \<open>(64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, SmtOp, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtOp_Extract_mk \<equiv> \<lambda>a0 a1. FunctionBody (literal (SmtOp_Extract a0 a1))\<close>
+
+definition "SmtOp_Repeat_mk" :: \<open>(64 word) \<Rightarrow> ('s, SmtOp, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtOp_Repeat_mk \<equiv> \<lambda>a0. FunctionBody (literal (SmtOp_Repeat a0))\<close>
+
+definition "SmtOp_ZeroExtend_mk" :: \<open>(64 word) \<Rightarrow> ('s, SmtOp, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtOp_ZeroExtend_mk \<equiv> \<lambda>a0. FunctionBody (literal (SmtOp_ZeroExtend a0))\<close>
+
+definition "SmtOp_SignExtend_mk" :: \<open>(64 word) \<Rightarrow> ('s, SmtOp, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtOp_SignExtend_mk \<equiv> \<lambda>a0. FunctionBody (literal (SmtOp_SignExtend a0))\<close>
+
+definition "SmtOp_RotateLeft_mk" :: \<open>(64 word) \<Rightarrow> ('s, SmtOp, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtOp_RotateLeft_mk \<equiv> \<lambda>a0. FunctionBody (literal (SmtOp_RotateLeft a0))\<close>
+
+definition "SmtOp_RotateRight_mk" :: \<open>(64 word) \<Rightarrow> ('s, SmtOp, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtOp_RotateRight_mk \<equiv> \<lambda>a0. FunctionBody (literal (SmtOp_RotateRight a0))\<close>
+
+(* Rust: SmtTerm *)
+datatype SmtTerm =
+    SmtTerm_BoolConst \<open>bool\<close>
+  | SmtTerm_BvConst \<open>bool list\<close>
+  | SmtTerm_Param \<open>64 word\<close>
+  | SmtTerm_Fun \<open>64 word\<close> \<open>SmtTerm list\<close>
+  | SmtTerm_Def \<open>64 word\<close> \<open>SmtTerm list\<close>
+  | SmtTerm_App \<open>SmtOp\<close> \<open>SmtTerm list\<close>
+
+definition "SmtTerm_BoolConst_mk" :: \<open>bool \<Rightarrow> ('s, SmtTerm, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtTerm_BoolConst_mk \<equiv> \<lambda>a0. FunctionBody (literal (SmtTerm_BoolConst a0))\<close>
+
+definition "SmtTerm_BvConst_mk" :: \<open>(bool list) \<Rightarrow> ('s, SmtTerm, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtTerm_BvConst_mk \<equiv> \<lambda>a0. FunctionBody (literal (SmtTerm_BvConst a0))\<close>
+
+definition "SmtTerm_Param_mk" :: \<open>(64 word) \<Rightarrow> ('s, SmtTerm, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtTerm_Param_mk \<equiv> \<lambda>a0. FunctionBody (literal (SmtTerm_Param a0))\<close>
+
+definition "SmtTerm_Fun_mk" :: \<open>(64 word) \<Rightarrow> (SmtTerm list) \<Rightarrow> ('s, SmtTerm, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtTerm_Fun_mk \<equiv> \<lambda>a0 a1. FunctionBody (literal (SmtTerm_Fun a0 a1))\<close>
+
+definition "SmtTerm_Def_mk" :: \<open>(64 word) \<Rightarrow> (SmtTerm list) \<Rightarrow> ('s, SmtTerm, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtTerm_Def_mk \<equiv> \<lambda>a0 a1. FunctionBody (literal (SmtTerm_Def a0 a1))\<close>
+
+definition "SmtTerm_App_mk" :: \<open>SmtOp \<Rightarrow> (SmtTerm list) \<Rightarrow> ('s, SmtTerm, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtTerm_App_mk \<equiv> \<lambda>a0 a1. FunctionBody (literal (SmtTerm_App a0 a1))\<close>
+
+(* Rust: SmtFun *)
+datatype_record SmtFun =
+  SmtFun_args :: \<open>SmtSort list\<close>
+  SmtFun_ret :: \<open>SmtSort\<close>
+micro_rust_record SmtFun
+
+definition "SmtFun_mk" :: \<open>(SmtSort list) \<Rightarrow> SmtSort \<Rightarrow> ('s, SmtFun, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtFun_mk \<equiv> \<lambda>a0 a1. FunctionBody (literal (make_SmtFun a0 a1))\<close>
+
+(* Rust: SmtDef *)
+datatype_record SmtDef =
+  SmtDef_params :: \<open>SmtSort list\<close>
+  SmtDef_ret :: \<open>SmtSort\<close>
+  SmtDef_body :: \<open>SmtTerm\<close>
+micro_rust_record SmtDef
+
+definition "SmtDef_mk" :: \<open>(SmtSort list) \<Rightarrow> SmtSort \<Rightarrow> SmtTerm \<Rightarrow> ('s, SmtDef, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtDef_mk \<equiv> \<lambda>a0 a1 a2. FunctionBody (literal (make_SmtDef a0 a1 a2))\<close>
+
+(* Rust: SmtProblem *)
+datatype_record SmtProblem =
+  SmtProblem_num_sorts :: \<open>64 word\<close>
+  SmtProblem_funs :: \<open>SmtFun list\<close>
+  SmtProblem_defs :: \<open>SmtDef list\<close>
+  SmtProblem_asserts :: \<open>SmtTerm list\<close>
+micro_rust_record SmtProblem
+
+definition "SmtProblem_mk" :: \<open>(64 word) \<Rightarrow> (SmtFun list) \<Rightarrow> (SmtDef list) \<Rightarrow> (SmtTerm list) \<Rightarrow> ('s, SmtProblem, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtProblem_mk \<equiv> \<lambda>a0 a1 a2 a3. FunctionBody (literal (make_SmtProblem a0 a1 a2 a3))\<close>
+
+(* Rust: SmtValue *)
+datatype SmtValue =
+    SmtValue_Bool \<open>bool\<close>
+  | SmtValue_Bv \<open>bool list\<close>
+  | SmtValue_Elem \<open>64 word\<close>
+
+definition "SmtValue_Bool_mk" :: \<open>bool \<Rightarrow> ('s, SmtValue, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtValue_Bool_mk \<equiv> \<lambda>a0. FunctionBody (literal (SmtValue_Bool a0))\<close>
+
+definition "SmtValue_Bv_mk" :: \<open>(bool list) \<Rightarrow> ('s, SmtValue, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtValue_Bv_mk \<equiv> \<lambda>a0. FunctionBody (literal (SmtValue_Bv a0))\<close>
+
+definition "SmtValue_Elem_mk" :: \<open>(64 word) \<Rightarrow> ('s, SmtValue, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtValue_Elem_mk \<equiv> \<lambda>a0. FunctionBody (literal (SmtValue_Elem a0))\<close>
+
+(* Rust: SmtEntry *)
+datatype_record SmtEntry =
+  SmtEntry_args :: \<open>SmtValue list\<close>
+  SmtEntry_val :: \<open>SmtValue\<close>
+micro_rust_record SmtEntry
+
+definition "SmtEntry_mk" :: \<open>(SmtValue list) \<Rightarrow> SmtValue \<Rightarrow> ('s, SmtEntry, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtEntry_mk \<equiv> \<lambda>a0 a1. FunctionBody (literal (make_SmtEntry a0 a1))\<close>
+
+(* Rust: SmtInterp *)
+datatype_record SmtInterp =
+  SmtInterp_entries :: \<open>SmtEntry list\<close>
+  SmtInterp_default :: \<open>SmtValue\<close>
+micro_rust_record SmtInterp
+
+definition "SmtInterp_mk" :: \<open>(SmtEntry list) \<Rightarrow> SmtValue \<Rightarrow> ('s, SmtInterp, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtInterp_mk \<equiv> \<lambda>a0 a1. FunctionBody (literal (make_SmtInterp a0 a1))\<close>
+
+(* Rust: SmtModel *)
+datatype_record SmtModel =
+  SmtModel_domains :: \<open>(64 word) list\<close>
+  SmtModel_funs :: \<open>SmtInterp list\<close>
+micro_rust_record SmtModel
+
+definition "SmtModel_mk" :: \<open>((64 word) list) \<Rightarrow> (SmtInterp list) \<Rightarrow> ('s, SmtModel, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtModel_mk \<equiv> \<lambda>a0 a1. FunctionBody (literal (make_SmtModel a0 a1))\<close>
+
+(* Rust: SmtAnswer *)
+datatype SmtAnswer =
+    SmtAnswer_Sat \<open>SmtModel\<close>
+  | SmtAnswer_Unsat
+  | SmtAnswer_Unknown
+
+definition "SmtAnswer_Sat_mk" :: \<open>SmtModel \<Rightarrow> ('s, SmtAnswer, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>SmtAnswer_Sat_mk \<equiv> \<lambda>a0. FunctionBody (literal (SmtAnswer_Sat a0))\<close>
+
+(* Rust: Enc *)
+datatype Enc =
+    Enc_Term \<open>64 word\<close>
+  | Enc_Lit \<open>64 word\<close> \<open>bool\<close>
+
+definition "Enc_Term_mk" :: \<open>(64 word) \<Rightarrow> ('s, Enc, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>Enc_Term_mk \<equiv> \<lambda>a0. FunctionBody (literal (Enc_Term a0))\<close>
+
+definition "Enc_Lit_mk" :: \<open>(64 word) \<Rightarrow> bool \<Rightarrow> ('s, Enc, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>Enc_Lit_mk \<equiv> \<lambda>a0 a1. FunctionBody (literal (Enc_Lit a0 a1))\<close>
+
+(* Rust: Tr *)
+datatype_record Tr =
+  Tr_terms :: \<open>Term list\<close>
+  Tr_atoms :: \<open>Atom list\<close>
+  Tr_clauses :: \<open>Clause list\<close>
+  Tr_next_fun :: \<open>64 word\<close>
+micro_rust_record Tr
+
+definition "Tr_mk" :: \<open>(Term list) \<Rightarrow> (Atom list) \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> ('s, Tr, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>Tr_mk \<equiv> \<lambda>a0 a1 a2 a3. FunctionBody (literal (make_Tr a0 a1 a2 a3))\<close>
+
 end

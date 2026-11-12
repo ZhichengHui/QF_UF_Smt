@@ -9,6 +9,22 @@ text \<open>Functions without a definition in this crate. Replace the bodies by 
 context QFUF_ctx
 begin
 
+(* Rust: std::boxed::Box::<T>::new_uninit *)
+definition "ext_alloc_boxed_Box_new_uninit" :: \<open>('s, ('rT) ext_core_mem_maybe_uninit_MaybeUninit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>ext_alloc_boxed_Box_new_uninit \<equiv> FunctionBody \<lbrakk> unimplemented!("external function std::boxed::Box::<T>::new_uninit") \<rbrakk>\<close>
+
+(* Rust: std::boxed::box_assume_init_into_vec_unsafe *)
+definition "ext_alloc_boxed_box_assume_init_into_vec_unsafe" :: \<open>(('rT list) ext_core_mem_maybe_uninit_MaybeUninit) \<Rightarrow> ('s, 'rT list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>ext_alloc_boxed_box_assume_init_into_vec_unsafe \<equiv> \<lambda>a0. FunctionBody \<lbrakk> unimplemented!("external function std::boxed::box_assume_init_into_vec_unsafe") \<rbrakk>\<close>
+
+(* Rust: alloc::intrinsics::write_box_via_move *)
+definition "ext_alloc_intrinsics_write_box_via_move" :: \<open>(('rT) ext_core_mem_maybe_uninit_MaybeUninit) \<Rightarrow> 'rT \<Rightarrow> ('s, ('rT) ext_core_mem_maybe_uninit_MaybeUninit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>ext_alloc_intrinsics_write_box_via_move \<equiv> \<lambda>a0 a1. FunctionBody \<lbrakk> unimplemented!("external function alloc::intrinsics::write_box_via_move") \<rbrakk>\<close>
+
+(* Rust: std::vec::Vec::<T, A>::is_empty *)
+definition "ext_alloc_vec_Vec_is_empty" :: \<open>('rT list) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>ext_alloc_vec_Vec_is_empty \<equiv> \<lambda>a0. FunctionBody \<lbrakk> unimplemented!("external function std::vec::Vec::<T, A>::is_empty") \<rbrakk>\<close>
+
 end
 
 end
