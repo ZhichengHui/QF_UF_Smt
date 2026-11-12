@@ -31,15 +31,27 @@ lemma wf_args_lt_length:
    unat x < length (Problem_terms p)\<close>
   using wf_args by (meson order.strict_trans)
 
+text \<open>Every representative is a term index.\<close>
+definition reps_lt :: \<open>Problem \<Rightarrow> 64 word list \<Rightarrow> bool\<close> where
+  \<open>reps_lt p rs \<equiv> \<forall>x \<in> set rs. unat x < length (Problem_terms p)\<close>
+
+lemma reps_lt_merge:
+  \<open>reps_lt p rs \<Longrightarrow> b < length rs \<Longrightarrow> reps_lt p (merge_list rs a b)\<close>
+  unfolding reps_lt_def merge_list_def by (auto intro: nth_mem)
+
+lemma reps_lt_init:
+  \<open>length (Problem_terms p) < 2^63 \<Longrightarrow> reps_lt p (List.map word_of_nat [0..<length (Problem_terms p)])\<close>
+  unfolding reps_lt_def by (auto simp add: unat_of_nat_eq)
+
 text \<open>The invariant of the representative list during the closure, for the asserted pairs \<open>E\<close>.\<close>
 definition cc_inv :: \<open>Problem \<Rightarrow> (nat \<times> nat) set \<Rightarrow> 64 word list \<Rightarrow> bool\<close> where
   \<open>cc_inv p E rs \<equiv> wf_problem p \<and> sizes_ok p \<and> rep_ok p E rs \<and>
-     (\<forall>(i, j) \<in> E. i < length (Problem_terms p) \<and> j < length (Problem_terms p))\<close>
+     (\<forall>(i, j) \<in> E. i < length (Problem_terms p) \<and> j < length (Problem_terms p)) \<and> reps_lt p rs\<close>
 
 lemma cc_inv_merge:
   assumes \<open>cc_inv p E rs\<close> \<open>i < length rs\<close> \<open>j < length rs\<close> \<open>congruent_p p rs i j\<close>
   shows \<open>cc_inv p E (merge_list rs i j)\<close>
-  using assms rep_ok_merge_congruent unfolding cc_inv_def rep_ok_def by (metis length_merge_list)
+  using assms rep_ok_merge_congruent reps_lt_merge unfolding cc_inv_def rep_ok_def by (metis length_merge_list)
 
 lemma cc_inv_length:
   \<open>cc_inv p E rs \<Longrightarrow> length rs = length (Problem_terms p)\<close>
@@ -59,6 +71,24 @@ lemma args_len_lt:
 lemma unat_len_plus_one:
   \<open>n < 2^63 \<Longrightarrow> unat (word_of_nat n + 1 :: 64 word) = n + 1\<close>
   by (simp add: unat_word_ariths unat_of_nat_eq)
+
+text \<open>Every value and every argument in the entries of the model \<open>m\<close> is a term index of \<open>p\<close>.\<close>
+definition model_vals_ok :: \<open>Problem \<Rightarrow> Model \<Rightarrow> bool\<close> where
+  \<open>model_vals_ok p m \<equiv> \<forall>e \<in> set (Model_entries m).
+     unat (Entry_val e) < length (Problem_terms p) \<and> (\<forall>a \<in> set (Entry_args e). unat a < length (Problem_terms p))\<close>
+
+lemma model_of_vals_ok:
+  assumes \<open>cc_inv p E rs\<close>
+  shows \<open>model_vals_ok p (model_of p rs)\<close>
+proof -
+  have wf: \<open>wf_problem p\<close> and n: \<open>length rs = length (Problem_terms p)\<close> and r: \<open>reps_lt p rs\<close>
+    using assms by (simp_all add: cc_inv_def rep_ok_def)
+  have rs: \<open>unat (rs ! k) < length (Problem_terms p)\<close> if \<open>k < length (Problem_terms p)\<close> for k
+    using r n that unfolding reps_lt_def by (metis nth_mem)
+  show ?thesis
+    unfolding model_vals_ok_def model_of_def
+    using rs wf_args_lt_length[OF wf] by auto
+qed
 
 lemma length_map_prefix [simp]:
   \<open>length (List.map f (take i xs) @ drop i xs) = length xs\<close>
@@ -277,7 +307,7 @@ definition diseqs_hold :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 6
 
 lemma cc_inv_init:
   \<open>wf_problem p \<Longrightarrow> sizes_ok p \<Longrightarrow> cc_inv p {} (List.map word_of_nat [0..<length (Problem_terms p)])\<close>
-  using rep_ok_init[of p] unfolding cc_inv_def sizes_ok_def by simp
+  using rep_ok_init[of p] reps_lt_init[of p] unfolding cc_inv_def sizes_ok_def by simp
 
 lemma cc_inv_assert:
   assumes \<open>cc_inv p (asserted p a k) rs\<close> \<open>k < length (Problem_atoms p)\<close> \<open>a ! k\<close>
@@ -303,6 +333,8 @@ proof -
       using assms(1) rep_has_merge bnd E' n unfolding cc_inv_def rep_ok_def by auto
     then show ?thesis using merge_list_joins[OF lr] E' unfolding rep_has_def by auto
   qed
+  moreover have \<open>reps_lt p (merge_list rs ?l ?r)\<close>
+    using assms(1) lr(2) reps_lt_merge unfolding cc_inv_def by blast
   ultimately show ?thesis
     using assms(1) bnd n unfolding cc_inv_def rep_ok_def by simp
 qed
@@ -559,7 +591,7 @@ definition theory_check_contract :: \<open>Problem \<Rightarrow> bool list \<Rig
      let post = \<lambda>r. can_alloc_reference \<star>
         \<langle>case r of
            None \<Rightarrow> \<forall>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. atom_vals I p \<noteq> a
-         | Some m \<Rightarrow> atom_vals (model_interp m) p = a\<rangle> in
+         | Some m \<Rightarrow> atom_vals (model_interp m) p = a \<and> model_vals_ok p m\<rangle> in
      make_function_contract pre post\<close>
 
 text \<open>The state of \<open>rep\<close> is existentially quantified inside the contract: the caller gets it from
@@ -576,7 +608,7 @@ definition finish_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarro
      let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs) \<star>
         \<langle>case r of
            None \<Rightarrow> \<forall>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. atom_vals I p \<noteq> a
-         | Some m \<Rightarrow> atom_vals (model_interp m) p = a\<rangle> in
+         | Some m \<Rightarrow> atom_vals (model_interp m) p = a \<and> model_vals_ok p m\<rangle> in
      make_function_contract pre post\<close>
 
 lemma finish_spec:
@@ -585,7 +617,7 @@ lemma finish_spec:
   apply (crush_base specs add: diseqs_ok_spec build_model_spec
       contracts add: diseqs_ok_contract_def build_model_contract_def
       simp add: sizes_ok_def)
-  apply (auto intro: theory_none theory_some simp add: sizes_ok_def)
+  apply (auto intro: theory_none theory_some model_of_vals_ok simp add: sizes_ok_def)
   apply ((metis theory_none)+)?
   done
 
@@ -610,7 +642,7 @@ definition search_contract :: \<open>nat \<Rightarrow> Problem \<Rightarrow> boo
      let post = \<lambda>r. can_alloc_reference \<star>
         \<langle>case r of
            None \<Rightarrow> \<not> ext_ok p a (unat i)
-         | Some m \<Rightarrow> problem_true (model_interp m) p\<rangle> in
+         | Some m \<Rightarrow> problem_true (model_interp m) p \<and> model_vals_ok p m\<rangle> in
      make_function_contract pre post\<close>
 
 lemma search_rec_step_spec:
@@ -657,6 +689,27 @@ lemma solve_spec:
       simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq ext_ok_start Answer_Sat_mk_def)
   done
 
+text \<open>The contract of \<^verbatim>\<open>solve\<close> with, for a model, the bound on its values and arguments.\<close>
+definition solve_contract_vals :: \<open>Problem \<Rightarrow> ('s, Answer, 'abort) function_contract\<close> where
+  \<open>solve_contract_vals p \<equiv>
+     let pre = can_alloc_reference \<star> \<langle>wf_problem p \<and> sizes_ok p\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star>
+        \<langle>case r of
+           Answer_Sat m \<Rightarrow> problem_true (model_interp m) p \<and>
+             (\<forall>e \<in> set (Model_entries m). unat (Entry_val e) < length (Problem_terms p) \<and>
+                (\<forall>a \<in> set (Entry_args e). unat a < length (Problem_terms p)))
+         | Answer_Unsat \<Rightarrow> \<not> satisfiable p\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma solve_vals_spec:
+  assumes fuel: \<open>length (Problem_atoms p) < urust_fuel\<close>
+  shows \<open>\<Gamma>; solve p \<Turnstile>\<^sub>F solve_contract_vals p\<close>
+  apply (crush_boot f: solve_def contract: solve_contract_vals_def)
+  apply (crush_base specs add: search_spec contracts add: search_contract_def split!: option.splits
+      simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq ext_ok_start Answer_Sat_mk_def)
+  apply (auto simp add: model_vals_ok_def)?
+  done
+
 text \<open>\<open>solve_spec\<close> needs fewer atoms than fuel: \<^verbatim>\<open>search\<close> is called with
   \<open>k = 0, 1, \<dots>, n\<close> for \<open>n\<close> atoms, so the calls are nested \<open>n + 1\<close> deep.\<close>
 
@@ -685,6 +738,19 @@ proof (unfold solve_correct_def, intro allI impI)
   have \<open>\<Gamma>; solve fuel p \<Turnstile>\<^sub>F solve_contract p\<close> if \<open>length (Problem_atoms p) < fuel\<close> for fuel
     by (rule QFUF_ctx.solve_spec[OF QFUF_ctxI that])
   then show \<open>\<exists>N. \<forall>fuel \<ge> N. \<Gamma>; solve fuel p \<Turnstile>\<^sub>F solve_contract p\<close>
+    by (intro exI[of _ \<open>length (Problem_atoms p) + 1\<close>]) simp
+qed
+
+text \<open>The same statement for \<^const>\<open>QFUF_ctx.solve_contract_vals\<close>.\<close>
+theorem solve_correct_vals:
+  shows \<open>\<forall>p. wf_problem p \<and> sizes_ok p \<longrightarrow>
+           (\<exists>N. \<forall>fuel \<ge> N. \<Gamma>; solve fuel p \<Turnstile>\<^sub>F QFUF_ctx.solve_contract_vals can_alloc_reference p)\<close>
+proof (intro allI impI)
+  fix p
+  have \<open>\<Gamma>; solve fuel p \<Turnstile>\<^sub>F QFUF_ctx.solve_contract_vals can_alloc_reference p\<close>
+    if \<open>length (Problem_atoms p) < fuel\<close> for fuel
+    by (rule QFUF_ctx.solve_vals_spec[OF QFUF_ctxI that])
+  then show \<open>\<exists>N. \<forall>fuel \<ge> N. \<Gamma>; solve fuel p \<Turnstile>\<^sub>F QFUF_ctx.solve_contract_vals can_alloc_reference p\<close>
     by (intro exI[of _ \<open>length (Problem_atoms p) + 1\<close>]) simp
 qed
 
