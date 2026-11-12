@@ -1,47 +1,92 @@
-# QF_UF 求解器及其 AutoCorrode 验证
+# QFUF
 
-一个用 Rust 写的 QF_UF SMT 求解器（能生成模型），以及它的 Isabelle/HOL 正确性证明。证明经由 AutoCorrode：Rust 代码先翻译成 uRust，再在 Isabelle 中证明翻译后的程序满足顶层规约。
+一个支持 QF_UF（无量词未解释函数）的 SMT 求解器，能给出模型。求解器用 Rust 写成，经 AutoCorrode 前端翻译到
+Isabelle/HOL，并证明它满足以 SMT-LIB 语义写成的顶层规约。另一个项目 BVSmt（QF_BV 求解器）与本项目共用前端、
+通用问题结构和语义，目录结构和命名一一对应。
 
-## 目录
+## 目录结构
 
-| 目录 | 内容 | Isabelle 会话 |
-|---|---|---|
-| `solver/` | Rust 求解器 `src/lib.rs` 和测试 `tests/solve.rs` | |
-| `urust/` | AutoCorrode 前端从 `solver/src/lib.rs` 生成的 uRust theory | `QFUF`（父会话 `AutoCorrode`） |
-| `spec/` | 顶层规约 `QFUF_Spec.thy` | `QFUF_Spec` |
-| `pure/` | 同余闭包、模型构造和搜索的纯数学证明 | `QFUF_Pure` |
-| `proof/` | 各函数的 uRust 契约证明，以及定理 `solve_correct` | `QFUF_Proof` |
+| 路径 | 内容 |
+|---|---|
+| `core/src/lib.rs` | 被验证的部分：求解器核心 `solve`（单一论域、项的 DAG、原子为等式的子句集；枚举原子真值，用同余闭包检查），以及通用问题结构上的入口 `check_sat`（片段检查、规模检查、翻译、模型翻译） |
+| `frontend/` | SMT-LIB 2.6 前端（未验证，两个项目相同）：解析脚本，构造通用问题结构，在 `check-sat` 时调用求解器，输出回答和 `get-model` |
+| `cli/src/main.rs` | 可执行程序 `qfuf`：前端加 `check_sat` |
+| `urust/` | AutoCorrode 前端从 `core/src/lib.rs` 生成的 Isabelle 翻译，session `QFUF` |
+| `spec/` | 规约，session `QFUF_Spec`：`SMT_Semantics.thy`（通用问题结构的语义，两个项目相同）、`QFUF_Spec.thy`（契约与顶层陈述）、`smtlib-2.6/`（所依据的 SMT-LIB 原文） |
+| `proof/` | 核心 `solve` 的证明，session `QFUF_Proof` |
+| `proof/smt/` | 翻译的函数式模型及其语义正确性，session `QFUF_Smt` |
+| `proof/top/` | Rust 翻译函数的精化、规模检查、规模界与顶层定理，session `QFUF_Top` |
+| `tools/` | 检查、测试与评测脚本 |
 
 ## 求解器
 
-输入是 CNF 形式的 QF_UF 问题：只有一个未解释类型；项按下标组成 DAG，参数的下标小于项本身；原子是两个项的等式。`solve` 枚举所有原子的真值；对满足全部子句的赋值，用同余闭包检查对应的等式与不等式是否一致，一致时从等价类读出模型。
+`check_sat(p: &SmtProblem) -> SmtAnswer` 依次：
 
-运行测试（在 `solver/` 下）：
+1. 检查 `p` 是否在本求解器的片段内（不含位向量的类型、常量和运算），不在则回答 `Unknown`；
+2. 用饱和到 `2^63` 的算术计算翻译规模的上界（项、原子、子句及其长度之和），达到 `2^63` 则回答 `Unknown`；
+3. 把 `p` 翻译成核心问题（Tseitin 编码；所有未解释类型合并为一个论域；Bool 用常量 TRUE、FALSE 与原子
+   `TRUE ≠ FALSE` 表示；带参数的定义在应用处展开）；
+4. 调用 `solve`；`Sat` 时把核心模型翻译回通用模型（每个未解释类型取同一个论域）。
 
-```
-cargo test --release
-```
+核心覆盖 SMT-LIB 2.6 Core 理论的全部运算（`not`、`and`、`or`、`xor`、`=>`、`=`、`distinct`、`ite`）和任意
+未解释类型与函数。
 
-测试用独立的求值器检查每个 `Sat` 回答的模型；`z3` 在 `PATH` 上时，还与 z3 比较 sat/unsat。
+## 构建与运行
 
-## 规约与证明
+需要 Rust 工具链：
 
-合约是 `spec/QFUF_Spec.thy` 中 locale `QFUF_ctx` 内的定义 `solve_contract`：在前置条件 `wf_problem`、`sizes_ok` 下，`solve` 回答 `Sat m` 时 `m` 使问题成立，回答 `Unsat` 时不存在论域为 `nat` 的模型，并且不 panic。合约不涉及 fuel。
+    cargo build --release
 
-翻译把递归函数 `search` 展开 `urust_fuel` 次，`urust_fuel` 是 locale `QFUF_ctx` 的参数，fuel 不够时最内层展开 panic。所以规约在 locale 之外对各 fuel 值的实例量化：`spec/QFUF_Spec.thy` 定义了 locale `QFUF_heap`（`QFUF_ctx` 去掉 fuel 参数，其余参数和假设相同），其中的定义 `solve_correct` 说：对每个满足前置条件的问题 `p`，存在 `N`，使得对所有 `fuel ≥ N`，fuel 为 `fuel` 的 `QFUF_ctx` 实例中的 `solve p` 满足 `solve_contract p`。各定义的含义和写法理由见该文件中的注释。
+产物为 `target/release/qfuf`。用法：`qfuf FILE.smt2`，或从标准输入读入脚本。支持 `get-model`，输出满足
+SMT-COMP 模型验证的格式；标准错误上不输出任何内容。
 
-`proof/QFUF_Proof.thy` 中的定理 `solve_correct`（locale `QFUF_heap` 内）证明了这一定义，取 `N = length (Problem_atoms p) + 1`。
+## 规约与定理
 
-检查证明需要 Isabelle2026 和 AutoCorrode（`ZhichengHui/AutoCorrode` 的提交 `d15effd`）：
+`spec/SMT_Semantics.thy` 定义通用问题的语义：良类型 `smt_wf`、表示条件 `smt_repr_ok`（每个 `Vec` 少于 `2^63`
+个元素，任何 Rust 值都满足）、求值 `smt_eval`、模型 `smt_is_model`、可满足性 `smt_satisfiable`，以及规模度量
+`smt_size_bound`。`spec/QFUF_Spec.thy` 中：
 
-```
-isabelle build -d <AutoCorrode 目录> -d urust -d spec -d pure -d proof QFUF_Proof
-```
+- `check_sat_contract p`：前置条件 `smt_wf p ∧ smt_repr_ok p`；回答 `Sat m` 时 `smt_is_model p m`，回答 `Unsat`
+  时 `p` 不可满足，回答 `Unknown` 时 `p` 不在片段内或 `smt_size_bound p ≥ 2^64`；不 panic；
+- `check_sat_correct Γ`：对每个满足前置条件的 `p`，存在 `N`，使翻译取任意不小于 `N` 的 fuel 时 `check_sat p`
+  满足 `check_sat_contract p`。fuel 是翻译给每个循环和递归设的次数上限，对它取存在量词。
+
+顶层定理是 `QFUF_heap.check_sat_correct`（`proof/top/QFUF_Top.thy`），`N` 取 `fuel_top p`。规约还保留核心的
+契约 `solve_contract` 和定理 `solve_correct`；`proof/QFUF_Proof.thy` 另证明更强的 `solve_contract_vals`
+（模型中的值都小于项数，模型翻译需要它）。
+
+信任基础（不在本仓库中证明）：AutoCorrode 翻译的正确性（fuel 足够时翻译出的函数与 Rust 函数行为一致）；
+locale `QFUF_heap` 的假设（AutoCorrode 引用模型的假设）；未验证的前端（把 SMT-LIB 文本转成通用问题结构，
+把模型打印成文本）。程序逻辑不模拟内存和栈的耗尽，契约对它们不作断言。
+
+## 证明的组成
+
+| 文件 | 内容 |
+|---|---|
+| `proof/QFUF_Pure.thy`、`proof/QFUF_Proof.thy` | 核心 `solve`：同余闭包、模型构造和搜索的纯数学证明与精化，`solve_spec`、`solve_correct`、`solve_vals_spec` |
+| `proof/smt/QFUF_SmtModel.thy` | 翻译的函数式模型 `tr_problem_m`、`tr_model_m`；翻译保持语义（`tr_wf_problem`、`tr_model_correct`、`tr_complete`） |
+| `proof/top/QFUF_SmtSize.thy` | 规模检查 `uf_size` 的契约（饱和算术），及其前置条件由良类型推出 |
+| `proof/top/QFUF_SmtBound.thy` | 规模上界不超过 `2^63` 时翻译满足核心的前置条件（`usize_tr_ok`）；`smt_size_bound p < 2^64` 时检查通过（`sizes_ok_usize`） |
+| `proof/top/QFUF_SmtRefine.thy` | Rust 翻译函数的行为等于函数式模型：`tr_problem_spec`、`tr_model_spec`、`in_fragment_spec` |
+| `proof/top/QFUF_Top.thy` | `check_sat_spec` 与顶层定理 `check_sat_correct` |
+
+## 检查证明
+
+    tools/check.sh QFUF_Top [MINUTES]
+
+把 `urust/`、`spec/`、`proof/` 复制到计算服务器上本项目登记在 `ROOTS` 中的目录，用 `isabelle build -b` 构建
+`QFUF_Top` 及其祖先，输出构建的 session、错误和退出码。需要 Isabelle2026 和已构建的 AutoCorrode heap。
+
+## 测试
+
+- `cargo test --release`：`core/tests/solve.rs` 直接测试核心；`cli/tests/check_sat.rs` 把 SMT-LIB 脚本经前端交给
+  `check_sat`，并用前端的参考求值器检查每个模型。
+- `tools/fuzz.py BIN Z3 N [SEED]`：随机 QF_UF 问题，与 z3 比较 sat/unsat，并用 z3 检查模型；
+  `tools/remote_fuzz.sh N SEED...` 在计算服务器上并行运行它。
+- `tools/eval.py`：在 SMT-LIB 基准上评测（回答与 `:status` 比较，模型用 z3 检查）。
 
 ## 重新生成翻译
 
-`solver/src/lib.rs` 改动后，在仓库根运行 AutoCorrode 前端：
+`core/src/lib.rs` 改动后，在仓库根目录运行 AutoCorrode 前端：
 
-```
-urust-frontend.sh --out urust --name QFUF solver/src/lib.rs
-```
+    urust-frontend.sh --out urust --name QFUF core/src/lib.rs
