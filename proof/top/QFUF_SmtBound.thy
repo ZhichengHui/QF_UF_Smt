@@ -4,6 +4,75 @@ begin
 
 section \<open>The size check bounds the translation\<close>
 
+subsection \<open>A bound on the size of the translation\<close>
+
+text \<open>The weight of a node with \<open>k\<close> arguments (\<^verbatim>\<open>node_weight\<close>).\<close>
+definition nw :: \<open>nat \<Rightarrow> nat\<close> where
+  \<open>nw k \<equiv> 16 * (k + 1) ^ 2\<close>
+
+lemma nw_sat: \<open>sat (16 * sat (sat (Suc x) * sat (Suc x))) = sat (nw x)\<close>
+proof -
+  have a: \<open>sat (sat (Suc x) * sat (Suc x)) = sat ((Suc x) * (Suc x))\<close> by (rule sat_mul_sat)
+  have \<open>sat (16 * sat (sat (Suc x) * sat (Suc x))) = sat (sat 16 * sat (sat (Suc x) * sat (Suc x)))\<close>
+    by (simp only: sat_16)
+  also have \<open>\<dots> = sat (sat 16 * sat ((Suc x) * (Suc x)))\<close> by (simp only: a)
+  also have \<open>\<dots> = sat (16 * ((Suc x) * (Suc x)))\<close> by (rule sat_mul_sat)
+  finally show ?thesis by (simp add: nw_def power2_eq_square)
+qed
+
+text \<open>\<^verbatim>\<open>uf_count\<close> and \<^verbatim>\<open>uf_count_args\<close> without saturation, with the definitions below \<open>n\<close>
+  expanded (as \<^const>\<open>tr_term_m\<close>). As in Rust, an application of a definition without
+  parameters counts only its node, and one of a definition with parameters its node, its arguments
+  and the body of the definition.\<close>
+function (sequential) ucnt :: \<open>SmtProblem \<Rightarrow> nat \<Rightarrow> SmtTerm \<Rightarrow> nat\<close>
+  and ucnt_args :: \<open>SmtProblem \<Rightarrow> nat \<Rightarrow> SmtTerm list \<Rightarrow> nat\<close>
+  where
+  \<open>ucnt p n (SmtTerm_Fun f args) = nw (length args) + ucnt_args p n args\<close>
+| \<open>ucnt p n (SmtTerm_Def d args) =
+     (if SmtDef_params (SmtProblem_defs p ! unat d) = [] then nw (length args)
+      else nw (length args) + (ucnt_args p n args +
+             (if unat d < n then ucnt p (unat d) (SmtDef_body (SmtProblem_defs p ! unat d)) else 0)))\<close>
+| \<open>ucnt p n (SmtTerm_App op args) = nw (length args) + ucnt_args p n args\<close>
+| \<open>ucnt p n _ = nw 0\<close>
+| \<open>ucnt_args p n [] = 0\<close>
+| \<open>ucnt_args p n (a # rest) = ucnt p n a + ucnt_args p n rest\<close>
+  by pat_completeness auto
+termination
+  by (relation \<open>measures [\<lambda>x. case x of Inl (_, n, _) \<Rightarrow> n | Inr (_, n, _) \<Rightarrow> n,
+                          \<lambda>x. case x of Inl (_, _, t) \<Rightarrow> size t | Inr (_, _, ts) \<Rightarrow> size_list size ts]\<close>)
+     auto
+
+text \<open>The value \<^verbatim>\<open>uf_size\<close> computes, without saturation: 16, the number of declared symbols,
+  the counts of the bodies of the definitions without parameters, and the counts plus 2 of the
+  assertions.\<close>
+definition usize_m :: \<open>SmtProblem \<Rightarrow> nat\<close> where
+  \<open>usize_m p \<equiv>
+     16 + length (SmtProblem_funs p) +
+     sum_list (map (\<lambda>d. if SmtDef_params (SmtProblem_defs p ! d) = []
+                         then ucnt p d (SmtDef_body (SmtProblem_defs p ! d)) else 0)
+                [0..<length (SmtProblem_defs p)]) +
+     sum_list (map (\<lambda>t. ucnt p (length (SmtProblem_defs p)) t + 2) (SmtProblem_asserts p))\<close>
+
+text \<open>The definitions part of \<^const>\<open>usize_m\<close> for the first \<open>d\<close> definitions.\<close>
+definition dsum :: \<open>SmtProblem \<Rightarrow> nat \<Rightarrow> nat\<close> where
+  \<open>dsum p d \<equiv> sum_list (map (\<lambda>i. if SmtDef_params (SmtProblem_defs p ! i) = []
+                                   then ucnt p i (SmtDef_body (SmtProblem_defs p ! i)) else 0) [0..<d])\<close>
+
+lemma dsum_0: \<open>dsum p 0 = 0\<close>
+  by (simp add: dsum_def)
+
+lemma dsum_Suc: \<open>dsum p (Suc d) = dsum p d +
+  (if SmtDef_params (SmtProblem_defs p ! d) = [] then ucnt p d (SmtDef_body (SmtProblem_defs p ! d)) else 0)\<close>
+  by (simp add: dsum_def)
+
+lemma usize_dsum: \<open>usize_m p = 16 + length (SmtProblem_funs p) + dsum p (length (SmtProblem_defs p)) +
+  sum_list (map (\<lambda>t. ucnt p (length (SmtProblem_defs p)) t + 2) (SmtProblem_asserts p))\<close>
+  by (simp add: usize_m_def dsum_def)
+
+lemma ucnt_args_sum: \<open>ucnt_args p n ts = sum_list (map (ucnt p n) ts)\<close>
+  by (induction ts) auto
+
+
 text \<open>The cost of a state: the numbers of terms, atoms and clauses, the lengths of the clauses and
   of the argument lists of the terms, and the next unused function symbol. The doc comment of
   \<^verbatim>\<open>uf_size\<close> bounds this sum by \<^const>\<open>usize_m\<close>.\<close>
@@ -314,101 +383,154 @@ proof -
   show ?thesis using c f ta cl by (simp add: q tr_bounded_def sizes_ok_def cst_def)
 qed
 
-subsection \<open>The size measure of the specification bounds \<^const>\<open>usize_m\<close>\<close>
+subsection \<open>The input range bounds \<^const>\<open>usize_m\<close>\<close>
 
-lemma nw_node: \<open>nw (length args) \<le> 16 * smt_node_weight fs ds ps t args\<close>
-proof -
-  have \<open>1 \<le> smt_wcube (smt_tsort fs ds ps t) ^ 3\<close> by (simp add: smt_wcube_def)
-  then have \<open>Suc (length args) ^ 2 * 1 \<le> smt_node_weight fs ds ps t args\<close>
-    unfolding smt_node_weight_def by (intro mult_le_mono2) simp
-  then show ?thesis by (simp add: nw_def)
+text \<open>The count \<^const>\<open>ucnt\<close> of a term is at most \<open>32\<close> times the square of its number of nodes
+  \<^const>\<open>ncnt\<close>: a node with \<open>k\<close> arguments costs \<open>16 (k + 1)^2\<close>, and its arguments have at least
+  \<open>k\<close> nodes.\<close>
+
+lemma ncnt_pos: \<open>1 \<le> ncnt p n t\<close>
+  by (cases t) simp_all
+
+lemma sum_ge_length: \<open>(\<forall>x \<in> set xs. 1 \<le> (f x :: nat)) \<Longrightarrow> length xs \<le> sum_list (map f xs)\<close>
+  by (induction xs) fastforce+
+
+lemma sum_sq_le: \<open>(\<forall>x \<in> set xs. 1 \<le> (f x :: nat)) \<Longrightarrow>
+  sum_list (map (\<lambda>x. f x ^ 2) xs) + length xs * (length xs - 1) \<le> (sum_list (map f xs)) ^ 2\<close>
+proof (induction xs)
+  case Nil
+  then show ?case by simp
+next
+  case (Cons a xs)
+  define y where \<open>y = f a\<close>
+  define X where \<open>X = sum_list (map f xs)\<close>
+  define k where \<open>k = length xs\<close>
+  have y: \<open>1 \<le> y\<close> using Cons.prems by (simp add: y_def)
+  have kX: \<open>k \<le> X\<close> using sum_ge_length[of xs f] Cons.prems by (simp add: k_def X_def)
+  have IH: \<open>sum_list (map (\<lambda>x. f x ^ 2) xs) + k * (k - 1) \<le> X ^ 2\<close>
+    using Cons by (simp add: k_def X_def)
+  have \<open>2 * k \<le> 2 * y * X\<close> using y kX by (metis mult_le_mono mult_le_mono2 nat_mult_1 mult.assoc)
+  moreover have \<open>Suc k * k = k * (k - 1) + 2 * k\<close> by (cases k) (simp_all add: algebra_simps)
+  ultimately show ?case using IH
+    by (simp add: y_def[symmetric] X_def[symmetric] k_def[symmetric] power2_eq_square algebra_simps)
 qed
 
-lemma ucnt_weight:
-  \<open>n \<le> length (SmtProblem_defs p) \<Longrightarrow>
-     \<forall>ps. ucnt p n t \<le> 16 * smt_weight (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps t\<close>
-  \<open>n \<le> length (SmtProblem_defs p) \<Longrightarrow>
-     \<forall>ps. ucnt_args p n ts \<le> 16 * sum_list (map (smt_weight (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps) ts)\<close>
+lemma sum_sq_le_sq: \<open>sum_list (map (\<lambda>x. (f x :: nat) ^ 2) xs) \<le> (sum_list (map f xs)) ^ 2\<close>
+proof (induction xs)
+  case (Cons a xs)
+  then show ?case by (simp add: power2_eq_square algebra_simps add_mono trans_le_add1)
+qed simp
+
+lemma node_arith: \<open>k \<le> X \<Longrightarrow> s + k * (k - 1) \<le> X ^ 2 \<Longrightarrow> nw k + 32 * s \<le> 32 * (1 + X) ^ 2\<close>
+proof -
+  assume kX: \<open>k \<le> X\<close> and s: \<open>s + k * (k - 1) \<le> X ^ 2\<close>
+  have a: \<open>16 * (k + 1) ^ 2 \<le> 32 * (k * (k - 1)) + 32 + 64 * X\<close>
+  proof (cases k)
+    case 0
+    then show ?thesis by simp
+  next
+    case (Suc j)
+    have \<open>64 * Suc j \<le> 64 * X\<close> using kX Suc by simp
+    then show ?thesis using Suc by (simp add: power2_eq_square algebra_simps)
+  qed
+  have b: \<open>32 * s + 32 * (k * (k - 1)) \<le> 32 * X ^ 2\<close> using s by simp
+  have c: \<open>32 * (1 + X) ^ 2 = 32 + 64 * X + 32 * X ^ 2\<close> by (simp add: power2_eq_square algebra_simps)
+  show ?thesis using a b c by (simp add: nw_def)
+qed
+
+lemma ucnt_sq:
+  \<open>ucnt p n t \<le> 32 * (ncnt p n t) ^ 2\<close>
+  \<open>ucnt_args p n ts \<le> 32 * sum_list (map (\<lambda>a. (ncnt p n a) ^ 2) ts)\<close>
 proof (induction p n t and p n ts rule: ucnt_ucnt_args.induct)
   case (1 p n f args)
-  show ?case
-  proof
-    fix ps
-    have a: \<open>ucnt_args p n args \<le> 16 * sum_list (map (smt_weight (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps) args)\<close>
-      using 1 by blast
-    show \<open>ucnt p n (SmtTerm_Fun f args) \<le> 16 * smt_weight (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps (SmtTerm_Fun f args)\<close>
-      using a nw_node[of args \<open>SmtProblem_funs p\<close> \<open>take n (SmtProblem_defs p)\<close> ps \<open>SmtTerm_Fun f args\<close>] by simp
-  qed
+  define X where \<open>X = ncnt_args p n args\<close>
+  define s where \<open>s = sum_list (map (\<lambda>a. (ncnt p n a) ^ 2) args)\<close>
+  have pos: \<open>\<forall>a \<in> set args. 1 \<le> ncnt p n a\<close> using ncnt_pos by blast
+  have X: \<open>X = sum_list (map (ncnt p n) args)\<close> by (simp add: X_def ncnt_args_sum)
+  have kX: \<open>length args \<le> X\<close> using sum_ge_length[OF pos] X by simp
+  have sq: \<open>s + length args * (length args - 1) \<le> X ^ 2\<close> using sum_sq_le[OF pos] X by (simp add: s_def)
+  have \<open>nw (length args) + 32 * s \<le> 32 * (1 + X) ^ 2\<close> by (rule node_arith[OF kX sq])
+  then show ?case using 1 by (simp add: X_def s_def)
 next
   case (2 p n d args)
+  define X where \<open>X = ncnt_args p n args\<close>
+  define s where \<open>s = sum_list (map (\<lambda>a. (ncnt p n a) ^ 2) args)\<close>
+  define e where \<open>e = SmtProblem_defs p ! unat d\<close>
+  have pos: \<open>\<forall>a \<in> set args. 1 \<le> ncnt p n a\<close> using ncnt_pos by blast
+  have X: \<open>X = sum_list (map (ncnt p n) args)\<close> by (simp add: X_def ncnt_args_sum)
+  have kX: \<open>length args \<le> X\<close> using sum_ge_length[OF pos] X by simp
+  have sq: \<open>s + length args * (length args - 1) \<le> X ^ 2\<close> using sum_sq_le[OF pos] X by (simp add: s_def)
+  have N: \<open>nw (length args) + 32 * s \<le> 32 * (1 + X) ^ 2\<close> by (rule node_arith[OF kX sq])
   show ?case
-  proof
-    fix ps
-    define e where \<open>e = SmtProblem_defs p ! unat d\<close>
-    have N: \<open>nw (length args) \<le> 16 * smt_node_weight (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps (SmtTerm_Def d args) args\<close> by (rule nw_node)
-    show \<open>ucnt p n (SmtTerm_Def d args) \<le> 16 * smt_weight (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps (SmtTerm_Def d args)\<close>
-    proof (cases \<open>SmtDef_params e = []\<close>)
-      case True
-      then show ?thesis using N by (simp add: e_def)
-    next
-      case F: False
-      have a: \<open>ucnt_args p n args \<le> 16 * sum_list (map (smt_weight (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps) args)\<close>
-        using 2 F 2(3) by (simp add: e_def)
-      show ?thesis
-      proof (cases \<open>unat d < n\<close>)
-        case False
-        then show ?thesis using N a F by (simp add: e_def)
-      next
-        case True
-        have b: \<open>ucnt p (unat d) (SmtDef_body e) \<le> 16 * smt_weight (SmtProblem_funs p) (take (unat d) (SmtProblem_defs p)) (SmtDef_params e) (SmtDef_body e)\<close>
-          using 2 F True by (simp add: e_def)
-        have t: \<open>unat d < length (take n (SmtProblem_defs p))\<close> \<open>take n (SmtProblem_defs p) ! unat d = e\<close> \<open>take (unat d) (take n (SmtProblem_defs p)) = take (unat d) (SmtProblem_defs p)\<close>
-          using True 2(3) by (simp_all add: e_def min_def)
-        show ?thesis using N a b F True t 2(3) by (simp add: e_def)
-      qed
-    qed
+  proof (cases \<open>SmtDef_params e = []\<close>)
+    case True
+    have \<open>nw (length args) \<le> 32 * (1 + X) ^ 2\<close> using N by simp
+    then show ?thesis using True by (simp add: e_def X_def)
+  next
+    case F: False
+    have a: \<open>ucnt_args p n args \<le> 32 * s\<close> using 2 F by (simp add: e_def s_def)
+    define B where \<open>B = (if unat d < n then ncnt p (unat d) (SmtDef_body e) else 0)\<close>
+    define U where \<open>U = (if unat d < n then ucnt p (unat d) (SmtDef_body e) else 0)\<close>
+    have b: \<open>U \<le> 32 * B ^ 2\<close> using 2 F by (simp add: U_def B_def e_def)
+    have c: \<open>32 * (1 + X) ^ 2 + 32 * B ^ 2 \<le> 32 * (1 + (X + B)) ^ 2\<close>
+      by (simp add: power2_eq_square algebra_simps)
+    have \<open>nw (length args) + (ucnt_args p n args + U) \<le> 32 * (1 + (X + B)) ^ 2\<close>
+      using N a b c by linarith
+    then show ?thesis using F by (auto simp: e_def[symmetric] X_def[symmetric] U_def B_def split: if_splits)
   qed
 next
   case (3 p n op args)
-  show ?case
-  proof
-    fix ps
-    have a: \<open>ucnt_args p n args \<le> 16 * sum_list (map (smt_weight (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps) args)\<close>
-      using 3 by blast
-    show \<open>ucnt p n (SmtTerm_App op args) \<le> 16 * smt_weight (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps (SmtTerm_App op args)\<close>
-      using a nw_node[of args \<open>SmtProblem_funs p\<close> \<open>take n (SmtProblem_defs p)\<close> ps \<open>SmtTerm_App op args\<close>] by simp
-  qed
-qed (use nw_node[of \<open>[]\<close>] in \<open>auto intro: add_mono trans_le_add1\<close>)
+  define X where \<open>X = ncnt_args p n args\<close>
+  define s where \<open>s = sum_list (map (\<lambda>a. (ncnt p n a) ^ 2) args)\<close>
+  have pos: \<open>\<forall>a \<in> set args. 1 \<le> ncnt p n a\<close> using ncnt_pos by blast
+  have X: \<open>X = sum_list (map (ncnt p n) args)\<close> by (simp add: X_def ncnt_args_sum)
+  have kX: \<open>length args \<le> X\<close> using sum_ge_length[OF pos] X by simp
+  have sq: \<open>s + length args * (length args - 1) \<le> X ^ 2\<close> using sum_sq_le[OF pos] X by (simp add: s_def)
+  have \<open>nw (length args) + 32 * s \<le> 32 * (1 + X) ^ 2\<close> by (rule node_arith[OF kX sq])
+  then show ?case using 3 by (simp add: X_def s_def)
+qed (simp_all add: nw_def)
 
-text \<open>Goal 2: a problem of the fragment with \<^const>\<open>smt_sizes_ok\<close> passes the size check.\<close>
-theorem sizes_ok_usize: \<open>smt_sizes_ok p \<Longrightarrow> usize_m p < 2 ^ 63\<close>
+text \<open>Goal 2: a problem of the input range passes the bounds of the translation.\<close>
+theorem in_range_usize:
+  assumes \<open>smt_size p \<le> 2 ^ 28\<close>
+  shows \<open>usize_m p < 2 ^ 63\<close>
 proof -
-  assume ok: \<open>smt_sizes_ok p\<close>
-  define WD where \<open>WD = sum_list (map (\<lambda>d. if SmtDef_params ((SmtProblem_defs p) ! d) = [] then smt_weight (SmtProblem_funs p) (take d (SmtProblem_defs p)) [] (SmtDef_body ((SmtProblem_defs p) ! d)) else 0)
-                   [0..<length (SmtProblem_defs p)])\<close>
-  define WA where \<open>WA = sum_list (map (smt_weight (SmtProblem_funs p) (SmtProblem_defs p) []) (SmtProblem_asserts p))\<close>
-  define X where \<open>X = 1 + length (SmtProblem_funs p) + length (SmtProblem_defs p) + length (SmtProblem_asserts p) + sum_list (map (\<lambda>f. smt_width (SmtFun_ret f) + 1) (SmtProblem_funs p)) + WD + WA\<close>
-  have B: \<open>smt_size_bound p = 1000000000 * X\<close> by (simp add: smt_size_bound_def Let_def X_def WD_def WA_def)
-  have D: \<open>sum_list (map (\<lambda>d. if SmtDef_params ((SmtProblem_defs p) ! d) = [] then ucnt p d (SmtDef_body ((SmtProblem_defs p) ! d)) else 0) [0..<length (SmtProblem_defs p)]) \<le> 16 * WD\<close>
+  define L where \<open>L = length (SmtProblem_defs p)\<close>
+  define fd where \<open>fd = (\<lambda>d. if SmtDef_params (SmtProblem_defs p ! d) = [] then ncnt p d (SmtDef_body (SmtProblem_defs p ! d)) else 0)\<close>
+  define ud where \<open>ud = (\<lambda>d. if SmtDef_params (SmtProblem_defs p ! d) = [] then ucnt p d (SmtDef_body (SmtProblem_defs p ! d)) else 0)\<close>
+  define ID where \<open>ID = sum_list (map fd [0..<L])\<close>
+  define IA where \<open>IA = sum_list (map (ncnt p L) (SmtProblem_asserts p))\<close>
+  define S where \<open>S = smt_size p\<close>
+  have S: \<open>S = length (SmtProblem_funs p) + L + length (SmtProblem_asserts p) + ID + IA\<close>
+    using isize_smt_size[of p] by (simp add: S_def isize_m_def ID_def IA_def fd_def L_def)
+  have ud: \<open>ud d \<le> 32 * (fd d) ^ 2\<close> for d by (simp add: ud_def fd_def ucnt_sq(1))
+  have D: \<open>sum_list (map ud [0..<L]) \<le> 32 * ID ^ 2\<close>
   proof -
-    have \<open>sum_list (map (\<lambda>d. if SmtDef_params ((SmtProblem_defs p) ! d) = [] then ucnt p d (SmtDef_body ((SmtProblem_defs p) ! d)) else 0) [0..<length (SmtProblem_defs p)]) \<le>
-          sum_list (map (\<lambda>d. 16 * (if SmtDef_params ((SmtProblem_defs p) ! d) = [] then smt_weight (SmtProblem_funs p) (take d (SmtProblem_defs p)) [] (SmtDef_body ((SmtProblem_defs p) ! d)) else 0)) [0..<length (SmtProblem_defs p)])\<close>
-      by (rule sum_list_mono) (use ucnt_weight(1) in \<open>auto\<close>)
-    then show ?thesis by (simp add: WD_def sum_list_const_mult)
+    have \<open>sum_list (map ud [0..<L]) \<le> sum_list (map (\<lambda>d. 32 * (fd d) ^ 2) [0..<L])\<close>
+      by (rule sum_list_mono) (rule ud)
+    also have \<open>\<dots> = 32 * sum_list (map (\<lambda>d. (fd d) ^ 2) [0..<L])\<close> by (simp add: sum_list_const_mult)
+    also have \<open>\<dots> \<le> 32 * ID ^ 2\<close> using sum_sq_le_sq[of fd \<open>[0..<L]\<close>] by (simp add: ID_def)
+    finally show ?thesis .
   qed
-  have A: \<open>sum_list (map (\<lambda>t. ucnt p (length (SmtProblem_defs p)) t + 2) ts) \<le> 16 * sum_list (map (smt_weight (SmtProblem_funs p) (SmtProblem_defs p) []) ts) + 2 * length ts\<close> for ts
+  have A1: \<open>sum_list (map (\<lambda>t. ucnt p L t + 2) ts) \<le> sum_list (map (\<lambda>t. 32 * (ncnt p L t) ^ 2) ts) + 2 * length ts\<close> for ts
   proof (induction ts)
-    case Nil
-    then show ?case by simp
-  next
-    case (Cons t ts)
-    have \<open>ucnt p (length (SmtProblem_defs p)) t \<le> 16 * smt_weight (SmtProblem_funs p) (SmtProblem_defs p) [] t\<close>
-      using ucnt_weight(1)[of \<open>length (SmtProblem_defs p)\<close> p t] by simp
-    then show ?case using Cons by simp
-  qed
-  have U: \<open>usize_m p \<le> 16 * X\<close>
-    using D A[of \<open>SmtProblem_asserts p\<close>] by (simp add: usize_m_def X_def WA_def)
-  show ?thesis using U ok B by (simp add: smt_sizes_ok_def)
+    case (Cons a ts)
+    have \<open>ucnt p L a \<le> 32 * (ncnt p L a) ^ 2\<close> by (rule ucnt_sq(1))
+    then show ?case using Cons.IH by simp
+  qed simp
+  have A2: \<open>sum_list (map (\<lambda>t. 32 * (ncnt p L t) ^ 2) ts) \<le> 32 * (sum_list (map (ncnt p L) ts)) ^ 2\<close> for ts
+    using sum_sq_le_sq[of \<open>ncnt p L\<close> ts] by (simp add: sum_list_const_mult)
+  have A: \<open>sum_list (map (\<lambda>t. ucnt p L t + 2) (SmtProblem_asserts p)) \<le> 32 * IA ^ 2 + 2 * length (SmtProblem_asserts p)\<close>
+    using A1[of \<open>SmtProblem_asserts p\<close>] A2[of \<open>SmtProblem_asserts p\<close>] by (simp add: IA_def)
+  have U: \<open>usize_m p \<le> 16 + length (SmtProblem_funs p) + 32 * ID ^ 2 + 32 * IA ^ 2 + 2 * length (SmtProblem_asserts p)\<close>
+    using D A by (simp add: usize_m_def ud_def L_def)
+  have sq1: \<open>ID ^ 2 + IA ^ 2 \<le> (ID + IA) ^ 2\<close> by (simp add: power2_eq_square algebra_simps)
+  have sq2: \<open>(ID + IA) ^ 2 \<le> S ^ 2\<close> using S by (intro power_mono) simp_all
+  have S28: \<open>S \<le> 2 ^ 28\<close> using assms by (simp add: S_def)
+  have S56: \<open>S ^ 2 \<le> 2 ^ 56\<close> using power_mono[OF S28, of 2] by (simp add: power_mult[symmetric])
+  have \<open>usize_m p \<le> 16 + 3 * S + 32 * S ^ 2\<close> using U sq1 sq2 S by linarith
+  moreover have \<open>16 + 3 * S + 32 * S ^ 2 \<le> 16 + 3 * 2 ^ 28 + 32 * 2 ^ 56\<close> using S28 S56 by linarith
+  ultimately show ?thesis by simp
 qed
 
 end
