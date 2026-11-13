@@ -1,5 +1,5 @@
 theory SMT_Semantics
-  imports QFUF.QFUF_Funs
+  imports SMT_Types
 begin
 
 text \<open>\<open>map\<close> below is \<^const>\<open>List.map\<close>, not the iterator function of AutoCorrode.\<close>
@@ -8,7 +8,7 @@ hide_const (open) Rust_Iterator.map
 section \<open>The semantics of general problems\<close>
 
 text \<open>
-  This theory is the same in both solvers (QF\_UF and QF\_BV); only the session it imports differs.
+  This theory is the same in both solvers (QF\_UF and QF\_BV).
   It gives the meaning of the general problem structure \<^typ>\<open>SmtProblem\<close>, the interface between
   the SMT-LIB front end and the solvers (\<^verbatim>\<open>frontend/src/problem.rs\<close>, repeated in
   \<^verbatim>\<open>core/src/lib.rs\<close>). A problem is the content of an SMT-LIB 2.6 script in the logics QF\_UF,
@@ -197,7 +197,7 @@ fun smt_bv_val :: \<open>sval \<Rightarrow> nat\<close> where
 
 text \<open>A binary bit-vector function on the numbers \<open>x\<close>, \<open>y\<close> of operands of width \<open>w\<close>. The functions
   of FixedSizeBitVectors (\<open>:definition\<close>) and the extensions of QF\_BV (each the number its
-  abbreviation denotes), as transcribed with the text of SMT-LIB in \<^verbatim>\<open>BVSmt_Spec\<close>:
+  abbreviation denotes), as transcribed with the text of SMT-LIB in \<^verbatim>\<open>proof/core_spec/QFBV_CoreSpec.thy\<close> of the QF\_BV solver:
   \<^item> \<open>bvand\<close>, \<open>bvor\<close>: bitwise; \<open>bvadd\<close>, \<open>bvmul\<close>: modulo \<open>2^w\<close>; \<open>bvudiv\<close> by 0 is all ones,
     \<open>bvurem\<close> by 0 the dividend; \<open>bvshl\<close>, \<open>bvlshr\<close>: by the number of \<open>y\<close>.
   \<^item> \<open>bvnand\<close>, \<open>bvnor\<close>, \<open>bvxor\<close>, \<open>bvxnor\<close>: bitwise; \<open>bvsub\<close>: \<open>x - y\<close> modulo \<open>2^w\<close>.

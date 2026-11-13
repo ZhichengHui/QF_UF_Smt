@@ -1,10 +1,15 @@
-session "QFUF_Proof" = "QFUF_Spec" +
+session "QFUF_CoreSpec" in "core_spec" = "QFUF_Spec" +
+  options [document = false]
+  theories
+    QFUF_CoreSpec
+
+session "QFUF_Proof" = "QFUF_CoreSpec" +
   options [document = false]
   theories
     QFUF_Pure
     QFUF_Proof
 
-session "QFUF_Smt" in "smt" = "QFUF_Spec" +
+session "QFUF_Smt" in "smt" = "QFUF_CoreSpec" +
   options [document = false]
   theories
     QFUF_SmtModel

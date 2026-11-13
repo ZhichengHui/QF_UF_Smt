@@ -12,7 +12,8 @@ Isabelle/HOL，并证明它满足以 SMT-LIB 语义写成的顶层规约。另�
 | `frontend/` | SMT-LIB 2.6 前端（未验证，两个项目共用；git submodule，仓库 SMTLIB-frontend）：解析脚本，构造通用问题结构，在 `check-sat` 时调用求解器，输出回答和 `get-model` |
 | `cli/src/main.rs` | 可执行程序 `qfuf`：前端加 `check_sat` |
 | `urust/` | AutoCorrode 前端从 `core/src/lib.rs` 生成的 Isabelle 翻译，session `QFUF` |
-| `spec/` | 规约，session `QFUF_Spec`：`SMT_Semantics.thy`（通用问题结构的语义，两个项目相同）、`QFUF_Spec.thy`（契约与顶层陈述）、`smtlib-2.6/`（所依据的 SMT-LIB 原文） |
+| `spec/` | 顶层规约，session `QFUF_Spec`。主定理的含义只取决于这个目录：`SMT_Types.thy`（生成的通用数据类型的形状）、`SMT_Semantics.thy`（通用问题的语义），这两个文件在两个项目中相同；`QFUF_Spec.thy`（片段、契约、heap locale 与主定理的陈述）；`smtlib-2.6/`（所依据的 SMT-LIB 原文） |
+| `proof/core_spec/` | 核心 `solve` 的规约（核心问题的语义、`solve_contract`、`solve_correct`），session `QFUF_CoreSpec`；不属于顶层规约 |
 | `proof/` | 核心 `solve` 的证明，session `QFUF_Proof` |
 | `proof/smt/` | 翻译的函数式模型及其语义正确性，session `QFUF_Smt` |
 | `proof/top/` | Rust 翻译函数的精化、规模检查、规模界与顶层定理，session `QFUF_Top` |
@@ -43,7 +44,9 @@ SMT-COMP 模型验证的格式；标准错误上不输出任何内容。
 
 ## 规约与定理
 
-`spec/SMT_Semantics.thy` 定义通用问题的语义：良类型 `smt_wf`、表示条件 `smt_repr_ok`（每个 `Vec` 少于 `2^63`
+顶层规约就是 `spec/` 目录：主定理的含义只取决于其中的定义，改动求解器或证明不需要改动它，改动它就是改动规约。
+`spec/SMT_Types.thy` 写出从 Rust 代码生成的通用数据类型（`SmtProblem`、`SmtModel`、`SmtAnswer` 等）的每个构造子、
+字段及其类型，并由生成的类型证明，Rust 中这些类型一旦改变，构建就失败。`spec/SMT_Semantics.thy` 定义通用问题的语义：良类型 `smt_wf`、表示条件 `smt_repr_ok`（每个 `Vec` 少于 `2^63`
 个元素，任何 Rust 值都满足）、求值 `smt_eval`、模型 `smt_is_model`、可满足性 `smt_satisfiable`，以及规模度量
 `smt_size_bound`。`spec/QFUF_Spec.thy` 中：
 
@@ -52,9 +55,13 @@ SMT-COMP 模型验证的格式；标准错误上不输出任何内容。
 - `check_sat_correct Γ`：对每个满足前置条件的 `p`，存在 `N`，使翻译取任意不小于 `N` 的 fuel 时 `check_sat p`
   满足 `check_sat_contract p`。fuel 是翻译给每个循环和递归设的次数上限，对它取存在量词。
 
-顶层定理是 `QFUF_heap.check_sat_correct`（`proof/top/QFUF_Top.thy`），`N` 取 `fuel_top p`。规约还保留核心的
-契约 `solve_contract` 和定理 `solve_correct`；`proof/QFUF_Proof.thy` 另证明更强的 `solve_contract_vals`
+顶层定理是 `QFUF_heap.check_sat_correct`（`proof/top/QFUF_Top.thy`），`N` 取 `fuel_top p`。核心的契约
+`solve_contract` 和陈述 `solve_correct` 在 `proof/core_spec/` 中，主定理不依赖它们；`proof/QFUF_Proof.thy` 另证明更强的 `solve_contract_vals`
 （模型中的值都小于项数，模型翻译需要它）。
+
+例外：`spec/QFUF_Spec.thy` 中的 locale `QFUF_heap` 是生成的 `QFUF_ctx`（`urust/QFUF_Locale.thy`）去掉 fuel 后的副本。
+求解器新增一种可变局部变量的类型时，生成的 locale 会多一个参数，`QFUF_heap` 要照样更新；这是 `spec/` 中唯一随求解器
+实现改变的部分。
 
 信任基础（不在本仓库中证明）：AutoCorrode 翻译的正确性（fuel 足够时翻译出的函数与 Rust 函数行为一致）；
 locale `QFUF_heap` 的假设（AutoCorrode 引用模型的假设）；未验证的前端（把 SMT-LIB 文本转成通用问题结构，
@@ -64,6 +71,7 @@ locale `QFUF_heap` 的假设（AutoCorrode 引用模型的假设）；未验证�
 
 | 文件 | 内容 |
 |---|---|
+| `proof/core_spec/QFUF_CoreSpec.thy` | 核心 `solve` 的规约：核心问题的语义、`solve_contract`、`solve_correct` |
 | `proof/QFUF_Pure.thy`、`proof/QFUF_Proof.thy` | 核心 `solve`：同余闭包、模型构造和搜索的纯数学证明与精化，`solve_spec`、`solve_correct`、`solve_vals_spec` |
 | `proof/smt/QFUF_SmtModel.thy` | 翻译的函数式模型 `tr_problem_m`、`tr_model_m`；翻译保持语义（`tr_wf_problem`、`tr_model_correct`、`tr_complete`） |
 | `proof/top/QFUF_SmtSize.thy` | 规模检查 `uf_size` 的契约（饱和算术），及其前置条件由良类型推出 |
