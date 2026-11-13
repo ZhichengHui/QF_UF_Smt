@@ -517,4 +517,26 @@ text \<open>The largest width of a multiplication, division or remainder in a pr
 definition smt_max_mul_width :: \<open>SmtProblem \<Rightarrow> nat\<close> where
   \<open>smt_max_mul_width p \<equiv> Max (insert 0 (smt_term_widths smt_mul_div p))\<close>
 
+
+text \<open>The arguments of an application of a theory function (none for other terms).\<close>
+fun smt_app_args :: \<open>SmtTerm \<Rightarrow> SmtTerm list\<close> where
+  \<open>smt_app_args (SmtTerm_App op args) = args\<close>
+| \<open>smt_app_args _ = []\<close>
+
+text \<open>A \<open>distinct\<close> of bit-vectors, whose usual encoding compares every pair of arguments.\<close>
+definition smt_bv_distinct :: \<open>SmtFun list \<Rightarrow> SmtDef list \<Rightarrow> SmtSort list \<Rightarrow> SmtTerm \<Rightarrow> bool\<close> where
+  \<open>smt_bv_distinct fs ds ps t \<equiv>
+     (case t of SmtTerm_App SmtOp_Distinct (a # _) \<Rightarrow> 0 < smt_twidth fs ds ps a | _ \<Rightarrow> False)\<close>
+
+text \<open>The largest number of arguments of a \<open>distinct\<close> of bit-vectors in a problem (0 if there is
+  none).\<close>
+definition smt_max_bv_distinct :: \<open>SmtProblem \<Rightarrow> nat\<close> where
+  \<open>smt_max_bv_distinct p \<equiv>
+     let fs = SmtProblem_funs p in let ds = SmtProblem_defs p in
+     Max (insert 0
+       ((\<Union>d < length ds. (\<lambda>u. length (smt_app_args u)) `
+           Set.filter (smt_bv_distinct fs (take d ds) (SmtDef_params (ds ! d))) (set (smt_subterms (SmtDef_body (ds ! d))))) \<union>
+        (\<Union>t \<in> set (SmtProblem_asserts p). (\<lambda>u. length (smt_app_args u)) `
+           Set.filter (smt_bv_distinct fs ds []) (set (smt_subterms t)))))\<close>
+
 end
