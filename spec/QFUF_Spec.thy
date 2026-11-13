@@ -15,8 +15,8 @@ text \<open>
   \<open>check_sat_correct\<close> at the end of this theory: for every well-sorted problem there is a bound
   \<open>N\<close> such that, with any fuel at least \<open>N\<close>, \<^verbatim>\<open>check_sat\<close> satisfies its contract. The
   contract allows the answer \<^verbatim>\<open>Sat\<close> only with a model, \<^verbatim>\<open>Unsat\<close> only for a problem without a
-  model, and \<^verbatim>\<open>Unknown\<close> only for a problem outside the fragment of this solver or above the size
-  bound of \<^verbatim>\<open>SMT_Semantics\<close>.
+  model, and \<^verbatim>\<open>Unknown\<close> only for a problem outside the fragment of this solver or outside
+  its input range (\<open>smt_in_range\<close>).
 
   Trusted, not proved here:
   \<^item> The translation (AutoCorrode) gives the Rust program its meaning. The theorem is about the
@@ -65,6 +65,17 @@ definition smt_fragment :: \<open>SmtProblem \<Rightarrow> bool\<close> where
      (\<forall>t \<in> set (SmtProblem_asserts p). smt_term_no_bv t)\<close>
 
 
+subsection \<open>The input range\<close>
+
+text \<open>The problems on which this solver promises an answer other than \<^verbatim>\<open>Unknown\<close> (besides
+  being in its fragment). The range is part of the specification and fixed: it is stated with the
+  measures of \<^verbatim>\<open>SMT_Semantics\<close>, which describe the problem as written, and does not depend on
+  how the solver works. A change of the solver must keep answering every problem of the range.
+  The range of this solver: \<^const>\<open>smt_size\<close> at most \<open>2^28\<close> (about \<open>2.7 \<cdot> 10^8\<close>).
+  The largest QF\_UF problem of the SMT-LIB 2025 release has size about \<open>1.5 \<cdot> 10^6\<close>.\<close>
+definition smt_in_range :: \<open>SmtProblem \<Rightarrow> bool\<close> where
+  \<open>smt_in_range p \<equiv> smt_size p \<le> 2 ^ 28\<close>
+
 subsection \<open>The contract\<close>
 
 context QFUF_ctx
@@ -77,17 +88,15 @@ definition check_sat_contract :: \<open>SmtProblem \<Rightarrow> ('s, SmtAnswer,
         \<langle>case r of
            SmtAnswer_Sat m \<Rightarrow> smt_is_model p m
          | SmtAnswer_Unsat \<Rightarrow> \<not> smt_satisfiable p
-         | SmtAnswer_Unknown \<Rightarrow> \<not> smt_fragment p \<or> \<not> smt_sizes_ok p\<rangle> in
+         | SmtAnswer_Unknown \<Rightarrow> \<not> smt_fragment p \<or> \<not> smt_in_range p\<rangle> in
      make_function_contract pre post\<close>
 
 text \<open>\<^const>\<open>check_sat_contract\<close> \<open>p\<close>:
   \<^item> Precondition: \<open>p\<close> is well-sorted (\<^const>\<open>smt_wf\<close>), and every list in it has fewer than
     \<open>2^63\<close> elements (\<^const>\<open>smt_repr_ok\<close>, which holds for every value of a Rust program).
   \<^item> \<^verbatim>\<open>Sat(m)\<close>: \<open>m\<close> is a model of \<open>p\<close>. \<^verbatim>\<open>Unsat\<close>: \<open>p\<close> has no model. \<^verbatim>\<open>Unknown\<close>: \<open>p\<close> is not in
-    the fragment of this solver, or it is large (\<^const>\<open>smt_size_bound\<close> \<open>p\<close> is not below
-    \<open>2^64\<close>). For a problem in the fragment with \<^const>\<open>smt_sizes_ok\<close> the answer is \<^verbatim>\<open>Sat\<close>
-    or \<^verbatim>\<open>Unsat\<close>. (The solver checks a bound on the size of the problem it translates \<open>p\<close> into,
-    so it may also answer \<^verbatim>\<open>Sat\<close> or \<^verbatim>\<open>Unsat\<close> for a larger problem.)
+    the fragment of this solver, or not in its range (\<^const>\<open>smt_in_range\<close>). For a problem in
+    the fragment and in the range the answer is \<^verbatim>\<open>Sat\<close> or \<^verbatim>\<open>Unsat\<close>.
   \<^item> No panic (the abort postcondition is false). The program
     logic does not model the exhaustion of memory or of the stack, so the contract says nothing
     about them.\<close>

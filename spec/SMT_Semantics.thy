@@ -24,9 +24,10 @@ text \<open>
     sorts (\<open>smt_interp_ok\<close>): applied to values of the argument sorts it gives a value of the result
     sort. A defined function means its body, with the parameters bound to the arguments.
   \<^item> The theory functions of Core and of FixedSizeBitVectors with the QF\_BV extensions: as in the
-    SMT-LIB 2.6 theory and logic declarations (the files in \<^verbatim>\<open>spec/smtlib-2.6/\<close> of the QF\_BV
-    solver). \<open>and\<close>, \<open>or\<close>, \<open>xor\<close>, \<open>bvand\<close>, \<open>bvor\<close>, \<open>bvadd\<close>, \<open>bvmul\<close> are left-associative,
-    \<open>=>\<close> right-associative, \<open>=\<close> chainable and \<open>distinct\<close> pairwise.
+    SMT-LIB 2.6 theory and logic declarations, whose text is quoted beside each bit-vector
+    function below (the files are in \<^verbatim>\<open>spec/smtlib-2.6/\<close> of the solver of each logic).
+    \<open>and\<close>, \<open>or\<close>, \<open>xor\<close>, \<open>bvand\<close>, \<open>bvor\<close>, \<open>bvadd\<close>, \<open>bvmul\<close>, \<open>bvxor\<close> are left-associative, \<open>=>\<close>
+    right-associative, \<open>=\<close> chainable and \<open>distinct\<close> pairwise.
   \<^item> A problem is satisfiable if some interpretation makes every assertion true. The elements of
     the uninterpreted sorts range over all natural numbers; a quantifier-free problem that has a
     model with some domains has one with countable domains, so this is no restriction.
@@ -195,15 +196,41 @@ fun smt_bv_val :: \<open>sval \<Rightarrow> nat\<close> where
   \<open>smt_bv_val (VBv w x) = x\<close>
 | \<open>smt_bv_val _ = 0\<close>
 
-text \<open>A binary bit-vector function on the numbers \<open>x\<close>, \<open>y\<close> of operands of width \<open>w\<close>. The functions
-  of FixedSizeBitVectors (\<open>:definition\<close>) and the extensions of QF\_BV (each the number its
-  abbreviation denotes), as transcribed with the text of SMT-LIB in \<^verbatim>\<open>proof/core_spec/QFBV_CoreSpec.thy\<close> of the QF\_BV solver:
-  \<^item> \<open>bvand\<close>, \<open>bvor\<close>: bitwise; \<open>bvadd\<close>, \<open>bvmul\<close>: modulo \<open>2^w\<close>; \<open>bvudiv\<close> by 0 is all ones,
-    \<open>bvurem\<close> by 0 the dividend; \<open>bvshl\<close>, \<open>bvlshr\<close>: by the number of \<open>y\<close>.
-  \<^item> \<open>bvnand\<close>, \<open>bvnor\<close>, \<open>bvxor\<close>, \<open>bvxnor\<close>: bitwise; \<open>bvsub\<close>: \<open>x - y\<close> modulo \<open>2^w\<close>.
-  \<^item> \<open>bvsdiv\<close>, \<open>bvsrem\<close>, \<open>bvsmod\<close>: on the two's complement values, with the division by 0 that
-    the case definitions of QF\_BV inherit from \<open>bvudiv\<close> and \<open>bvurem\<close>; \<open>bvashr\<close>: the two's
-    complement value divided by \<open>2^y\<close>, rounded down.\<close>
+text \<open>A binary bit-vector function on the numbers \<open>x\<close>, \<open>y\<close> of operands of width \<open>w\<close>. The text of
+  SMT-LIB 2.6 is quoted for each case; \<open>s\<close>, \<open>t\<close> are the operands, \<open>m\<close> their width.
+
+  FixedSizeBitVectors, \<open>:definition\<close>:
+  \<^item> \<open>bvand\<close>, \<open>bvor\<close>: \<open>[[(bvand s t)]] := \<lambda>x:[0, m). if [[s]](x) = 0 then 0 else [[t]](x)\<close>,
+    \<open>[[(bvor s t)]] := \<lambda>x:[0, m). if [[s]](x) = 1 then 1 else [[t]](x)\<close>: the bitwise operations
+    on numbers (\<^const>\<open>Bit_Operations.and\<close>, \<^const>\<open>Bit_Operations.or\<close>).
+  \<^item> \<open>bvadd\<close>: \<open>nat2bv[m](bv2nat([[s]]) + bv2nat([[t]]))\<close>; \<open>bvmul\<close>: \<open>nat2bv[m](bv2nat([[s]]) * bv2nat([[t]]))\<close>.
+  \<^item> \<open>bvudiv\<close>: \<open>if bv2nat([[t]]) = 0 then \<lambda>x:[0, m). 1 else nat2bv[m](bv2nat([[s]]) div bv2nat([[t]]))\<close>.
+  \<^item> \<open>bvurem\<close>: \<open>if bv2nat([[t]]) = 0 then [[s]] else nat2bv[m](bv2nat([[s]]) rem bv2nat([[t]]))\<close>.
+  \<^item> \<open>bvshl\<close>: \<open>nat2bv[m](bv2nat([[s]]) * 2^(bv2nat([[t]])))\<close>; \<open>bvlshr\<close>: \<open>nat2bv[m](bv2nat([[s]]) div 2^(bv2nat([[t]])))\<close>.
+
+  QF\_BV, \<open>:extensions\<close>:
+  \<^item> \<open>bvnand s t\<close> abbreviates \<open>(bvnot (bvand s t))\<close>; \<open>bvnor\<close>: \<open>(bvnot (bvor s t))\<close>.
+  \<^item> \<open>bvxor s t\<close> abbreviates \<open>(bvor (bvand s (bvnot t)) (bvand (bvnot s) t))\<close>: the bitwise exclusive
+    or; \<open>bvxnor s t\<close> abbreviates \<open>(bvor (bvand s t) (bvand (bvnot s) (bvnot t)))\<close>: its negation.
+  \<^item> \<open>bvsub s t\<close> abbreviates \<open>(bvadd s (bvneg t))\<close>: \<open>s - t\<close> modulo \<open>2^m\<close>.
+  \<^item> \<open>bvsdiv s t\<close>: \<open>(bvudiv s t)\<close> if both sign bits are 0; \<open>(bvneg (bvudiv (bvneg s) t))\<close> if they are
+    1, 0; \<open>(bvneg (bvudiv s (bvneg t)))\<close> if 0, 1; \<open>(bvudiv (bvneg s) (bvneg t))\<close> if 1, 1. For
+    \<open>t \<noteq> 0\<close>, this is the quotient of the two's complement values rounded towards zero
+    (\<^const>\<open>smt_tdiv\<close>), modulo \<open>2^m\<close>. For \<open>t = 0\<close> (sign bit 0), \<open>bvudiv\<close> by 0 gives all ones: the
+    result is all ones (\<open>2^m - 1\<close>) when the sign bit of \<open>s\<close> is 0, and \<open>bvneg\<close> of all ones, 1, when
+    it is 1.
+  \<^item> \<open>bvsrem s t\<close>: \<open>(bvurem s t)\<close>; \<open>(bvneg (bvurem (bvneg s) t))\<close>; \<open>(bvurem s (bvneg t))\<close>;
+    \<open>(bvneg (bvurem (bvneg s) (bvneg t)))\<close> for the same four cases: the remainder of that
+    division, with the sign of \<open>s\<close> (\<^const>\<open>smt_tmod\<close>), modulo \<open>2^m\<close>. For \<open>t = 0\<close>, \<open>bvurem\<close> by 0
+    gives the dividend, so the result is \<open>s\<close>.
+  \<^item> \<open>bvsmod s t\<close>: with \<open>u = (bvurem abs_s abs_t)\<close> of the absolute values: \<open>u\<close> if \<open>u = 0\<close> or both
+    sign bits are 0; \<open>(bvadd (bvneg u) t)\<close> if they are 1, 0; \<open>(bvadd u t)\<close> if 0, 1; \<open>(bvneg u)\<close> if
+    1, 1. For \<open>t \<noteq> 0\<close>, this is the remainder with the sign of \<open>t\<close>: \<open>mod\<close> of the two's complement
+    values (the \<open>mod\<close> of Isabelle/HOL rounds the quotient down), modulo \<open>2^m\<close>. For \<open>t = 0\<close>, \<open>u\<close> is
+    \<open>abs_s\<close> and every case gives \<open>s\<close>.
+  \<^item> \<open>bvashr s t\<close> abbreviates
+    \<open>(ite (= ((_ extract |m-1| |m-1|) s) #b0) (bvlshr s t) (bvnot (bvlshr (bvnot s) t)))\<close>: the two's
+    complement value of \<open>s\<close> divided by \<open>2^t\<close>, rounded down, modulo \<open>2^m\<close>.\<close>
 fun smt_bv_bin :: \<open>SmtOp \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat\<close> where
   \<open>smt_bv_bin SmtOp_Bvand w x y = Bit_Operations.and x y\<close>
 | \<open>smt_bv_bin SmtOp_Bvor w x y = Bit_Operations.or x y\<close>
@@ -226,9 +253,15 @@ fun smt_bv_bin :: \<open>SmtOp \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow>
 | \<open>smt_bv_bin SmtOp_Bvashr w x y = smt_to_bv w (smt_sint w x div 2 ^ y)\<close>
 | \<open>smt_bv_bin _ w x y = 0\<close>
 
-text \<open>A binary bit-vector predicate on the numbers of operands of width \<open>w\<close>: \<open>bvult\<close>
-  (FixedSizeBitVectors) and the comparisons of QF\_BV (unsigned, and signed on the two's
-  complement values).\<close>
+text \<open>A binary bit-vector predicate on the numbers of operands of width \<open>w\<close>, with the text of
+  SMT-LIB 2.6:
+  \<^item> \<open>bvult\<close> (FixedSizeBitVectors): \<open>true iff bv2nat([[s]]) < bv2nat([[t]])\<close>.
+  \<^item> QF\_BV: \<open>bvule s t\<close> abbreviates \<open>(or (bvult s t) (= s t))\<close>; \<open>bvugt s t\<close>: \<open>(bvult t s)\<close>;
+    \<open>bvuge s t\<close>: \<open>(or (bvult t s) (= s t))\<close>.
+  \<^item> QF\_BV: \<open>bvslt s t\<close> abbreviates
+    \<open>(or (and (= msb_s #b1) (= msb_t #b0)) (and (= msb_s msb_t) (bvult s t)))\<close>: the two's
+    complement value of \<open>s\<close> is below that of \<open>t\<close>; \<open>bvsle\<close>: the same with \<open>bvule\<close>;
+    \<open>bvsgt s t\<close>: \<open>(bvslt t s)\<close>; \<open>bvsge s t\<close>: \<open>(bvsle t s)\<close>.\<close>
 fun smt_bv_cmp :: \<open>SmtOp \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool\<close> where
   \<open>smt_bv_cmp SmtOp_Bvult w x y = (x < y)\<close>
 | \<open>smt_bv_cmp SmtOp_Bvule w x y = (x \<le> y)\<close>
@@ -244,11 +277,30 @@ text \<open>A theory function applied to the values \<open>vs\<close> of its arg
   the cases of Core: \<open>not\<close>; \<open>and\<close>, \<open>or\<close> (all, some argument true); \<open>xor\<close> (left-associative: an
   odd number of arguments true); \<open>=>\<close> (right-associative: some argument but the last false, or the
   last true); \<open>=\<close> (chainable: all arguments equal); \<open>distinct\<close> (pairwise); \<open>ite\<close>. Of the
-  bit-vector theory: \<open>concat\<close> (the first argument the high part); \<open>extract\<close> (bits \<open>j\<close> to \<open>i\<close>);
-  \<open>bvnot\<close>, \<open>bvneg\<close>; the left-associative \<open>bvand\<close>, \<open>bvor\<close>, \<open>bvadd\<close>, \<open>bvmul\<close> (folded from the
-  left); \<open>bvcomp\<close> (1 iff equal); the predicates; \<open>repeat\<close>; \<open>zero_extend\<close> (the number
-  unchanged); \<open>sign_extend\<close> (the two's complement value at the larger width); \<open>rotate_left\<close>,
-  \<open>rotate_right\<close> by \<open>i mod w\<close> places; the other binary functions by \<^const>\<open>smt_bv_bin\<close>.\<close>
+  bit-vector theory, with the text of SMT-LIB 2.6 (\<open>s\<close>, \<open>t\<close> the operands, \<open>m\<close> the width of \<open>t\<close>):
+  \<^item> \<open>concat\<close>: \<open>\<lambda>x:[0, n+m). if (x < m) then [[t]](x) else [[s]](x - m)\<close>: \<open>s\<close> above the \<open>m\<close>
+    bits of \<open>t\<close>.
+  \<^item> \<open>((_ extract i j) s)\<close>: \<open>\<lambda>x:[0, i-j+1). [[s]](j + x)\<close>: bits \<open>j\<close> to \<open>i\<close>.
+  \<^item> \<open>bvnot\<close>: \<open>\<lambda>x:[0, m). if [[s]](x) = 0 then 1 else 0\<close>: every bit flipped, \<open>2^m - 1 - x\<close>.
+  \<^item> \<open>bvneg\<close>: \<open>nat2bv[m](2^m - bv2nat([[s]]))\<close>.
+  \<^item> The left-associative \<open>bvand\<close>, \<open>bvor\<close>, \<open>bvadd\<close>, \<open>bvmul\<close> and (QF\_BV) \<open>bvxor\<close>: folded from the
+    left with \<^const>\<open>smt_bv_bin\<close>.
+  \<^item> \<open>bvcomp s t\<close> (QF\_BV): \<open>bvxnor\<close> of the bits, conjoined over all bits: \<open>#b1\<close> iff \<open>s\<close> and \<open>t\<close>
+    are equal.
+  \<^item> The predicates: \<^const>\<open>smt_bv_cmp\<close>.
+  \<^item> \<open>((_ repeat i) t)\<close> (QF\_BV): \<open>t\<close> concatenated with itself \<open>i\<close> times (\<^const>\<open>smt_repeat_val\<close>).
+  \<^item> \<open>((_ zero_extend i) t)\<close> abbreviates \<open>(concat ((_ repeat i) #b0) t)\<close> (and \<open>t\<close> for \<open>i = 0\<close>): the
+    number is unchanged.
+  \<^item> \<open>((_ sign_extend i) t)\<close> abbreviates \<open>(concat ((_ repeat i) ((_ extract |m-1| |m-1|) t)) t)\<close>:
+    the two's complement value of \<open>t\<close>, as a value of width \<open>m + i\<close>.
+  \<^item> \<open>((_ rotate_left i) t)\<close> abbreviates
+    \<open>((_ rotate_left |i-1|) (concat ((_ extract |m-2| 0) t) ((_ extract |m-1| |m-1|) t)))\<close> (and \<open>t\<close>
+    for \<open>i = 0\<close> or \<open>m = 1\<close>): with \<open>r = i mod m\<close>, the low \<open>m - r\<close> bits of \<open>t\<close> end up above its
+    high \<open>r\<close> bits.
+  \<^item> \<open>((_ rotate_right i) t)\<close> abbreviates
+    \<open>((_ rotate_right |i-1|) (concat ((_ extract 0 0) t) ((_ extract |m-1| 1) t)))\<close>: with
+    \<open>r = i mod m\<close>, the low \<open>r\<close> bits of \<open>t\<close> end up above its high \<open>m - r\<close> bits.
+  \<^item> The other binary functions: \<^const>\<open>smt_bv_bin\<close>.\<close>
 fun smt_op_sem :: \<open>SmtOp \<Rightarrow> sval list \<Rightarrow> sval\<close> where
   \<open>smt_op_sem SmtOp_Not vs = VBool (\<not> smt_true (hd vs))\<close>
 | \<open>smt_op_sem SmtOp_And vs = VBool (\<forall>v \<in> set vs. smt_true v)\<close>
@@ -392,56 +444,77 @@ definition smt_repr_ok :: \<open>SmtProblem \<Rightarrow> bool\<close> where
      (\<forall>d \<in> set (SmtProblem_defs p). length (SmtDef_params d) < 2 ^ 63 \<and> smt_term_repr (SmtDef_body d)) \<and>
      length (SmtProblem_asserts p) < 2 ^ 63 \<and> (\<forall>t \<in> set (SmtProblem_asserts p). smt_term_repr t)\<close>
 
-subsection \<open>A size measure\<close>
+subsection \<open>The size of a problem\<close>
 
-text \<open>A measure of the size of a problem. A solver may use it to state for which problems it
-  gives an answer other than \<^verbatim>\<open>Unknown\<close>; it is not a condition on the input.\<close>
+text \<open>Measures of a problem as it is written, independent of any solver. A solver states with
+  them the range of problems for which it promises an answer other than \<^verbatim>\<open>Unknown\<close>.\<close>
 
-text \<open>The weight of a node of a term of sort \<open>s\<close> (or none) with \<open>n\<close> arguments of sorts \<open>ss\<close>: the
-  square of \<open>n + 1\<close> times the sum of the cubes of the widths (plus one) of the node and its
-  arguments.\<close>
-definition smt_wcube :: \<open>SmtSort option \<Rightarrow> nat\<close> where
-  \<open>smt_wcube s \<equiv> (case s of Some s \<Rightarrow> smt_width s | None \<Rightarrow> 0) + 1\<close>
-
-definition smt_node_weight :: \<open>SmtFun list \<Rightarrow> SmtDef list \<Rightarrow> SmtSort list \<Rightarrow> SmtTerm \<Rightarrow> SmtTerm list \<Rightarrow> nat\<close> where
-  \<open>smt_node_weight fs ds ps t args \<equiv>
-     Suc (length args) ^ 2 *
-     (smt_wcube (smt_tsort fs ds ps t) ^ 3 + sum_list (map (\<lambda>a. smt_wcube (smt_tsort fs ds ps a) ^ 3) args))\<close>
-
-text \<open>The weight of a term: the weights of its nodes, where a definition with parameters counts
-  with the weight of its body at every application (a solver may expand it there).\<close>
-function smt_weight :: \<open>SmtFun list \<Rightarrow> SmtDef list \<Rightarrow> SmtSort list \<Rightarrow> SmtTerm \<Rightarrow> nat\<close> where
-  \<open>smt_weight fs ds ps (SmtTerm_BoolConst b) = smt_node_weight fs ds ps (SmtTerm_BoolConst b) []\<close>
-| \<open>smt_weight fs ds ps (SmtTerm_BvConst bs) = smt_node_weight fs ds ps (SmtTerm_BvConst bs) [] + length bs\<close>
-| \<open>smt_weight fs ds ps (SmtTerm_Param k) = smt_node_weight fs ds ps (SmtTerm_Param k) []\<close>
-| \<open>smt_weight fs ds ps (SmtTerm_Fun f args) =
-     smt_node_weight fs ds ps (SmtTerm_Fun f args) args + sum_list (map (smt_weight fs ds ps) args)\<close>
-| \<open>smt_weight fs ds ps (SmtTerm_Def d args) =
-     smt_node_weight fs ds ps (SmtTerm_Def d args) args + sum_list (map (smt_weight fs ds ps) args) +
+text \<open>The number of nodes of a term. An application of a definition with parameters counts with
+  the nodes of the body of the definition as well, since it stands for that body.\<close>
+function smt_nodes :: \<open>SmtDef list \<Rightarrow> SmtTerm \<Rightarrow> nat\<close> where
+  \<open>smt_nodes ds (SmtTerm_BoolConst b) = 1\<close>
+| \<open>smt_nodes ds (SmtTerm_BvConst bs) = 1\<close>
+| \<open>smt_nodes ds (SmtTerm_Param k) = 1\<close>
+| \<open>smt_nodes ds (SmtTerm_Fun f args) = Suc (sum_list (map (smt_nodes ds) args))\<close>
+| \<open>smt_nodes ds (SmtTerm_Def d args) =
+     Suc (sum_list (map (smt_nodes ds) args)) +
      (if unat d < length ds \<and> SmtDef_params (ds ! unat d) \<noteq> []
-      then smt_weight fs (take (unat d) ds) (SmtDef_params (ds ! unat d)) (SmtDef_body (ds ! unat d)) else 0)\<close>
-| \<open>smt_weight fs ds ps (SmtTerm_App op args) =
-     smt_node_weight fs ds ps (SmtTerm_App op args) args + sum_list (map (smt_weight fs ds ps) args)\<close>
+      then smt_nodes (take (unat d) ds) (SmtDef_body (ds ! unat d)) else 0)\<close>
+| \<open>smt_nodes ds (SmtTerm_App op args) = Suc (sum_list (map (smt_nodes ds) args))\<close>
   by pat_completeness auto
 termination
-  by (relation \<open>measures [\<lambda>(_, ds, _, _). length ds, \<lambda>(_, _, _, t). size t]\<close>)
+  by (relation \<open>measures [\<lambda>(ds, _). length ds, \<lambda>(_, t). size t]\<close>)
      (auto intro: size_list_estimation' simp: less_Suc_eq_le)
 
-text \<open>The size of a problem: \<open>10^9\<close> times one plus the numbers of declared symbols, definitions
-  and assertions, the widths (plus one) of the result sorts of the declared symbols, and the
-  weights of the bodies of the definitions without parameters and of the assertions.\<close>
-definition smt_size_bound :: \<open>SmtProblem \<Rightarrow> nat\<close> where
-  \<open>smt_size_bound p \<equiv>
-     let fs = SmtProblem_funs p in let ds = SmtProblem_defs p in
-     1000000000 *
-       (1 + length fs + length ds + length (SmtProblem_asserts p) +
-        sum_list (map (\<lambda>f. smt_width (SmtFun_ret f) + 1) fs) +
-        sum_list (map (\<lambda>d. if SmtDef_params (ds ! d) = [] then smt_weight fs (take d ds) [] (SmtDef_body (ds ! d)) else 0)
-                   [0..<length ds]) +
-        sum_list (map (smt_weight fs ds []) (SmtProblem_asserts p)))\<close>
+text \<open>The size of a problem: the numbers of declared symbols, definitions and assertions, and the
+  nodes of the assertions and of the bodies of the definitions without parameters.\<close>
+definition smt_size :: \<open>SmtProblem \<Rightarrow> nat\<close> where
+  \<open>smt_size p \<equiv>
+     let ds = SmtProblem_defs p in
+     length (SmtProblem_funs p) + length ds + length (SmtProblem_asserts p) +
+     sum_list (map (\<lambda>d. if SmtDef_params (ds ! d) = [] then smt_nodes (take d ds) (SmtDef_body (ds ! d)) else 0)
+                [0..<length ds]) +
+     sum_list (map (smt_nodes ds) (SmtProblem_asserts p))\<close>
 
-text \<open>The size fits in a 64-bit word.\<close>
-definition smt_sizes_ok :: \<open>SmtProblem \<Rightarrow> bool\<close> where
-  \<open>smt_sizes_ok p \<equiv> smt_size_bound p < 2 ^ 64\<close>
+text \<open>The subterms of a term, the term included.\<close>
+fun smt_subterms :: \<open>SmtTerm \<Rightarrow> SmtTerm list\<close> where
+  \<open>smt_subterms (SmtTerm_Fun f args) = SmtTerm_Fun f args # concat (map smt_subterms args)\<close>
+| \<open>smt_subterms (SmtTerm_Def d args) = SmtTerm_Def d args # concat (map smt_subterms args)\<close>
+| \<open>smt_subterms (SmtTerm_App op args) = SmtTerm_App op args # concat (map smt_subterms args)\<close>
+| \<open>smt_subterms t = [t]\<close>
+
+text \<open>The width of the sort of a term (0 if it is not a bit-vector).\<close>
+definition smt_twidth :: \<open>SmtFun list \<Rightarrow> SmtDef list \<Rightarrow> SmtSort list \<Rightarrow> SmtTerm \<Rightarrow> nat\<close> where
+  \<open>smt_twidth fs ds ps t \<equiv> (case smt_tsort fs ds ps t of Some s \<Rightarrow> smt_width s | None \<Rightarrow> 0)\<close>
+
+text \<open>The widths of the subterms satisfying \<open>Q\<close> of the bodies of the definitions (over their
+  parameters) and of the assertions.\<close>
+definition smt_term_widths :: \<open>(SmtTerm \<Rightarrow> bool) \<Rightarrow> SmtProblem \<Rightarrow> nat set\<close> where
+  \<open>smt_term_widths Q p \<equiv>
+     let fs = SmtProblem_funs p in let ds = SmtProblem_defs p in
+     (\<Union>d < length ds. smt_twidth fs (take d ds) (SmtDef_params (ds ! d)) `
+        Set.filter Q (set (smt_subterms (SmtDef_body (ds ! d))))) \<union>
+     (\<Union>t \<in> set (SmtProblem_asserts p). smt_twidth fs ds [] ` Set.filter Q (set (smt_subterms t)))\<close>
+
+text \<open>The widths of the sorts of the declared symbols and of the definitions.\<close>
+definition smt_sort_widths :: \<open>SmtProblem \<Rightarrow> nat set\<close> where
+  \<open>smt_sort_widths p \<equiv>
+     (\<Union>f \<in> set (SmtProblem_funs p). smt_width ` set (SmtFun_ret f # SmtFun_args f)) \<union>
+     (\<Union>d \<in> set (SmtProblem_defs p). smt_width ` set (SmtDef_ret d # SmtDef_params d))\<close>
+
+text \<open>The largest bit-vector width in a problem (0 if there is none).\<close>
+definition smt_max_width :: \<open>SmtProblem \<Rightarrow> nat\<close> where
+  \<open>smt_max_width p \<equiv> Max (insert 0 (smt_sort_widths p \<union> smt_term_widths (\<lambda>_. True) p))\<close>
+
+text \<open>Multiplication, division and remainder: the bit-vector functions whose usual circuits grow
+  with the square of the width.\<close>
+fun smt_mul_div :: \<open>SmtTerm \<Rightarrow> bool\<close> where
+  \<open>smt_mul_div (SmtTerm_App op args) = (op \<in> {SmtOp_Bvmul, SmtOp_Bvudiv, SmtOp_Bvurem, SmtOp_Bvsdiv, SmtOp_Bvsrem, SmtOp_Bvsmod})\<close>
+| \<open>smt_mul_div _ = False\<close>
+
+text \<open>The largest width of a multiplication, division or remainder in a problem (0 if there is
+  none).\<close>
+definition smt_max_mul_width :: \<open>SmtProblem \<Rightarrow> nat\<close> where
+  \<open>smt_max_mul_width p \<equiv> Max (insert 0 (smt_term_widths smt_mul_div p))\<close>
 
 end
