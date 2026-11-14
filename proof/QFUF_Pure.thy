@@ -1,5 +1,5 @@
 theory QFUF_Pure
-  imports QFUF_Spec.QFUF_Spec
+  imports "QFUF_CoreSpec.QFUF_CoreSpec"
 begin
 
 section \<open>Pure facts behind the solver\<close>

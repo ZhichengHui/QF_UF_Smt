@@ -1,5 +1,5 @@
 theory QFUF_SmtModel
-  imports "QFUF_Spec.QFUF_Spec"
+  imports "QFUF_CoreSpec.QFUF_CoreSpec"
 begin
 
 section \<open>The translation of general problems: functional model\<close>

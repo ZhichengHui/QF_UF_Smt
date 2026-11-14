@@ -6,7 +6,7 @@ section \<open>The top-level theorem\<close>
 
 text \<open>\<^verbatim>\<open>check_sat\<close> satisfies \<^const>\<open>QFUF_ctx.check_sat_contract\<close> for every fuel at least
   \<open>fuel_top\<close> of the problem. The proof composes the contracts of \<^verbatim>\<open>in_fragment\<close>,
-  \<^verbatim>\<open>uf_size\<close>, \<^verbatim>\<open>tr_problem\<close>, \<^verbatim>\<open>solve\<close> (with the bounds on its model) and
+  \<^verbatim>\<open>input_size\<close>, \<^verbatim>\<open>tr_problem\<close>, \<^verbatim>\<open>solve\<close> (with the bounds on its model) and
   \<^verbatim>\<open>tr_model\<close> with the semantic correctness of the translation (\<^verbatim>\<open>QFUF_SmtModel\<close>) and the
   size bounds (\<^verbatim>\<open>QFUF_SmtBound\<close>).\<close>
 
@@ -37,19 +37,22 @@ proof -
   then show ?thesis using assms(2) by (simp add: domain_size_m_def)
 qed
 
-lemma usz_lt:
+lemma isz_le:
   fixes x xa :: \<open>64 word\<close>
-  shows \<open>unat x = sat T \<Longrightarrow> unat xa = 9223372036854775808 \<Longrightarrow> \<not> xa \<le> x \<Longrightarrow> T < 2 ^ 63\<close>
-  by (simp add: word_le_nat_alt sat_def min_def split: if_splits)
+  shows \<open>unat x = sat T \<Longrightarrow> unat xa = 268435456 \<Longrightarrow> \<not> xa < x \<Longrightarrow> T \<le> 2 ^ 28\<close>
+  by (simp add: word_less_nat_alt sat_def min_def split: if_splits)
 
-lemma usz_ge:
+lemma isz_gt:
   fixes x xa :: \<open>64 word\<close>
-  shows \<open>unat x = sat T \<Longrightarrow> unat xa = 9223372036854775808 \<Longrightarrow> xa \<le> x \<Longrightarrow> \<not> T < 2 ^ 63\<close>
-  by (simp add: word_le_nat_alt sat_def min_def split: if_splits)
+  shows \<open>unat x = sat T \<Longrightarrow> unat xa = 268435456 \<Longrightarrow> xa < x \<Longrightarrow> \<not> T \<le> 2 ^ 28\<close>
+  by (simp add: word_less_nat_alt sat_def min_def split: if_splits)
+
+lemma isz_usize: \<open>isize_m p \<le> 2 ^ 28 \<Longrightarrow> usize_m p < 2 ^ 63\<close>
+  using in_range_usize[of p] by (simp add: isize_smt_size)
 
 text \<open>A fuel sufficient for every loop and recursion of \<^verbatim>\<open>check_sat\<close> on \<open>p\<close>.\<close>
 definition fuel_top :: \<open>SmtProblem \<Rightarrow> nat\<close> where
-  \<open>fuel_top p \<equiv> QFUF_ctx.tr_fuel p + usize_fuel p + Suc (length (Problem_atoms (tr_problem_m p)))\<close>
+  \<open>fuel_top p \<equiv> QFUF_ctx.tr_fuel p + isize_fuel p + Suc (length (Problem_atoms (tr_problem_m p)))\<close>
 
 context QFUF_ctx
 begin
@@ -69,16 +72,16 @@ next
   case True
   then have W: \<open>smt_wf p\<close> and R: \<open>smt_repr_ok p\<close> by simp_all
   let ?q = \<open>tr_problem_m p\<close>
-  have NF: \<open>tr_fuel p \<le> urust_fuel\<close> \<open>usize_fuel p \<le> urust_fuel\<close> \<open>length (Problem_atoms ?q) < urust_fuel\<close>
+  have NF: \<open>tr_fuel p \<le> urust_fuel\<close> \<open>isize_fuel p \<le> urust_fuel\<close> \<open>length (Problem_atoms ?q) < urust_fuel\<close>
     using F by (simp_all add: fuel_top_def)
   have IP: \<open>if_pre urust_fuel p\<close> using in_fragment_pre[OF R NF(1)] .
-  have US: \<open>usize_pre urust_fuel p\<close> using usize_pre_wf[OF W R NF(2)] .
+  have US: \<open>isize_pre urust_fuel p\<close> using isize_pre_wf[OF W R NF(2)] .
   have OK: \<open>tr_bounded p \<and> sizes_ok ?q\<close> if \<open>usize_m p < 2 ^ 63\<close> using usize_tr_ok[OF that W] .
   have TP: \<open>tr_pre urust_fuel p\<close> if \<open>smt_fragment p\<close> \<open>usize_m p < 2 ^ 63\<close>
     using tr_problem_pre[OF W that(1) R conjunct1[OF OK[OF that(2)]] NF(1)] .
   have WP: \<open>wf_problem ?q \<and> sizes_ok ?q\<close> if \<open>smt_fragment p\<close> \<open>usize_m p < 2 ^ 63\<close>
     using tr_wf_problem[OF W that(1) conjunct1[OF OK[OF that(2)]]] OK[OF that(2)] by simp
-  have B: \<open>usize_m p < 2 ^ 63\<close> if \<open>smt_sizes_ok p\<close> using sizes_ok_usize[OF that] .
+  have B: \<open>isize_m p \<le> 2 ^ 28\<close> if \<open>smt_in_range p\<close> using that by (simp add: smt_in_range_def isize_smt_size)
   have MP: \<open>tm_pre urust_fuel p m\<close>
     if \<open>smt_fragment p\<close> \<open>usize_m p < 2 ^ 63\<close>
        \<open>length (Model_entries m) \<le> length (Problem_terms ?q)\<close>
@@ -107,12 +110,12 @@ next
         simp add: IP US W R)
     subgoal for x xa xb
       apply (cases xb; crush_base)
-      apply (all \<open>frule usz_lt, assumption, assumption\<close>)
+      apply (all \<open>frule isz_le, assumption, assumption, drule isz_usize\<close>)
       using UC MC MP by auto
-    subgoal using WP usz_lt by blast
-    subgoal using WP usz_lt by blast
-    subgoal using TP usz_lt by blast
-    subgoal using B usz_ge by simp
+    subgoal using WP isz_le isz_usize by blast
+    subgoal using WP isz_le isz_usize by blast
+    subgoal using TP isz_le isz_usize by blast
+    subgoal using B isz_gt by blast
     done
 qed
 

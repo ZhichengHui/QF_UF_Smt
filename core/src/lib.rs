@@ -883,17 +883,22 @@ fn tr_model(p: &SmtProblem, m: &Model) -> SmtModel {
     SmtModel { domains, funs }
 }
 
-// Size checks. The solver (`solve`) is verified for problems all of whose vectors (terms, atoms,
-// clauses, the arguments of each term, the literals of each clause) have fewer than 2^63
-// elements, and the translation computes with `usize` (the next function symbol, the indices of
-// the terms and atoms). A definition with parameters is expanded wherever it is applied, so the
-// translation can be exponentially larger than `p`. `check_sat` answers `Unknown` when the bound
-// `uf_size` on the translation reaches 2^63. The computations below saturate at 2^63: each
-// returns the exact value if it is below 2^63, and 2^63 otherwise.
+// The input range. `check_sat` answers `Unknown` for a problem outside the range of the
+// specification (`smt_in_range` in `spec/QFUF_Spec.thy`): its size `smt_size` (the numbers of
+// declared symbols, definitions and assertions, and the nodes of the terms, an application of a
+// definition with parameters counting with the nodes of the body) is above 2^28. Within the
+// range, every count of the translation and of the solver stays below 2^63. The size is computed
+// with additions that saturate at 2^63: each returns the exact value if it is below 2^63, and
+// 2^63 otherwise.
 
-/// The bound at which the size computations saturate: 2^63.
+/// The bound at which the size computation saturates: 2^63.
 fn cap() -> usize {
     9223372036854775808
+}
+
+/// The largest size of the range: 2^28.
+fn max_size() -> usize {
+    268435456
 }
 
 /// `a + b`, saturated at `cap()`.
@@ -905,67 +910,43 @@ fn sat_add(a: usize, b: usize) -> usize {
     }
 }
 
-/// `a * b`, saturated at `cap()`.
-fn sat_mul(a: usize, b: usize) -> usize {
-    if a == 0 || b == 0 {
-        0
-    } else if a >= cap() || b >= cap() || b > (cap() - 1) / a {
-        cap()
-    } else {
-        a * b
-    }
-}
-
-/// The weight of a node with `n` arguments: `16 * (n + 1)^2`.
-fn node_weight(n: usize) -> usize {
-    let v = sat_add(n, 1);
-    sat_mul(16, sat_mul(v, v))
-}
-
-/// The bound on the size of the translation of `t` (what `enc` adds to the state): the weight of
-/// each node, the arguments of a definition with parameters, and its body (`dc`). `dc` gives,
-/// for each definition with parameters of `p` before the current one, the bound of its body.
-fn uf_count(p: &SmtProblem, dc: &Vec<usize>, t: &SmtTerm) -> usize {
+/// The number of nodes of `t` (`smt_nodes`): an application of a definition with parameters
+/// counts with the nodes of its body, which `dc` gives for each definition before the current
+/// one.
+fn node_count(p: &SmtProblem, dc: &Vec<usize>, t: &SmtTerm) -> usize {
     match t {
-        SmtTerm::Fun(_, args) => sat_add(node_weight(args.len()), uf_count_args(p, dc, args)),
+        SmtTerm::Fun(_, args) => sat_add(1, node_count_args(p, dc, args)),
         SmtTerm::Def(d, args) => {
             if p.defs[*d].params.len() == 0 {
-                node_weight(args.len())
+                sat_add(1, node_count_args(p, dc, args))
             } else {
-                sat_add(node_weight(args.len()), sat_add(uf_count_args(p, dc, args), dc[*d]))
+                sat_add(1, sat_add(node_count_args(p, dc, args), dc[*d]))
             }
         }
-        SmtTerm::App(_, args) => sat_add(node_weight(args.len()), uf_count_args(p, dc, args)),
-        _ => node_weight(0),
+        SmtTerm::App(_, args) => sat_add(1, node_count_args(p, dc, args)),
+        _ => 1,
     }
 }
 
-/// The sum of the bounds of the arguments `ts`.
-fn uf_count_args(p: &SmtProblem, dc: &Vec<usize>, ts: &Vec<SmtTerm>) -> usize {
+/// The sum of the node counts of the arguments `ts`.
+fn node_count_args(p: &SmtProblem, dc: &Vec<usize>, ts: &Vec<SmtTerm>) -> usize {
     let mut n: usize = 0;
     let mut i: usize = 0;
     while i < ts.len() {
-        n = sat_add(n, uf_count(p, dc, &ts[i]));
+        n = sat_add(n, node_count(p, dc, &ts[i]));
         i += 1;
     }
     n
 }
 
-/// A bound on the size of the translation of `p` (`tr_problem`): the sum of the numbers of its
-/// terms, atoms and clauses, the lengths of all its clauses and of the argument lists of all its
-/// terms, and the final `next_fun`. Per node of `p` with `n` arguments (counting each expansion
-/// of a definition with parameters) the encoders add at most `16 * (n + 1)^2`: a new constant
-/// costs 2 (a term and `next_fun`), a new literal 3, an atom 1, a clause of length `l` costs
-/// `1 + l`; so `enc_term` costs at most 10, `gate_andor` on `m` literals `4 m + 5`, `gate_xor`
-/// and `gate_ite` 19, `=`/`distinct` at most 25 per pair of arguments plus 5, a declared symbol
-/// `11 n + 2`, an `ite` on terms 30. The initial state costs `p.funs.len() + 8`, and each
-/// assertion 2 more for its unit clause.
-fn uf_size(p: &SmtProblem) -> usize {
+/// The size of `p` (`smt_size`): the numbers of declared symbols, definitions and assertions,
+/// and the nodes of the bodies of the definitions without parameters and of the assertions.
+fn input_size(p: &SmtProblem) -> usize {
     let mut dc = Vec::new();
-    let mut n: usize = sat_add(16, p.funs.len());
+    let mut n: usize = sat_add(sat_add(p.funs.len(), p.defs.len()), p.asserts.len());
     let mut d: usize = 0;
     while d < p.defs.len() {
-        let c = uf_count(p, &dc, &p.defs[d].body);
+        let c = node_count(p, &dc, &p.defs[d].body);
         if p.defs[d].params.len() == 0 {
             n = sat_add(n, c);
             dc.push(0);
@@ -976,20 +957,19 @@ fn uf_size(p: &SmtProblem) -> usize {
     }
     let mut j: usize = 0;
     while j < p.asserts.len() {
-        n = sat_add(n, sat_add(uf_count(p, &dc, &p.asserts[j]), 2));
+        n = sat_add(n, node_count(p, &dc, &p.asserts[j]));
         j += 1;
     }
     n
 }
 
-/// The solver on a general problem: `Unknown` outside the fragment, or if the translation may be
-/// too large (`uf_size`, see the size checks above); otherwise the problem is translated into
-/// this solver's problem and solved.
+/// The solver on a general problem: `Unknown` outside the fragment or outside the input range
+/// (see above); otherwise the problem is translated into this solver's problem and solved.
 pub fn check_sat(p: &SmtProblem) -> SmtAnswer {
     if !in_fragment(p) {
         return SmtAnswer::Unknown;
     }
-    if uf_size(p) >= cap() {
+    if input_size(p) > max_size() {
         return SmtAnswer::Unknown;
     }
     match solve(&tr_problem(p)) {

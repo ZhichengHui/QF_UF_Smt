@@ -886,6 +886,12 @@ definition "cap" :: \<open>('s, 64 word, 'abort, 'i prompt, 'o prompt_output) fu
     9223372036854775808_usize
   \<rbrakk>\<close>
 
+(* Rust: max_size *)
+definition "max_size" :: \<open>('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>max_size \<equiv> FunctionBody \<lbrakk>
+    268435456_usize
+  \<rbrakk>\<close>
+
 (* Rust: sat_add *)
 definition "sat_add" :: \<open>(64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>sat_add \<equiv> \<lambda>a b. FunctionBody \<lbrakk>
@@ -896,47 +902,26 @@ definition "sat_add" :: \<open>(64 word) \<Rightarrow> (64 word) \<Rightarrow> (
     }
   \<rbrakk>\<close>
 
-(* Rust: sat_mul *)
-definition "sat_mul" :: \<open>(64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>sat_mul \<equiv> \<lambda>a b. FunctionBody \<lbrakk>
-    if (a == 0_usize) || (b == 0_usize) {
-      0_usize
-    } else {
-      if ((a >= cap()) || (b >= cap())) || (b > ((cap() - 1_usize) / a)) {
-        cap()
-      } else {
-        a * b
-      }
-    }
-  \<rbrakk>\<close>
+text \<open>Recursive group node_count, node_count_args: defined by iterating node_count_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>
 
-(* Rust: node_weight *)
-definition "node_weight" :: \<open>(64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>node_weight \<equiv> \<lambda>n. FunctionBody \<lbrakk>
-    let v = sat_add(n, 1_usize);
-    sat_mul(16_usize, sat_mul(v, v))
-  \<rbrakk>\<close>
-
-text \<open>Recursive group uf_count, uf_count_args: defined by iterating uf_count_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>
-
-definition "uf_count_rec_step" :: \<open>((SmtProblem \<Rightarrow> ((64 word) list) \<Rightarrow> SmtTerm \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body) \<times> (SmtProblem \<Rightarrow> ((64 word) list) \<Rightarrow> (SmtTerm list) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> ((SmtProblem \<Rightarrow> ((64 word) list) \<Rightarrow> SmtTerm \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body) \<times> (SmtProblem \<Rightarrow> ((64 word) list) \<Rightarrow> (SmtTerm list) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
-  \<open>uf_count_rec_step \<equiv> \<lambda>(rec_uf_count, rec_uf_count_args). (\<lambda>p dc t. FunctionBody \<lbrakk>
+definition "node_count_rec_step" :: \<open>((SmtProblem \<Rightarrow> ((64 word) list) \<Rightarrow> SmtTerm \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body) \<times> (SmtProblem \<Rightarrow> ((64 word) list) \<Rightarrow> (SmtTerm list) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> ((SmtProblem \<Rightarrow> ((64 word) list) \<Rightarrow> SmtTerm \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body) \<times> (SmtProblem \<Rightarrow> ((64 word) list) \<Rightarrow> (SmtTerm list) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
+  \<open>node_count_rec_step \<equiv> \<lambda>(rec_node_count, rec_node_count_args). (\<lambda>p dc t. FunctionBody \<lbrakk>
     match t {
       SmtTerm_Fun(_, args) \<Rightarrow> {
-        sat_add(node_weight(len(args)), \<epsilon>\<open>rec_uf_count_args\<close>(p, dc, args))
+        sat_add(1_usize, \<epsilon>\<open>rec_node_count_args\<close>(p, dc, args))
       },
       SmtTerm_Def(d, args) \<Rightarrow> {
         if len(p.SmtProblem_defs[d].SmtDef_params) == 0_usize {
-          node_weight(len(args))
+          sat_add(1_usize, \<epsilon>\<open>rec_node_count_args\<close>(p, dc, args))
         } else {
-          sat_add(node_weight(len(args)), sat_add(\<epsilon>\<open>rec_uf_count_args\<close>(p, dc, args), dc[d]))
+          sat_add(1_usize, sat_add(\<epsilon>\<open>rec_node_count_args\<close>(p, dc, args), dc[d]))
         }
       },
       SmtTerm_App(_, args) \<Rightarrow> {
-        sat_add(node_weight(len(args)), \<epsilon>\<open>rec_uf_count_args\<close>(p, dc, args))
+        sat_add(1_usize, \<epsilon>\<open>rec_node_count_args\<close>(p, dc, args))
       },
       _ \<Rightarrow> {
-        node_weight(0_usize)
+        1_usize
       }
     }
   \<rbrakk>,
@@ -944,30 +929,30 @@ definition "uf_count_rec_step" :: \<open>((SmtProblem \<Rightarrow> ((64 word) l
     let mut n = 0_usize;
     let mut i = 0_usize;
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(ts) {
-      * n = sat_add(* n, \<epsilon>\<open>rec_uf_count\<close>(p, dc, ts[* i]));
+      * n = sat_add(* n, \<epsilon>\<open>rec_node_count\<close>(p, dc, ts[* i]));
       * i += 1_usize;
     };
     * n
   \<rbrakk>)\<close>
 
-(* Rust: uf_count *)
-definition "uf_count" :: \<open>SmtProblem \<Rightarrow> ((64 word) list) \<Rightarrow> SmtTerm \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>uf_count \<equiv> (fst ((uf_count_rec_step ^^ urust_fuel) (\<lambda>p dc t. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>,
+(* Rust: node_count *)
+definition "node_count" :: \<open>SmtProblem \<Rightarrow> ((64 word) list) \<Rightarrow> SmtTerm \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>node_count \<equiv> (fst ((node_count_rec_step ^^ urust_fuel) (\<lambda>p dc t. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>,
    \<lambda>p dc ts. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>)))\<close>
 
-(* Rust: uf_count_args *)
-definition "uf_count_args" :: \<open>SmtProblem \<Rightarrow> ((64 word) list) \<Rightarrow> (SmtTerm list) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>uf_count_args \<equiv> (snd ((uf_count_rec_step ^^ urust_fuel) (\<lambda>p dc t. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>,
+(* Rust: node_count_args *)
+definition "node_count_args" :: \<open>SmtProblem \<Rightarrow> ((64 word) list) \<Rightarrow> (SmtTerm list) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>node_count_args \<equiv> (snd ((node_count_rec_step ^^ urust_fuel) (\<lambda>p dc t. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>,
    \<lambda>p dc ts. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>)))\<close>
 
-(* Rust: uf_size *)
-definition "uf_size" :: \<open>SmtProblem \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>uf_size \<equiv> \<lambda>p. FunctionBody \<lbrakk>
+(* Rust: input_size *)
+definition "input_size" :: \<open>SmtProblem \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>input_size \<equiv> \<lambda>p. FunctionBody \<lbrakk>
     let mut dc = { let init_2 = { let res_1 = []; \<llangle>res_1 :: (64 word) list\<rrangle> }; \<llangle>init_2 :: (64 word) list\<rrangle> };
-    let mut n = sat_add(16_usize, len(p.SmtProblem_funs));
+    let mut n = sat_add(sat_add(len(p.SmtProblem_funs), len(p.SmtProblem_defs)), len(p.SmtProblem_asserts));
     let mut d = 0_usize;
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* d) < len(p.SmtProblem_defs) {
-      let c = uf_count(p, * dc, p.SmtProblem_defs[* d].SmtDef_body);
+      let c = node_count(p, * dc, p.SmtProblem_defs[* d].SmtDef_body);
       if len(p.SmtProblem_defs[* d].SmtDef_params) == 0_usize {
         * n = sat_add(* n, c);
         vec_push(dc, 0_usize);
@@ -978,7 +963,7 @@ definition "uf_size" :: \<open>SmtProblem \<Rightarrow> ('s, 64 word, 'abort, 'i
     };
     let mut j = 0_usize;
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < len(p.SmtProblem_asserts) {
-      * n = sat_add(* n, sat_add(uf_count(p, * dc, p.SmtProblem_asserts[* j]), 2_usize));
+      * n = sat_add(* n, node_count(p, * dc, p.SmtProblem_asserts[* j]));
       * j += 1_usize;
     };
     * n
@@ -990,7 +975,7 @@ definition "check_sat" :: \<open>SmtProblem \<Rightarrow> ('s, SmtAnswer, 'abort
     if !in_fragment(p) {
       return SmtAnswer_Unknown;
     };
-    if uf_size(p) >= cap() {
+    if input_size(p) > max_size() {
       return SmtAnswer_Unknown;
     };
     match solve(tr_problem(p)) {
