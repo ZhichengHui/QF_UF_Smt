@@ -9,8 +9,8 @@ aggressive improvement safe, as long as they hold at every commit. Proof churn i
 of an improvement, not a reason to avoid one; never route a change around the proofs.
 
 - Make the solver solve more SMT-LIB benchmarks, and faster, while every proof holds and within the
-  unchanged input range. `tools/eval.py` measures the answers and times on the benchmarks; every
-  optimization reports its effect on them.
+  unchanged input range. The benchmark measurement is being re-established; once it exists, every
+  optimization reports its effect on it.
 - Issues from the owner come first. An issue labelled `agent-plan` is a work item; a worker claims
   and does it. An issue labelled `directive` is a larger task; a planner splits it into `agent-plan`
   issues (or a worker does it directly when it is small), and closes it when its deliverables are
@@ -39,6 +39,25 @@ of an improvement, not a reason to avoid one; never route a change around the pr
   `spec/` must match the manifest `tools/spec.sha256`, and the locale must match the generated one.
   Only the owner updates the manifest (`tools/check-spec.sh --update`).
 
+### The verification framework
+
+- The Rust code is verified with our own AutoCorrode framework: the front end
+  `ZhichengHui/AutoCorrodeRustFrontEnd` (Rust to Isabelle) and the Isabelle library
+  `ZhichengHui/AutoCorrode`. Both are installed in the agents' environment on the compute server.
+- The framework supports a subset of Rust, and not yet all of it. Write the code in that subset:
+  the translation has no placeholders (`urust/PLACEHOLDERS.txt` reports 0) and no new stubs of
+  external functions in `urust/*_Template.thy`.
+- When a construct you need is not supported, rewrite the code with supported constructs that do
+  the same. Stop the task (and say why on its issue) only when no reasonable rewrite exists.
+- Report every gap you meet to the framework, also the ones you worked around: an issue in its
+  repository (the front end for what does not translate, AutoCorrode for what its library or
+  automation lacks), labelled `from-agent`, with a minimal Rust example, what the translation
+  produced, and the workaround you took, if any; link it from the issue of your task. The owner,
+  or agents working on the framework, improve it from these issues.
+- The framework is always the newest commit of its main branches: the agents' launcher updates the
+  front end and AutoCorrode (rebuilding its heap) before every start, and CI checks out both at
+  their newest commit.
+
 ### Verified code
 
 - Every change keeps every proof and the statement of `check_sat_correct`, and leaves no `sorry`,
@@ -46,6 +65,14 @@ of an improvement, not a reason to avoid one; never route a change around the pr
 - Do not weaken a contract or a lemma used by the top level to make a proof easier; do not delete a
   proved lemma that is still used.
 - Every pull request passes CI: the check of `spec/`, `cargo test`, and every proof.
+
+### Tests
+
+- Tests are auxiliary and secondary: the proofs establish correctness. The test infrastructure
+  (`core/tests/`, `tools/fuzz.py` against z3) is a quick way to find a likely bug before the slow
+  proof work.
+- Meaningful tests may be added, such as a case that once exposed a bug. No change requires a
+  test, and a failing test means a bug in the code or in the test.
 
 ### Trusted base
 
