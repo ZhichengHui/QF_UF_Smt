@@ -31,7 +31,8 @@ PATH and HOME), and on the user's machine.
   absolute path. Re-run `tools/devcopy.sh` after every edit before checking again.
 - Close every file you opened with `isabelle_close` before finishing.
 - Before opening a pull request, `tools/check.sh` must end with `EXIT 0`, and
-  `grep -rnwE 'sorry|oops|quick_and_dirty' spec proof` must find nothing.
+  `grep -rnwE 'sorry|oops|quick_and_dirty' spec proof` must find nothing, and `tools/check-spec.sh`
+  must pass.
 
 ## Layout
 
@@ -42,27 +43,16 @@ PATH and HOME), and on the user's machine.
 - `core/`, `cli/` — Rust; `frontend/` — the SMT-LIB front end (submodule); `tools/` — checks,
   fuzzing, evaluation, the pod launcher.
 
-## The specification is fixed
+## Rules
 
-- Do not edit any file in `spec/` or `tools/spec.sha256`, and do not change the `frontend`
-  submodule. If a task seems to need such a change, do not make it: comment on the issue explaining
-  why, and stop. CI fails when `spec/` differs from `tools/spec.sha256`, and pod refuses to open a
-  pull request that touches them.
-- This includes the input range `smt_in_range` in `spec/QFUF_Spec.thy`: a change of the solver must
-  keep answering (`Sat` or `Unsat`) every problem of the fragment and of the range. Make the solver
-  fit the range, never the range fit the solver.
-- One part of `spec/` follows the generated code: the locale `QFUF_heap` in `spec/QFUF_Spec.thy` is
-  `QFUF_ctx` of `urust/QFUF_Locale.thy` without its last line (the fuel). A change of the Rust code
-  that changes that locale (a new type of mutable local) needs a change of `spec/`: do not make it;
-  report it on the issue and stop.
-- `spec/SMT_Types.thy` and `spec/SMT_Semantics.thy` are the same in the QF_UF_Smt and QF_BV_Smt
-  repositories (`SMT_Types.thy` up to its `imports` line).
+The rules of this repository are in `PLAN.md` (the specification and its input range, the front
+end, verified code, the trusted base); follow them. In practice:
 
-## Iterate on verified code
-
-- Every change keeps all proofs and the statement of `check_sat_correct`.
-- Do not weaken a contract or a lemma used by the top level to make a proof easier; do not delete a
-  proved lemma that is still used.
+- After regenerating `urust/`, run `tools/check-spec.sh`. If it reports that the locale `QFUF_heap`
+  differs from the generated one, update that locale in `spec/QFUF_Spec.thy` to match exactly (and
+  say so in the pull request). That is the only change of `spec/` you may make.
+- If a task seems to need any other change of `spec/`, or a change of the `frontend` submodule, do
+  not make it: comment on the issue explaining why, and stop.
 - After three failed attempts with the same approach, change the approach.
 
 ## Tests
@@ -75,4 +65,7 @@ PATH and HOME), and on the user's machine.
 
 - Prefixes: `feat:`, `fix:`, `refactor:`, `test:`, `doc:`, `chore:`, `perf:`.
 - One logical change per commit; every commit builds and passes `cargo test`.
-- Do not edit `CLAUDE.md`, `PLAN.md`, `.github/` or `.pod/` (pod refuses such pull requests).
+- Write the progress entry of the session in `progress/` (pod's worker flow) and commit it with
+  the change.
+- Do not edit `CLAUDE.md`, `PLAN.md`, `tools/spec.sha256`, `tools/check-spec.sh`, `.github/`,
+  `.pod/` or the `frontend` submodule (pod refuses such pull requests).

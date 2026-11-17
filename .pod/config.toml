@@ -8,10 +8,10 @@ build_cache_dir = "target"         # Build cache seeded into worktrees (cargo)
 build_cache_symlink_subdirs = []  # Subdirs of build_cache_dir to symlink
                                             # instead of copy (immutable shared deps).
                                             # Set to [] to copy everything.
-# Files agents may not modify in PRs (git pathspecs): the fixed specification and its manifest,
-# the steering files, CI, this configuration, and the shared SMT-LIB front end (a submodule, part of
-# the trusted base).
-protected_files = ["spec", "tools/spec.sha256", "PLAN.md", "CLAUDE.md", ".github", ".pod", "frontend"]
+# Files agents may not modify in PRs (git pathspecs): the manifest of the specification and its
+# check, the steering files, CI, this configuration and the front end. spec/ itself is guarded by CI
+# (tools/check-spec.sh), so that agents can update its locale as PLAN.md allows.
+protected_files = ["tools/spec.sha256", "tools/check-spec.sh", "PLAN.md", "CLAUDE.md", ".github", ".pod", "frontend"]
 min_free_disk_gb = 2               # Pause dispatch when free disk drops below this
 
 [merge]

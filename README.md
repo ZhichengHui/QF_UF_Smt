@@ -108,9 +108,11 @@ CI（spec 校验、cargo test、全部证明）通过后自动 squash 合并。
 
 - 下达任务：开一个 issue。带标签 `agent-plan` 的 issue 由 worker 直接认领去做；带标签 `directive` 的较大任务由 planner
   拆成若干 `agent-plan` issue。只有仓库所有者和协作者写的 issue 与评论会被 agent 读到。
-- 规则：agent 遵守 `CLAUDE.md`；`PLAN.md` 说明本仓库没有自主路线图，只做 issue 里的任务。pod 拒绝为改动 `spec/`、
-  `tools/spec.sha256`、`frontend`、`CLAUDE.md`、`PLAN.md`、`.github/`、`.pod/` 的分支开 PR（`.pod/config.toml` 的
-  `protected_files`）。
+- 规则：`PLAN.md` 写项目规则和方向（只有所有者能改），`CLAUDE.md` 写 agent 的工作方式；agent 的每个任务在
+  `progress/` 留一份工作记录。pod 拒绝为改动 `tools/spec.sha256`、`tools/check-spec.sh`、`frontend`、`PLAN.md`、
+  `CLAUDE.md`、`.github/`、`.pod/` 的分支开 PR（`.pod/config.toml` 的 `protected_files`）；`spec/` 由 CI 的
+  `tools/check-spec.sh` 把关：去掉 heap locale 后与清单一致，heap locale 与生成的 locale 去掉 fuel 后一致，agent
+  只能按规则更新这个 locale。
 - 启动（在计算服务器上，pod 的工作副本 `$RT/pod/QF_UF_Smt`）：`tmux attach -t pod-qfuf`，然后 `tools/pod-remote.sh`
   （监视界面）或 `tools/pod-remote.sh add N`（启动 N 个 agent）；`status`、`list`、`log ID`、`finish all` 见 pod 的说明。
   `tools/pod-remote.sh` 设置 agent 的环境：`HOME=$RT/home`（服务器上的 Claude Code 配置：auto 权限模式、Isabelle skill、
