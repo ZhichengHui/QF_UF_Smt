@@ -86,23 +86,23 @@ locale `QFUF_heap` 的假设（AutoCorrode 引用模型的假设）；未验证�
 
     tools/check.sh [MINUTES]
 
-按计算环境的标准流程检查全部证明：把 `urust/`、`spec/`、`proof/` 复制到计算服务器的任务目录
-`$RT/work/qfuf-check-<检出目录名>/`（并行的 worktree 互不冲突；在计算服务器上直接运行，不经 ssh），在那里写 `ROOTS` 和一个以任务命名的 session `QFUFCheck_Task`（导入顶层定理
+检查全部证明：把 `urust/`、`spec/`、`proof/` 复制到检查机器上的任务目录
+`$CHECK_WORK/qfuf-check-<检出目录名>/`（并行的 worktree 互不冲突），在那里写 `ROOTS` 和一个以任务命名的 session `QFUFCheck_Task`（导入顶层定理
 `QFUF_Top.QFUF_Top`），用 `isabelle build -d`（不加 `-b`，不留 heap）在共享的 AutoCorrode heap 上构建，作为
 限时 MINUTES 分钟（默认 120）、内存 16 GB 的 systemd 单元运行，结束后输出构建的 session、错误和退出码。
-不改动共享的 `ROOTS`。需要 Isabelle2026 和已构建的 AutoCorrode heap。
+不改动共享的 `ROOTS`。需要 Isabelle2026 和已构建的 AutoCorrode heap。检查机器、任务目录和 Isabelle 的位置是机器相关的配置，不在仓库里，见 `tools/check.sh` 开头的说明。
 
 ## 测试
 
 - `cargo test --release`：`core/tests/solve.rs` 直接测试核心；`cli/tests/check_sat.rs` 把 SMT-LIB 脚本经前端交给
   `check_sat`，并用前端的参考求值器检查每个模型。
 - `tools/fuzz.py BIN Z3 N [SEED]`：随机 QF_UF 问题，与 z3 比较 sat/unsat，并用 z3 检查模型；
-  `tools/remote_fuzz.sh N SEED...` 在计算服务器上并行运行它。
+  `tools/remote_fuzz.sh N SEED...` 在检查机器上并行运行它。
 - `tools/eval.py`：在 SMT-LIB 基准上评测（回答与 `:status` 比较，模型用 z3 检查）。
 
 ## 用 pod 派任务
 
-仓库按 lean-zip 的做法配置了 pod（<https://github.com/kim-em/pod>，多代理管理器），与 Sat 仓库相同：在计算服务器上运行
+仓库按 lean-zip 的做法配置了 pod（<https://github.com/kim-em/pod>，多代理管理器），与 Sat 仓库相同：在一台机器上运行
 一组 Claude Code agent，每个 agent 在自己的 git worktree 和分支上工作，通过 GitHub issue 接任务、通过 PR 交付，PR 的
 CI（spec 校验、cargo test、全部证明）通过后自动 squash 合并。
 
@@ -113,10 +113,9 @@ CI（spec 校验、cargo test、全部证明）通过后自动 squash 合并。
   `CLAUDE.md`、`.github/`、`.pod/` 的分支开 PR（`.pod/config.toml` 的 `protected_files`）；`spec/` 由 CI 的
   `tools/check-spec.sh` 把关：去掉 heap locale 后与清单一致，heap locale 与生成的 locale 去掉 fuel 后一致，agent
   只能按规则更新这个 locale。
-- 启动（在计算服务器上，pod 的工作副本 `$RT/pod/QF_UF_Smt`）：`tmux attach -t pod-qfuf`，然后 `tools/pod-remote.sh`
-  （监视界面）或 `tools/pod-remote.sh add N`（启动 N 个 agent）；`status`、`list`、`log ID`、`finish all` 见 pod 的说明。
-  `tools/pod-remote.sh` 设置 agent 的环境：`HOME=$RT/home`（服务器上的 Claude Code 配置：auto 权限模式、Isabelle skill、
-  Pool Server MCP），令牌取自 `$RT/secrets/claude_token` 和 `$RT/secrets/github_pod_token`，PATH 含 claude、gh、cargo、z3。
+- 启动：在运行 pod 的机器上进入 pod 的工作副本，用所有者环境中的启动脚本运行 pod（`add N` 启动 N 个 agent，`list`、
+  `status`、`finish all` 等见 pod 的说明）。启动脚本设置 agent 的环境（Claude Code 配置、令牌、PATH、`tools/check.sh`
+  的配置），属于机器相关的配置，不在仓库里。
 - agent 开发证明时，用 `tools/devcopy.sh` 生成 `dev/`（导入去掉 session 限定的扁平副本），在 Pool Server 上检查其中的理论；
   提交前 `tools/check.sh` 必须通过。
 
