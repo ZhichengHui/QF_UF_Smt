@@ -48,7 +48,8 @@ header); pod agents get all of it from the environment their launcher sets.
 The rules of this repository are in `PLAN.md` (the specification and its input range, the front
 end, verified code, the trusted base); follow them. In practice:
 
-- After regenerating `urust/`: `urust/PLACEHOLDERS.txt` must report 0, and `urust/*_Template.thy`
+- After regenerating `urust/`: `urust/PLACEHOLDERS.txt` must report 0 placeholders (its "Ignored output" section, prints
+  translated as doing nothing, is allowed), and `urust/*_Template.thy`
   must have no new stubs. If not, rewrite the code in the supported subset; in every case report
   the gap to the framework as `PLAN.md` says.
 - After regenerating `urust/`, run `tools/check-spec.sh`. If it reports that the locale `QFUF_heap`
