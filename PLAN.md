@@ -82,5 +82,5 @@ of an improvement, not a reason to avoid one; never route a change around the pr
 
 Not proved in this repository, and not to be presented as proved: the AutoCorrode translation, the
 output of the verified code (including a print that fails, which panics), the assumptions of the
-locale `QFUF_heap` (AutoCorrode's reference model), and the front end (`frontend/`, which turns SMT-
-LIB text into a problem and a model back into text).
+locale `QFUF_heap` (AutoCorrode's reference model), and the front end (`frontend/`, which turns
+SMT-LIB text into a problem and a model back into text).
