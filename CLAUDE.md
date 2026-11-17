@@ -1,9 +1,7 @@
 # QF_UF_Smt
 
-A verified SMT solver for QF_UF with models: Rust code (`core/src/lib.rs`), translated to Isabelle by
-the AutoCorrode front end (`urust/`), with the top-level theorem `QFUF_heap.check_sat_correct` proved
-in `proof/top/QFUF_Top.thy` against the specification in `spec/`. The SMT-LIB front end `frontend/`
-(a git submodule shared with QF_BV_Smt) is trusted, not verified.
+A verified SMT solver for QF_UF: the top-level theorem `QFUF_heap.check_sat_correct` is proved against the
+specification in `spec/`.
 
 ## Build and test
 
@@ -12,11 +10,9 @@ header); pod agents get all of it from the environment their launcher sets.
 
 - First, in a fresh checkout or worktree: `git submodule update --init` (the front end).
 - Rust: `cargo build --release`, `cargo test --release`.
-- Proofs: `tools/check.sh` checks every session (on the machine its configuration names; its task
-  directory is named after the checkout, so worktrees do not collide). CI runs the same check on
-  every pull request.
-- Differential testing: `python3 tools/fuzz.py target/release/qfuf z3 200 SEED` (random small
-  problems, answers compared with z3, models checked by z3).
+- Proofs: `tools/check.sh` checks every session; CI runs the same check on every pull
+  request.
+- Differential testing: `python3 tools/fuzz.py target/release/qfuf z3 200 SEED`.
 - After changing `core/src/lib.rs`, or when CI's `translation up to date` fails: regenerate
   `urust/` with the newest front end (never pinned): `git -C "$URUST_FRONTEND_DIR" pull -q`,
   `cargo build --release` there, then
@@ -45,10 +41,8 @@ header); pod agents get all of it from the environment their launcher sets.
 
 - `spec/` — the specification; the meaning of `check_sat_correct` depends on nothing else.
 - `urust/` — generated; never edit by hand.
-- `proof/` — the core solver (`QFUF_*.thy`), its interface (`core_spec/`), the translation model
-  (`smt/`), the top level (`top/`).
-- `core/`, `cli/` — Rust; `frontend/` — the SMT-LIB front end (submodule); `tools/` — checks,
-  fuzzing, evaluation, the pod launcher.
+- `proof/` — the proofs.
+- `core/`, `cli/` — Rust; `frontend/` — the SMT-LIB front end (submodule); `tools/` — checks and tests.
 
 ## Rules
 
