@@ -89,7 +89,7 @@ locale `QFUF_heap` 的假设（AutoCorrode 引用模型的假设）；未验证�
 按计算环境的标准流程检查全部证明：把 `urust/`、`spec/`、`proof/` 复制到计算服务器的任务目录
 `$RT/work/qfuf-check-<检出目录名>/`（并行的 worktree 互不冲突；在计算服务器上直接运行，不经 ssh），在那里写 `ROOTS` 和一个以任务命名的 session `QFUFCheck_Task`（导入顶层定理
 `QFUF_Top.QFUF_Top`），用 `isabelle build -d`（不加 `-b`，不留 heap）在共享的 AutoCorrode heap 上构建，作为
-限时 MINUTES 分钟（默认 120）、内存 96 GB 的 systemd 单元运行，结束后输出构建的 session、错误和退出码。
+限时 MINUTES 分钟（默认 120）、内存 16 GB 的 systemd 单元运行，结束后输出构建的 session、错误和退出码。
 不改动共享的 `ROOTS`。需要 Isabelle2026 和已构建的 AutoCorrode heap。
 
 ## 测试
