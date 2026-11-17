@@ -13,8 +13,8 @@ PATH and HOME), and on the user's machine.
 - First, in a fresh checkout or worktree: `git submodule update --init` (the front end).
 - Rust: `cargo build --release`, `cargo test --release`.
 - Proofs: `tools/check.sh` checks every session (on the server it runs there directly; its task
-  directory is named after the checkout, so worktrees do not collide). CI runs the same check on
-  every pull request.
+  directory is named after the checkout, so worktrees do not collide). CI runs it on every pull request;
+  you need not run it before opening one.
 - Differential testing: `python3 tools/fuzz.py target/release/qfuf z3 200 SEED` (random small
   problems, answers compared with z3, models checked by z3).
 - After changing `core/src/lib.rs`, or when CI's `translation up to date` fails: regenerate
@@ -32,7 +32,8 @@ PATH and HOME), and on the user's machine.
   unqualified imports, not committed); check `dev/<Theory>.thy` with the Pool Server, giving its
   absolute path. Re-run `tools/devcopy.sh` after every edit before checking again.
 - Close every file you opened with `isabelle_close` before finishing.
-- Before opening a pull request, `tools/check.sh` must end with `EXIT 0`, and
+- Before opening a pull request, every theory you changed checks in the Pool Server without
+  errors, and
   `grep -rnwE 'sorry|oops|quick_and_dirty' spec proof` must find nothing, and `tools/check-spec.sh`
   must pass.
 
