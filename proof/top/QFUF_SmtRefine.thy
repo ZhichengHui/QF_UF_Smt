@@ -13,9 +13,16 @@ definition st_of :: \<open>Tr \<Rightarrow> st\<close> where
 definition tr_of :: \<open>st \<Rightarrow> Tr\<close> where
   \<open>tr_of S \<equiv> make_Tr (st_terms S) (st_atoms S) (st_clauses S) (word_of_nat (st_next S))\<close>
 
-fun encm :: \<open>Enc \<Rightarrow> enc_m\<close> where
+definition encm :: \<open>Enc \<Rightarrow> enc_m\<close> where
+  \<open>encm e \<equiv>
+     (case e of
+        Enc_Term i \<Rightarrow> (ETerm (unat i))
+      | Enc_Lit a pos \<Rightarrow> (ELit (unat a) pos))\<close>
+
+lemma encm_simps [simp]:
   \<open>encm (Enc_Term i) = ETerm (unat i)\<close>
-| \<open>encm (Enc_Lit a pos) = ELit (unat a) pos\<close>
+  \<open>encm (Enc_Lit a pos) = ELit (unat a) pos\<close>
+  by (simp_all add: encm_def)
 
 fun enc_of :: \<open>enc_m \<Rightarrow> Enc\<close> where
   \<open>enc_of (ETerm i) = Enc_Term (word_of_nat i)\<close>
@@ -68,11 +75,59 @@ lemma wn_unat_wn: \<open>(word_of_nat (unat (word_of_nat a :: 64 word)) :: 64 wo
 subsection \<open>The precondition of the recursion\<close>
 
 text \<open>The least number of arguments with which \<^verbatim>\<open>enc_app\<close> does not panic.\<close>
-fun min_ar :: \<open>SmtOp \<Rightarrow> nat\<close> where
+definition min_ar :: \<open>SmtOp \<Rightarrow> nat\<close> where
+  \<open>min_ar op \<equiv>
+     (case op of
+        SmtOp_Not \<Rightarrow> 1
+      | SmtOp_Xor \<Rightarrow> 1
+      | SmtOp_Ite \<Rightarrow> 3
+      | _ \<Rightarrow> 0)\<close>
+
+lemma min_ar_simps [simp]:
   \<open>min_ar SmtOp_Not = 1\<close>
-| \<open>min_ar SmtOp_Xor = 1\<close>
-| \<open>min_ar SmtOp_Ite = 3\<close>
-| \<open>min_ar _ = 0\<close>
+  \<open>min_ar SmtOp_Xor = 1\<close>
+  \<open>min_ar SmtOp_Ite = 3\<close>
+  \<open>min_ar SmtOp_And = 0\<close>
+  \<open>min_ar SmtOp_Or = 0\<close>
+  \<open>min_ar SmtOp_Implies = 0\<close>
+  \<open>min_ar SmtOp_Eq = 0\<close>
+  \<open>min_ar SmtOp_Distinct = 0\<close>
+  \<open>min_ar SmtOp_Concat = 0\<close>
+  \<open>min_ar (SmtOp_Extract a0 a1) = 0\<close>
+  \<open>min_ar SmtOp_Bvnot = 0\<close>
+  \<open>min_ar SmtOp_Bvand = 0\<close>
+  \<open>min_ar SmtOp_Bvor = 0\<close>
+  \<open>min_ar SmtOp_Bvneg = 0\<close>
+  \<open>min_ar SmtOp_Bvadd = 0\<close>
+  \<open>min_ar SmtOp_Bvmul = 0\<close>
+  \<open>min_ar SmtOp_Bvudiv = 0\<close>
+  \<open>min_ar SmtOp_Bvurem = 0\<close>
+  \<open>min_ar SmtOp_Bvshl = 0\<close>
+  \<open>min_ar SmtOp_Bvlshr = 0\<close>
+  \<open>min_ar SmtOp_Bvult = 0\<close>
+  \<open>min_ar SmtOp_Bvnand = 0\<close>
+  \<open>min_ar SmtOp_Bvnor = 0\<close>
+  \<open>min_ar SmtOp_Bvxor = 0\<close>
+  \<open>min_ar SmtOp_Bvxnor = 0\<close>
+  \<open>min_ar SmtOp_Bvcomp = 0\<close>
+  \<open>min_ar SmtOp_Bvsub = 0\<close>
+  \<open>min_ar SmtOp_Bvsdiv = 0\<close>
+  \<open>min_ar SmtOp_Bvsrem = 0\<close>
+  \<open>min_ar SmtOp_Bvsmod = 0\<close>
+  \<open>min_ar SmtOp_Bvashr = 0\<close>
+  \<open>min_ar (SmtOp_Repeat a0) = 0\<close>
+  \<open>min_ar (SmtOp_ZeroExtend a0) = 0\<close>
+  \<open>min_ar (SmtOp_SignExtend a0) = 0\<close>
+  \<open>min_ar (SmtOp_RotateLeft a0) = 0\<close>
+  \<open>min_ar (SmtOp_RotateRight a0) = 0\<close>
+  \<open>min_ar SmtOp_Bvule = 0\<close>
+  \<open>min_ar SmtOp_Bvugt = 0\<close>
+  \<open>min_ar SmtOp_Bvuge = 0\<close>
+  \<open>min_ar SmtOp_Bvslt = 0\<close>
+  \<open>min_ar SmtOp_Bvsle = 0\<close>
+  \<open>min_ar SmtOp_Bvsgt = 0\<close>
+  \<open>min_ar SmtOp_Bvsge = 0\<close>
+  by (simp_all add: min_ar_def)
 
 text \<open>\<open>tok p F dl el n t\<close>: what \<^verbatim>\<open>enc\<close> needs not to panic and to compute \<^const>\<open>tr_term_m\<close> with
   the bound \<open>n\<close>, for \<open>dl\<close> entries of \<^verbatim>\<open>dm\<close> and \<open>el\<close> of \<^verbatim>\<open>env\<close>: indices in bounds, a

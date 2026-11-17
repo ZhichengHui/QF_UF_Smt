@@ -119,19 +119,68 @@ definition ite_term_m :: \<open>st \<Rightarrow> enc_m list \<Rightarrow> st \<t
           s2 = add_clause_m s1 [lit_m kc pc, lit_m (snd rkb) True]
       in (s2, ETerm c))\<close>
 
-fun enc_app_m :: \<open>st \<Rightarrow> SmtOp \<Rightarrow> enc_m list \<Rightarrow> st \<times> enc_m\<close> where
+definition enc_app_m :: \<open>st \<Rightarrow> SmtOp \<Rightarrow> enc_m list \<Rightarrow> st \<times> enc_m\<close> where
+  \<open>enc_app_m s op es \<equiv>
+     (case op of
+        SmtOp_Not \<Rightarrow> (s, ELit (fst (enc_lit_m (es ! 0))) (\<not> snd (enc_lit_m (es ! 0))))
+      | SmtOp_And \<Rightarrow> (gate_andor_m s (map enc_lit_m es) True)
+      | SmtOp_Or \<Rightarrow> (gate_andor_m s (map enc_lit_m es) False)
+      | SmtOp_Xor \<Rightarrow> (let r = foldl xor_step_m (s, enc_lit_m (es ! 0)) (tl es) in (fst r, ELit (fst (snd r)) (snd (snd r))))
+      | SmtOp_Implies \<Rightarrow> (gate_andor_m s (implies_lits_m es) False)
+      | SmtOp_Eq \<Rightarrow> (enc_eq_m s es False)
+      | SmtOp_Distinct \<Rightarrow> (enc_eq_m s es True)
+      | SmtOp_Ite \<Rightarrow> (if is_lit_m (es ! 1) then gate_ite_m s (enc_lit_m (es ! 0)) (enc_lit_m (es ! 1)) (enc_lit_m (es ! 2))
+                else ite_term_m s es)
+      | _ \<Rightarrow> (s, ELit 0 True))\<close>
+
+lemma enc_app_m_simps [simp]:
   \<open>enc_app_m s SmtOp_Not es = (s, ELit (fst (enc_lit_m (es ! 0))) (\<not> snd (enc_lit_m (es ! 0))))\<close>
-| \<open>enc_app_m s SmtOp_And es = gate_andor_m s (map enc_lit_m es) True\<close>
-| \<open>enc_app_m s SmtOp_Or es = gate_andor_m s (map enc_lit_m es) False\<close>
-| \<open>enc_app_m s SmtOp_Xor es =
-     (let r = foldl xor_step_m (s, enc_lit_m (es ! 0)) (tl es) in (fst r, ELit (fst (snd r)) (snd (snd r))))\<close>
-| \<open>enc_app_m s SmtOp_Implies es = gate_andor_m s (implies_lits_m es) False\<close>
-| \<open>enc_app_m s SmtOp_Eq es = enc_eq_m s es False\<close>
-| \<open>enc_app_m s SmtOp_Distinct es = enc_eq_m s es True\<close>
-| \<open>enc_app_m s SmtOp_Ite es =
-     (if is_lit_m (es ! 1) then gate_ite_m s (enc_lit_m (es ! 0)) (enc_lit_m (es ! 1)) (enc_lit_m (es ! 2))
-      else ite_term_m s es)\<close>
-| \<open>enc_app_m s _ es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_And es = gate_andor_m s (map enc_lit_m es) True\<close>
+  \<open>enc_app_m s SmtOp_Or es = gate_andor_m s (map enc_lit_m es) False\<close>
+  \<open>enc_app_m s SmtOp_Xor es =
+       (let r = foldl xor_step_m (s, enc_lit_m (es ! 0)) (tl es) in (fst r, ELit (fst (snd r)) (snd (snd r))))\<close>
+  \<open>enc_app_m s SmtOp_Implies es = gate_andor_m s (implies_lits_m es) False\<close>
+  \<open>enc_app_m s SmtOp_Eq es = enc_eq_m s es False\<close>
+  \<open>enc_app_m s SmtOp_Distinct es = enc_eq_m s es True\<close>
+  \<open>enc_app_m s SmtOp_Ite es =
+       (if is_lit_m (es ! 1) then gate_ite_m s (enc_lit_m (es ! 0)) (enc_lit_m (es ! 1)) (enc_lit_m (es ! 2))
+        else ite_term_m s es)\<close>
+  \<open>enc_app_m s SmtOp_Concat es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s (SmtOp_Extract a0 a1) es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvnot es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvand es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvor es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvneg es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvadd es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvmul es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvudiv es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvurem es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvshl es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvlshr es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvult es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvnand es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvnor es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvxor es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvxnor es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvcomp es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvsub es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvsdiv es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvsrem es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvsmod es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvashr es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s (SmtOp_Repeat a0) es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s (SmtOp_ZeroExtend a0) es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s (SmtOp_SignExtend a0) es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s (SmtOp_RotateLeft a0) es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s (SmtOp_RotateRight a0) es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvule es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvugt es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvuge es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvslt es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvsle es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvsgt es = (s, ELit 0 True)\<close>
+  \<open>enc_app_m s SmtOp_Bvsge es = (s, ELit 0 True)\<close>
+  by (simp_all add: enc_app_m_def)
 
 text \<open>The loop of \<^verbatim>\<open>enc\<close> that turns the translated arguments of a declared symbol into terms.\<close>
 definition enc_terms_m :: \<open>st \<Rightarrow> enc_m list \<Rightarrow> st \<times> nat list\<close> where
@@ -215,9 +264,17 @@ definition dsize_step :: \<open>nat \<Rightarrow> 64 word \<Rightarrow> nat\<clo
 definition domain_size_m :: \<open>Model \<Rightarrow> nat\<close> where
   \<open>domain_size_m m \<equiv> foldl (\<lambda>n e. foldl dsize_step (dsize_step n (Entry_val e)) (Entry_args e)) 1 (Model_entries m)\<close>
 
-fun value_of_m :: \<open>SmtSort \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> SmtValue\<close> where
+definition value_of_m :: \<open>SmtSort \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> SmtValue\<close> where
+  \<open>value_of_m srt v t \<equiv>
+     (case srt of
+        SmtSort_Bool \<Rightarrow> (SmtValue_Bool (v = t))
+      | _ \<Rightarrow> (SmtValue_Elem (word_of_nat v)))\<close>
+
+lemma value_of_m_simps [simp]:
   \<open>value_of_m SmtSort_Bool v t = SmtValue_Bool (v = t)\<close>
-| \<open>value_of_m _ v t = SmtValue_Elem (word_of_nat v)\<close>
+  \<open>value_of_m (SmtSort_BitVec a0) v t = SmtValue_Elem (word_of_nat v)\<close>
+  \<open>value_of_m (SmtSort_Uninterpreted a0) v t = SmtValue_Elem (word_of_nat v)\<close>
+  by (simp_all add: value_of_m_def)
 
 text \<open>The entry \<open>e\<close> passes the test of \<^verbatim>\<open>tr_interp\<close> for the symbol with signature \<open>sg\<close>.\<close>
 definition entry_ok_m :: \<open>SmtFun \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> Entry \<Rightarrow> bool\<close> where
@@ -2353,9 +2410,17 @@ fun encv :: \<open>sval \<Rightarrow> nat\<close> where
 | \<open>encv (VElem e) = e + 2\<close>
 | \<open>encv (VBv w x) = 0\<close>
 
-fun decv :: \<open>SmtSort \<Rightarrow> nat \<Rightarrow> sval\<close> where
+definition decv :: \<open>SmtSort \<Rightarrow> nat \<Rightarrow> sval\<close> where
+  \<open>decv srt d \<equiv>
+     (case srt of
+        SmtSort_Bool \<Rightarrow> (VBool (d = 0))
+      | _ \<Rightarrow> (VElem (d - 2)))\<close>
+
+lemma decv_simps [simp]:
   \<open>decv SmtSort_Bool d = VBool (d = 0)\<close>
-| \<open>decv _ d = VElem (d - 2)\<close>
+  \<open>decv (SmtSort_BitVec a0) d = VElem (d - 2)\<close>
+  \<open>decv (SmtSort_Uninterpreted a0) d = VElem (d - 2)\<close>
+  by (simp_all add: decv_def)
 
 text \<open>The interpretation of the declared symbols, TRUE and FALSE for an interpretation \<open>J\<close> of \<open>p\<close>.\<close>
 definition interp_of :: \<open>SmtProblem \<Rightarrow> (nat \<Rightarrow> sval list \<Rightarrow> sval) \<Rightarrow> nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where

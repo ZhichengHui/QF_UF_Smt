@@ -17,9 +17,11 @@ PATH and HOME), and on the user's machine.
   every pull request.
 - Differential testing: `python3 tools/fuzz.py target/release/qfuf z3 200 SEED` (random small
   problems, answers compared with z3, models checked by z3).
-- After changing `core/src/lib.rs`: regenerate the translation with
-  `$RT/AutoCorrodeRustFrontEnd/scripts/urust-frontend.sh --out urust --name QFUF core/src/lib.rs`
-  (`RT=/disk/scratch/$(id -un)`; set `RUSTUP_HOME=$RT/rust/rustup`).
+- After changing `core/src/lib.rs`, or when CI's `translation up to date` fails: regenerate
+  `urust/` with the newest front end (never pinned): `git -C $RT/AutoCorrodeRustFrontEnd pull -q`,
+  `cargo build --release` there, then
+  `$RT/AutoCorrodeRustFrontEnd/scripts/urust-frontend.sh --out urust --name QFUF core/src/lib.rs`.
+  If the new translation breaks `spec/`, do not change `spec/`: report it on the issue and stop.
 
 ## Developing proofs
 

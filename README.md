@@ -122,6 +122,6 @@ CI（spec 校验、cargo test、全部证明）通过后自动 squash 合并。
 
 ## 重新生成翻译
 
-`core/src/lib.rs` 改动后，在仓库根目录运行 AutoCorrode 前端：
+`core/src/lib.rs` 改动后，或前端更新后（CI 的 `translation up to date` 失败），用前端 master 分支的最新版本重新生成：
 
     urust-frontend.sh --out urust --name QFUF core/src/lib.rs
