@@ -30,6 +30,8 @@ of an improvement, not a reason to avoid one; never route a change around the pr
   implementation uses a new type of mutable local, the generated locale gains a parameter, and
   `QFUF_heap` is updated to match it exactly. Nothing else in `spec/` changes unless the owner
   changes it.
+- A task that needs any other change of `spec/` stops there: say why on its issue and label the
+  issue `needs-owner`.
 - This includes the input range `smt_in_range`: a change of the solver must keep answering (`Sat`
   or `Unsat`) every problem of the fragment and of the range. Make the solver fit the range and the
   specification, never the reverse.
@@ -49,7 +51,8 @@ of an improvement, not a reason to avoid one; never route a change around the pr
   the translation has no placeholders (`urust/PLACEHOLDERS.txt` reports 0) and no new stubs of
   external functions in `urust/*_Template.thy`.
 - When a construct you need is not supported, rewrite the code with supported constructs that do
-  the same. Stop the task (and say why on its issue) only when no reasonable rewrite exists.
+  the same. Stop the task only when no reasonable rewrite exists: say why on its issue
+  and label the issue `needs-owner`.
 - Report every gap you meet to the framework, also the ones you worked around: an issue in its
   repository (the front end for what does not translate, AutoCorrode for what its library or
   automation lacks), labelled `from-agent`, with a minimal Rust example, what the translation
