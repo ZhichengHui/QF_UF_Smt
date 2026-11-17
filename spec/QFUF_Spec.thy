@@ -31,21 +31,77 @@ text \<open>
 
 subsection \<open>The fragment\<close>
 
-fun smt_sort_no_bv :: \<open>SmtSort \<Rightarrow> bool\<close> where
+definition smt_sort_no_bv :: \<open>SmtSort \<Rightarrow> bool\<close> where
+  \<open>smt_sort_no_bv srt \<equiv>
+     (case srt of
+        SmtSort_BitVec w \<Rightarrow> False
+      | _ \<Rightarrow> True)\<close>
+
+lemma smt_sort_no_bv_simps [simp]:
   \<open>smt_sort_no_bv (SmtSort_BitVec w) = False\<close>
-| \<open>smt_sort_no_bv _ = True\<close>
+  \<open>smt_sort_no_bv SmtSort_Bool = True\<close>
+  \<open>smt_sort_no_bv (SmtSort_Uninterpreted a0) = True\<close>
+  by (simp_all add: smt_sort_no_bv_def)
 
 text \<open>The theory functions of Core.\<close>
-fun smt_core_op :: \<open>SmtOp \<Rightarrow> bool\<close> where
+definition smt_core_op :: \<open>SmtOp \<Rightarrow> bool\<close> where
+  \<open>smt_core_op op \<equiv>
+     (case op of
+        SmtOp_Not \<Rightarrow> True
+      | SmtOp_And \<Rightarrow> True
+      | SmtOp_Or \<Rightarrow> True
+      | SmtOp_Xor \<Rightarrow> True
+      | SmtOp_Implies \<Rightarrow> True
+      | SmtOp_Eq \<Rightarrow> True
+      | SmtOp_Distinct \<Rightarrow> True
+      | SmtOp_Ite \<Rightarrow> True
+      | _ \<Rightarrow> False)\<close>
+
+lemma smt_core_op_simps [simp]:
   \<open>smt_core_op SmtOp_Not = True\<close>
-| \<open>smt_core_op SmtOp_And = True\<close>
-| \<open>smt_core_op SmtOp_Or = True\<close>
-| \<open>smt_core_op SmtOp_Xor = True\<close>
-| \<open>smt_core_op SmtOp_Implies = True\<close>
-| \<open>smt_core_op SmtOp_Eq = True\<close>
-| \<open>smt_core_op SmtOp_Distinct = True\<close>
-| \<open>smt_core_op SmtOp_Ite = True\<close>
-| \<open>smt_core_op _ = False\<close>
+  \<open>smt_core_op SmtOp_And = True\<close>
+  \<open>smt_core_op SmtOp_Or = True\<close>
+  \<open>smt_core_op SmtOp_Xor = True\<close>
+  \<open>smt_core_op SmtOp_Implies = True\<close>
+  \<open>smt_core_op SmtOp_Eq = True\<close>
+  \<open>smt_core_op SmtOp_Distinct = True\<close>
+  \<open>smt_core_op SmtOp_Ite = True\<close>
+  \<open>smt_core_op SmtOp_Concat = False\<close>
+  \<open>smt_core_op (SmtOp_Extract a0 a1) = False\<close>
+  \<open>smt_core_op SmtOp_Bvnot = False\<close>
+  \<open>smt_core_op SmtOp_Bvand = False\<close>
+  \<open>smt_core_op SmtOp_Bvor = False\<close>
+  \<open>smt_core_op SmtOp_Bvneg = False\<close>
+  \<open>smt_core_op SmtOp_Bvadd = False\<close>
+  \<open>smt_core_op SmtOp_Bvmul = False\<close>
+  \<open>smt_core_op SmtOp_Bvudiv = False\<close>
+  \<open>smt_core_op SmtOp_Bvurem = False\<close>
+  \<open>smt_core_op SmtOp_Bvshl = False\<close>
+  \<open>smt_core_op SmtOp_Bvlshr = False\<close>
+  \<open>smt_core_op SmtOp_Bvult = False\<close>
+  \<open>smt_core_op SmtOp_Bvnand = False\<close>
+  \<open>smt_core_op SmtOp_Bvnor = False\<close>
+  \<open>smt_core_op SmtOp_Bvxor = False\<close>
+  \<open>smt_core_op SmtOp_Bvxnor = False\<close>
+  \<open>smt_core_op SmtOp_Bvcomp = False\<close>
+  \<open>smt_core_op SmtOp_Bvsub = False\<close>
+  \<open>smt_core_op SmtOp_Bvsdiv = False\<close>
+  \<open>smt_core_op SmtOp_Bvsrem = False\<close>
+  \<open>smt_core_op SmtOp_Bvsmod = False\<close>
+  \<open>smt_core_op SmtOp_Bvashr = False\<close>
+  \<open>smt_core_op (SmtOp_Repeat a0) = False\<close>
+  \<open>smt_core_op (SmtOp_ZeroExtend a0) = False\<close>
+  \<open>smt_core_op (SmtOp_SignExtend a0) = False\<close>
+  \<open>smt_core_op (SmtOp_RotateLeft a0) = False\<close>
+  \<open>smt_core_op (SmtOp_RotateRight a0) = False\<close>
+  \<open>smt_core_op SmtOp_Bvule = False\<close>
+  \<open>smt_core_op SmtOp_Bvugt = False\<close>
+  \<open>smt_core_op SmtOp_Bvuge = False\<close>
+  \<open>smt_core_op SmtOp_Bvslt = False\<close>
+  \<open>smt_core_op SmtOp_Bvsle = False\<close>
+  \<open>smt_core_op SmtOp_Bvsgt = False\<close>
+  \<open>smt_core_op SmtOp_Bvsge = False\<close>
+  by (simp_all add: smt_core_op_def)
 
 text \<open>No bit-vector constant or function occurs in a term.\<close>
 fun smt_term_no_bv :: \<open>SmtTerm \<Rightarrow> bool\<close> where

@@ -69,26 +69,63 @@ fun smt_repeat_val :: \<open>nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarro
 subsection \<open>Sorts\<close>
 
 text \<open>The width of a bit-vector sort; 0 for the other sorts.\<close>
-fun smt_width :: \<open>SmtSort \<Rightarrow> nat\<close> where
+definition smt_width :: \<open>SmtSort \<Rightarrow> nat\<close> where
+  \<open>smt_width srt \<equiv>
+     (case srt of
+        SmtSort_BitVec w \<Rightarrow> (unat w)
+      | _ \<Rightarrow> 0)\<close>
+
+lemma smt_width_simps [simp]:
   \<open>smt_width (SmtSort_BitVec w) = unat w\<close>
-| \<open>smt_width _ = 0\<close>
+  \<open>smt_width SmtSort_Bool = 0\<close>
+  \<open>smt_width (SmtSort_Uninterpreted a0) = 0\<close>
+  by (simp_all add: smt_width_def)
 
 text \<open>A sort of a problem with \<open>ns\<close> uninterpreted sorts: a bit-vector width is at least 1, an
   uninterpreted sort is one of the \<open>ns\<close>.\<close>
-fun smt_wf_sort :: \<open>nat \<Rightarrow> SmtSort \<Rightarrow> bool\<close> where
-  \<open>smt_wf_sort ns SmtSort_Bool = True\<close>
-| \<open>smt_wf_sort ns (SmtSort_BitVec w) = (1 \<le> unat w)\<close>
-| \<open>smt_wf_sort ns (SmtSort_Uninterpreted s) = (unat s < ns)\<close>
+definition smt_wf_sort :: \<open>nat \<Rightarrow> SmtSort \<Rightarrow> bool\<close> where
+  \<open>smt_wf_sort ns srt \<equiv>
+     (case srt of
+        SmtSort_Bool \<Rightarrow> True
+      | SmtSort_BitVec w \<Rightarrow> (1 \<le> unat w)
+      | SmtSort_Uninterpreted s \<Rightarrow> (unat s < ns))\<close>
 
-fun smt_has_sort :: \<open>SmtSort \<Rightarrow> sval \<Rightarrow> bool\<close> where
+lemma smt_wf_sort_simps [simp]:
+  \<open>smt_wf_sort ns SmtSort_Bool = True\<close>
+  \<open>smt_wf_sort ns (SmtSort_BitVec w) = (1 \<le> unat w)\<close>
+  \<open>smt_wf_sort ns (SmtSort_Uninterpreted s) = (unat s < ns)\<close>
+  by (simp_all add: smt_wf_sort_def)
+
+definition smt_has_sort :: \<open>SmtSort \<Rightarrow> sval \<Rightarrow> bool\<close> where
+  \<open>smt_has_sort srt v \<equiv>
+     (case srt of
+        SmtSort_Bool \<Rightarrow> (case v of VBool _ \<Rightarrow> True | _ \<Rightarrow> False)
+      | SmtSort_BitVec w \<Rightarrow> (case v of VBv m x \<Rightarrow> m = unat w \<and> x < 2 ^ m | _ \<Rightarrow> False)
+      | SmtSort_Uninterpreted s \<Rightarrow> (case v of VElem _ \<Rightarrow> True | _ \<Rightarrow> False))\<close>
+
+lemma smt_has_sort_simps [simp]:
   \<open>smt_has_sort SmtSort_Bool v = (case v of VBool _ \<Rightarrow> True | _ \<Rightarrow> False)\<close>
-| \<open>smt_has_sort (SmtSort_BitVec w) v = (case v of VBv m x \<Rightarrow> m = unat w \<and> x < 2 ^ m | _ \<Rightarrow> False)\<close>
-| \<open>smt_has_sort (SmtSort_Uninterpreted s) v = (case v of VElem _ \<Rightarrow> True | _ \<Rightarrow> False)\<close>
+  \<open>smt_has_sort (SmtSort_BitVec w) v = (case v of VBv m x \<Rightarrow> m = unat w \<and> x < 2 ^ m | _ \<Rightarrow> False)\<close>
+  \<open>smt_has_sort (SmtSort_Uninterpreted s) v = (case v of VElem _ \<Rightarrow> True | _ \<Rightarrow> False)\<close>
+  by (simp_all add: smt_has_sort_def)
 
 text \<open>The width of two bit-vector sorts of equal width.\<close>
-fun smt_bin_width :: \<open>SmtSort list \<Rightarrow> nat option\<close> where
+definition smt_bin_width :: \<open>SmtSort list \<Rightarrow> nat option\<close> where
+  \<open>smt_bin_width ss \<equiv>
+     (case ss of
+        [SmtSort_BitVec a, SmtSort_BitVec b] \<Rightarrow> (if a = b then Some (unat a) else None)
+      | _ \<Rightarrow> None)\<close>
+
+lemma smt_bin_width_simps [simp]:
   \<open>smt_bin_width [SmtSort_BitVec a, SmtSort_BitVec b] = (if a = b then Some (unat a) else None)\<close>
-| \<open>smt_bin_width _ = None\<close>
+  \<open>smt_bin_width [] = None\<close>
+  \<open>smt_bin_width [s] = None\<close>
+  \<open>smt_bin_width (s # t # u # us) = None\<close>
+  \<open>smt_bin_width [SmtSort_Bool, t] = None\<close>
+  \<open>smt_bin_width [SmtSort_Uninterpreted n, t] = None\<close>
+  \<open>smt_bin_width [SmtSort_BitVec a, SmtSort_Bool] = None\<close>
+  \<open>smt_bin_width [SmtSort_BitVec a, SmtSort_Uninterpreted n] = None\<close>
+  by (simp_all add: smt_bin_width_def split: SmtSort.splits)
 
 text \<open>The width of one or more bit-vector sorts of equal width.\<close>
 definition smt_same_width :: \<open>SmtSort list \<Rightarrow> nat option\<close> where
@@ -99,55 +136,113 @@ definition smt_same_width :: \<open>SmtSort list \<Rightarrow> nat option\<close
 text \<open>The result sort of a theory function applied to arguments of the sorts \<open>ss\<close>, if the
   application is well-sorted (the rank declarations of Core, FixedSizeBitVectors and QF\_BV). The
   widths of results stay below \<open>2^64\<close>, the range of the widths of \<^typ>\<open>SmtSort\<close>.\<close>
-fun smt_op_sort :: \<open>SmtOp \<Rightarrow> SmtSort list \<Rightarrow> SmtSort option\<close> where
+definition smt_op_sort :: \<open>SmtOp \<Rightarrow> SmtSort list \<Rightarrow> SmtSort option\<close> where
+  \<open>smt_op_sort op ss \<equiv>
+     (case op of
+        SmtOp_Not \<Rightarrow> (if ss = [SmtSort_Bool] then Some SmtSort_Bool else None)
+      | SmtOp_And \<Rightarrow> (if 2 \<le> length ss \<and> set ss \<subseteq> {SmtSort_Bool} then Some SmtSort_Bool else None)
+      | SmtOp_Or \<Rightarrow> (if 2 \<le> length ss \<and> set ss \<subseteq> {SmtSort_Bool} then Some SmtSort_Bool else None)
+      | SmtOp_Xor \<Rightarrow> (if 2 \<le> length ss \<and> set ss \<subseteq> {SmtSort_Bool} then Some SmtSort_Bool else None)
+      | SmtOp_Implies \<Rightarrow> (if 2 \<le> length ss \<and> set ss \<subseteq> {SmtSort_Bool} then Some SmtSort_Bool else None)
+      | SmtOp_Eq \<Rightarrow> (if 2 \<le> length ss \<and> set ss \<subseteq> {hd ss} then Some SmtSort_Bool else None)
+      | SmtOp_Distinct \<Rightarrow> (if 2 \<le> length ss \<and> set ss \<subseteq> {hd ss} then Some SmtSort_Bool else None)
+      | SmtOp_Ite \<Rightarrow> (case ss of [c, a, b] \<Rightarrow> if c = SmtSort_Bool \<and> a = b then Some a else None | _ \<Rightarrow> None)
+      | SmtOp_Concat \<Rightarrow> (case ss of [SmtSort_BitVec a, SmtSort_BitVec b] \<Rightarrow>
+                  if unat a + unat b < 2 ^ 64 then Some (SmtSort_BitVec (a + b)) else None
+                | _ \<Rightarrow> None)
+      | SmtOp_Extract i j \<Rightarrow> (case ss of [SmtSort_BitVec m] \<Rightarrow>
+                  if unat j \<le> unat i \<and> unat i < unat m then Some (SmtSort_BitVec (i - j + 1)) else None
+                | _ \<Rightarrow> None)
+      | SmtOp_Bvnot \<Rightarrow> (case ss of [SmtSort_BitVec m] \<Rightarrow> Some (SmtSort_BitVec m) | _ \<Rightarrow> None)
+      | SmtOp_Bvneg \<Rightarrow> (case ss of [SmtSort_BitVec m] \<Rightarrow> Some (SmtSort_BitVec m) | _ \<Rightarrow> None)
+      | SmtOp_Bvand \<Rightarrow> (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)
+      | SmtOp_Bvor \<Rightarrow> (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)
+      | SmtOp_Bvadd \<Rightarrow> (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)
+      | SmtOp_Bvmul \<Rightarrow> (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)
+      | SmtOp_Bvxor \<Rightarrow> (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)
+      | SmtOp_Bvcomp \<Rightarrow> (if smt_bin_width ss \<noteq> None then Some (SmtSort_BitVec 1) else None)
+      | SmtOp_Bvult \<Rightarrow> (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)
+      | SmtOp_Bvule \<Rightarrow> (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)
+      | SmtOp_Bvugt \<Rightarrow> (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)
+      | SmtOp_Bvuge \<Rightarrow> (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)
+      | SmtOp_Bvslt \<Rightarrow> (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)
+      | SmtOp_Bvsle \<Rightarrow> (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)
+      | SmtOp_Bvsgt \<Rightarrow> (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)
+      | SmtOp_Bvsge \<Rightarrow> (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)
+      | SmtOp_Repeat i \<Rightarrow> (case ss of [SmtSort_BitVec m] \<Rightarrow>
+                  if 1 \<le> unat i \<and> unat m * unat i < 2 ^ 64 then Some (SmtSort_BitVec (m * i)) else None
+                | _ \<Rightarrow> None)
+      | SmtOp_ZeroExtend i \<Rightarrow> (case ss of [SmtSort_BitVec m] \<Rightarrow>
+                  if unat m + unat i < 2 ^ 64 then Some (SmtSort_BitVec (m + i)) else None
+                | _ \<Rightarrow> None)
+      | SmtOp_SignExtend i \<Rightarrow> (case ss of [SmtSort_BitVec m] \<Rightarrow>
+                  if unat m + unat i < 2 ^ 64 then Some (SmtSort_BitVec (m + i)) else None
+                | _ \<Rightarrow> None)
+      | SmtOp_RotateLeft i \<Rightarrow> (case ss of [SmtSort_BitVec m] \<Rightarrow> Some (SmtSort_BitVec m) | _ \<Rightarrow> None)
+      | SmtOp_RotateRight i \<Rightarrow> (case ss of [SmtSort_BitVec m] \<Rightarrow> Some (SmtSort_BitVec m) | _ \<Rightarrow> None)
+      | _ \<Rightarrow> (if smt_bin_width ss \<noteq> None then Some (hd ss) else None))\<close>
+
+lemma smt_op_sort_simps [simp]:
   \<open>smt_op_sort SmtOp_Not ss = (if ss = [SmtSort_Bool] then Some SmtSort_Bool else None)\<close>
-| \<open>smt_op_sort SmtOp_And ss = (if 2 \<le> length ss \<and> set ss \<subseteq> {SmtSort_Bool} then Some SmtSort_Bool else None)\<close>
-| \<open>smt_op_sort SmtOp_Or ss = (if 2 \<le> length ss \<and> set ss \<subseteq> {SmtSort_Bool} then Some SmtSort_Bool else None)\<close>
-| \<open>smt_op_sort SmtOp_Xor ss = (if 2 \<le> length ss \<and> set ss \<subseteq> {SmtSort_Bool} then Some SmtSort_Bool else None)\<close>
-| \<open>smt_op_sort SmtOp_Implies ss = (if 2 \<le> length ss \<and> set ss \<subseteq> {SmtSort_Bool} then Some SmtSort_Bool else None)\<close>
-| \<open>smt_op_sort SmtOp_Eq ss = (if 2 \<le> length ss \<and> set ss \<subseteq> {hd ss} then Some SmtSort_Bool else None)\<close>
-| \<open>smt_op_sort SmtOp_Distinct ss = (if 2 \<le> length ss \<and> set ss \<subseteq> {hd ss} then Some SmtSort_Bool else None)\<close>
-| \<open>smt_op_sort SmtOp_Ite ss =
-     (case ss of [c, a, b] \<Rightarrow> if c = SmtSort_Bool \<and> a = b then Some a else None | _ \<Rightarrow> None)\<close>
-| \<open>smt_op_sort SmtOp_Concat ss =
-     (case ss of [SmtSort_BitVec a, SmtSort_BitVec b] \<Rightarrow>
-        if unat a + unat b < 2 ^ 64 then Some (SmtSort_BitVec (a + b)) else None
-      | _ \<Rightarrow> None)\<close>
-| \<open>smt_op_sort (SmtOp_Extract i j) ss =
-     (case ss of [SmtSort_BitVec m] \<Rightarrow>
-        if unat j \<le> unat i \<and> unat i < unat m then Some (SmtSort_BitVec (i - j + 1)) else None
-      | _ \<Rightarrow> None)\<close>
-| \<open>smt_op_sort SmtOp_Bvnot ss = (case ss of [SmtSort_BitVec m] \<Rightarrow> Some (SmtSort_BitVec m) | _ \<Rightarrow> None)\<close>
-| \<open>smt_op_sort SmtOp_Bvneg ss = (case ss of [SmtSort_BitVec m] \<Rightarrow> Some (SmtSort_BitVec m) | _ \<Rightarrow> None)\<close>
-| \<open>smt_op_sort SmtOp_Bvand ss = (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)\<close>
-| \<open>smt_op_sort SmtOp_Bvor ss = (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)\<close>
-| \<open>smt_op_sort SmtOp_Bvadd ss = (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)\<close>
-| \<open>smt_op_sort SmtOp_Bvmul ss = (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)\<close>
-| \<open>smt_op_sort SmtOp_Bvxor ss = (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)\<close>
-| \<open>smt_op_sort SmtOp_Bvcomp ss = (if smt_bin_width ss \<noteq> None then Some (SmtSort_BitVec 1) else None)\<close>
-| \<open>smt_op_sort SmtOp_Bvult ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
-| \<open>smt_op_sort SmtOp_Bvule ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
-| \<open>smt_op_sort SmtOp_Bvugt ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
-| \<open>smt_op_sort SmtOp_Bvuge ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
-| \<open>smt_op_sort SmtOp_Bvslt ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
-| \<open>smt_op_sort SmtOp_Bvsle ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
-| \<open>smt_op_sort SmtOp_Bvsgt ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
-| \<open>smt_op_sort SmtOp_Bvsge ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
-| \<open>smt_op_sort (SmtOp_Repeat i) ss =
-     (case ss of [SmtSort_BitVec m] \<Rightarrow>
-        if 1 \<le> unat i \<and> unat m * unat i < 2 ^ 64 then Some (SmtSort_BitVec (m * i)) else None
-      | _ \<Rightarrow> None)\<close>
-| \<open>smt_op_sort (SmtOp_ZeroExtend i) ss =
-     (case ss of [SmtSort_BitVec m] \<Rightarrow>
-        if unat m + unat i < 2 ^ 64 then Some (SmtSort_BitVec (m + i)) else None
-      | _ \<Rightarrow> None)\<close>
-| \<open>smt_op_sort (SmtOp_SignExtend i) ss =
-     (case ss of [SmtSort_BitVec m] \<Rightarrow>
-        if unat m + unat i < 2 ^ 64 then Some (SmtSort_BitVec (m + i)) else None
-      | _ \<Rightarrow> None)\<close>
-| \<open>smt_op_sort (SmtOp_RotateLeft i) ss = (case ss of [SmtSort_BitVec m] \<Rightarrow> Some (SmtSort_BitVec m) | _ \<Rightarrow> None)\<close>
-| \<open>smt_op_sort (SmtOp_RotateRight i) ss = (case ss of [SmtSort_BitVec m] \<Rightarrow> Some (SmtSort_BitVec m) | _ \<Rightarrow> None)\<close>
-| \<open>smt_op_sort _ ss = (if smt_bin_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_And ss = (if 2 \<le> length ss \<and> set ss \<subseteq> {SmtSort_Bool} then Some SmtSort_Bool else None)\<close>
+  \<open>smt_op_sort SmtOp_Or ss = (if 2 \<le> length ss \<and> set ss \<subseteq> {SmtSort_Bool} then Some SmtSort_Bool else None)\<close>
+  \<open>smt_op_sort SmtOp_Xor ss = (if 2 \<le> length ss \<and> set ss \<subseteq> {SmtSort_Bool} then Some SmtSort_Bool else None)\<close>
+  \<open>smt_op_sort SmtOp_Implies ss = (if 2 \<le> length ss \<and> set ss \<subseteq> {SmtSort_Bool} then Some SmtSort_Bool else None)\<close>
+  \<open>smt_op_sort SmtOp_Eq ss = (if 2 \<le> length ss \<and> set ss \<subseteq> {hd ss} then Some SmtSort_Bool else None)\<close>
+  \<open>smt_op_sort SmtOp_Distinct ss = (if 2 \<le> length ss \<and> set ss \<subseteq> {hd ss} then Some SmtSort_Bool else None)\<close>
+  \<open>smt_op_sort SmtOp_Ite ss =
+       (case ss of [c, a, b] \<Rightarrow> if c = SmtSort_Bool \<and> a = b then Some a else None | _ \<Rightarrow> None)\<close>
+  \<open>smt_op_sort SmtOp_Concat ss =
+       (case ss of [SmtSort_BitVec a, SmtSort_BitVec b] \<Rightarrow>
+          if unat a + unat b < 2 ^ 64 then Some (SmtSort_BitVec (a + b)) else None
+        | _ \<Rightarrow> None)\<close>
+  \<open>smt_op_sort (SmtOp_Extract i j) ss =
+       (case ss of [SmtSort_BitVec m] \<Rightarrow>
+          if unat j \<le> unat i \<and> unat i < unat m then Some (SmtSort_BitVec (i - j + 1)) else None
+        | _ \<Rightarrow> None)\<close>
+  \<open>smt_op_sort SmtOp_Bvnot ss = (case ss of [SmtSort_BitVec m] \<Rightarrow> Some (SmtSort_BitVec m) | _ \<Rightarrow> None)\<close>
+  \<open>smt_op_sort SmtOp_Bvneg ss = (case ss of [SmtSort_BitVec m] \<Rightarrow> Some (SmtSort_BitVec m) | _ \<Rightarrow> None)\<close>
+  \<open>smt_op_sort SmtOp_Bvand ss = (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvor ss = (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvadd ss = (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvmul ss = (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvxor ss = (if 2 \<le> length ss \<and> smt_same_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvcomp ss = (if smt_bin_width ss \<noteq> None then Some (SmtSort_BitVec 1) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvult ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvule ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvugt ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvuge ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvslt ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvsle ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvsgt ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvsge ss = (if smt_bin_width ss \<noteq> None then Some SmtSort_Bool else None)\<close>
+  \<open>smt_op_sort (SmtOp_Repeat i) ss =
+       (case ss of [SmtSort_BitVec m] \<Rightarrow>
+          if 1 \<le> unat i \<and> unat m * unat i < 2 ^ 64 then Some (SmtSort_BitVec (m * i)) else None
+        | _ \<Rightarrow> None)\<close>
+  \<open>smt_op_sort (SmtOp_ZeroExtend i) ss =
+       (case ss of [SmtSort_BitVec m] \<Rightarrow>
+          if unat m + unat i < 2 ^ 64 then Some (SmtSort_BitVec (m + i)) else None
+        | _ \<Rightarrow> None)\<close>
+  \<open>smt_op_sort (SmtOp_SignExtend i) ss =
+       (case ss of [SmtSort_BitVec m] \<Rightarrow>
+          if unat m + unat i < 2 ^ 64 then Some (SmtSort_BitVec (m + i)) else None
+        | _ \<Rightarrow> None)\<close>
+  \<open>smt_op_sort (SmtOp_RotateLeft i) ss = (case ss of [SmtSort_BitVec m] \<Rightarrow> Some (SmtSort_BitVec m) | _ \<Rightarrow> None)\<close>
+  \<open>smt_op_sort (SmtOp_RotateRight i) ss = (case ss of [SmtSort_BitVec m] \<Rightarrow> Some (SmtSort_BitVec m) | _ \<Rightarrow> None)\<close>
+  \<open>smt_op_sort SmtOp_Bvudiv ss = (if smt_bin_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvurem ss = (if smt_bin_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvshl ss = (if smt_bin_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvlshr ss = (if smt_bin_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvnand ss = (if smt_bin_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvnor ss = (if smt_bin_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvxnor ss = (if smt_bin_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvsub ss = (if smt_bin_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvsdiv ss = (if smt_bin_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvsrem ss = (if smt_bin_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvsmod ss = (if smt_bin_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  \<open>smt_op_sort SmtOp_Bvashr ss = (if smt_bin_width ss \<noteq> None then Some (hd ss) else None)\<close>
+  by (simp_all add: smt_op_sort_def)
 
 text \<open>The last case covers the binary functions with result of the width of their operands:
   \<open>bvudiv\<close>, \<open>bvurem\<close>, \<open>bvshl\<close>, \<open>bvlshr\<close>, \<open>bvnand\<close>, \<open>bvnor\<close>, \<open>bvxor\<close>, \<open>bvxnor\<close>, \<open>bvsub\<close>,
@@ -231,27 +326,76 @@ text \<open>A binary bit-vector function on the numbers \<open>x\<close>, \<open
   \<^item> \<open>bvashr s t\<close> abbreviates
     \<open>(ite (= ((_ extract |m-1| |m-1|) s) #b0) (bvlshr s t) (bvnot (bvlshr (bvnot s) t)))\<close>: the two's
     complement value of \<open>s\<close> divided by \<open>2^t\<close>, rounded down, modulo \<open>2^m\<close>.\<close>
-fun smt_bv_bin :: \<open>SmtOp \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat\<close> where
+definition smt_bv_bin :: \<open>SmtOp \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat\<close> where
+  \<open>smt_bv_bin op w x y \<equiv>
+     (case op of
+        SmtOp_Bvand \<Rightarrow> (Bit_Operations.and x y)
+      | SmtOp_Bvor \<Rightarrow> (Bit_Operations.or x y)
+      | SmtOp_Bvxor \<Rightarrow> (Bit_Operations.xor x y)
+      | SmtOp_Bvnand \<Rightarrow> (2 ^ w - 1 - Bit_Operations.and x y)
+      | SmtOp_Bvnor \<Rightarrow> (2 ^ w - 1 - Bit_Operations.or x y)
+      | SmtOp_Bvxnor \<Rightarrow> (2 ^ w - 1 - Bit_Operations.xor x y)
+      | SmtOp_Bvadd \<Rightarrow> ((x + y) mod 2 ^ w)
+      | SmtOp_Bvsub \<Rightarrow> ((x + (2 ^ w - y)) mod 2 ^ w)
+      | SmtOp_Bvmul \<Rightarrow> ((x * y) mod 2 ^ w)
+      | SmtOp_Bvudiv \<Rightarrow> (if y = 0 then 2 ^ w - 1 else x div y)
+      | SmtOp_Bvurem \<Rightarrow> (if y = 0 then x else x mod y)
+      | SmtOp_Bvsdiv \<Rightarrow> (if y = 0 then (if smt_sint w x < 0 then 1 else 2 ^ w - 1)
+                else smt_to_bv w (smt_tdiv (smt_sint w x) (smt_sint w y)))
+      | SmtOp_Bvsrem \<Rightarrow> (if y = 0 then x else smt_to_bv w (smt_tmod (smt_sint w x) (smt_sint w y)))
+      | SmtOp_Bvsmod \<Rightarrow> (if y = 0 then x else smt_to_bv w (smt_sint w x mod smt_sint w y))
+      | SmtOp_Bvshl \<Rightarrow> ((x * 2 ^ y) mod 2 ^ w)
+      | SmtOp_Bvlshr \<Rightarrow> (x div 2 ^ y)
+      | SmtOp_Bvashr \<Rightarrow> (smt_to_bv w (smt_sint w x div 2 ^ y))
+      | _ \<Rightarrow> 0)\<close>
+
+lemma smt_bv_bin_simps [simp]:
   \<open>smt_bv_bin SmtOp_Bvand w x y = Bit_Operations.and x y\<close>
-| \<open>smt_bv_bin SmtOp_Bvor w x y = Bit_Operations.or x y\<close>
-| \<open>smt_bv_bin SmtOp_Bvxor w x y = Bit_Operations.xor x y\<close>
-| \<open>smt_bv_bin SmtOp_Bvnand w x y = 2 ^ w - 1 - Bit_Operations.and x y\<close>
-| \<open>smt_bv_bin SmtOp_Bvnor w x y = 2 ^ w - 1 - Bit_Operations.or x y\<close>
-| \<open>smt_bv_bin SmtOp_Bvxnor w x y = 2 ^ w - 1 - Bit_Operations.xor x y\<close>
-| \<open>smt_bv_bin SmtOp_Bvadd w x y = (x + y) mod 2 ^ w\<close>
-| \<open>smt_bv_bin SmtOp_Bvsub w x y = (x + (2 ^ w - y)) mod 2 ^ w\<close>
-| \<open>smt_bv_bin SmtOp_Bvmul w x y = (x * y) mod 2 ^ w\<close>
-| \<open>smt_bv_bin SmtOp_Bvudiv w x y = (if y = 0 then 2 ^ w - 1 else x div y)\<close>
-| \<open>smt_bv_bin SmtOp_Bvurem w x y = (if y = 0 then x else x mod y)\<close>
-| \<open>smt_bv_bin SmtOp_Bvsdiv w x y =
-     (if y = 0 then (if smt_sint w x < 0 then 1 else 2 ^ w - 1)
-      else smt_to_bv w (smt_tdiv (smt_sint w x) (smt_sint w y)))\<close>
-| \<open>smt_bv_bin SmtOp_Bvsrem w x y = (if y = 0 then x else smt_to_bv w (smt_tmod (smt_sint w x) (smt_sint w y)))\<close>
-| \<open>smt_bv_bin SmtOp_Bvsmod w x y = (if y = 0 then x else smt_to_bv w (smt_sint w x mod smt_sint w y))\<close>
-| \<open>smt_bv_bin SmtOp_Bvshl w x y = (x * 2 ^ y) mod 2 ^ w\<close>
-| \<open>smt_bv_bin SmtOp_Bvlshr w x y = x div 2 ^ y\<close>
-| \<open>smt_bv_bin SmtOp_Bvashr w x y = smt_to_bv w (smt_sint w x div 2 ^ y)\<close>
-| \<open>smt_bv_bin _ w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Bvor w x y = Bit_Operations.or x y\<close>
+  \<open>smt_bv_bin SmtOp_Bvxor w x y = Bit_Operations.xor x y\<close>
+  \<open>smt_bv_bin SmtOp_Bvnand w x y = 2 ^ w - 1 - Bit_Operations.and x y\<close>
+  \<open>smt_bv_bin SmtOp_Bvnor w x y = 2 ^ w - 1 - Bit_Operations.or x y\<close>
+  \<open>smt_bv_bin SmtOp_Bvxnor w x y = 2 ^ w - 1 - Bit_Operations.xor x y\<close>
+  \<open>smt_bv_bin SmtOp_Bvadd w x y = (x + y) mod 2 ^ w\<close>
+  \<open>smt_bv_bin SmtOp_Bvsub w x y = (x + (2 ^ w - y)) mod 2 ^ w\<close>
+  \<open>smt_bv_bin SmtOp_Bvmul w x y = (x * y) mod 2 ^ w\<close>
+  \<open>smt_bv_bin SmtOp_Bvudiv w x y = (if y = 0 then 2 ^ w - 1 else x div y)\<close>
+  \<open>smt_bv_bin SmtOp_Bvurem w x y = (if y = 0 then x else x mod y)\<close>
+  \<open>smt_bv_bin SmtOp_Bvsdiv w x y =
+       (if y = 0 then (if smt_sint w x < 0 then 1 else 2 ^ w - 1)
+        else smt_to_bv w (smt_tdiv (smt_sint w x) (smt_sint w y)))\<close>
+  \<open>smt_bv_bin SmtOp_Bvsrem w x y = (if y = 0 then x else smt_to_bv w (smt_tmod (smt_sint w x) (smt_sint w y)))\<close>
+  \<open>smt_bv_bin SmtOp_Bvsmod w x y = (if y = 0 then x else smt_to_bv w (smt_sint w x mod smt_sint w y))\<close>
+  \<open>smt_bv_bin SmtOp_Bvshl w x y = (x * 2 ^ y) mod 2 ^ w\<close>
+  \<open>smt_bv_bin SmtOp_Bvlshr w x y = x div 2 ^ y\<close>
+  \<open>smt_bv_bin SmtOp_Bvashr w x y = smt_to_bv w (smt_sint w x div 2 ^ y)\<close>
+  \<open>smt_bv_bin SmtOp_Not w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_And w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Or w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Xor w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Implies w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Eq w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Distinct w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Ite w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Concat w x y = 0\<close>
+  \<open>smt_bv_bin (SmtOp_Extract a0 a1) w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Bvnot w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Bvneg w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Bvult w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Bvcomp w x y = 0\<close>
+  \<open>smt_bv_bin (SmtOp_Repeat a0) w x y = 0\<close>
+  \<open>smt_bv_bin (SmtOp_ZeroExtend a0) w x y = 0\<close>
+  \<open>smt_bv_bin (SmtOp_SignExtend a0) w x y = 0\<close>
+  \<open>smt_bv_bin (SmtOp_RotateLeft a0) w x y = 0\<close>
+  \<open>smt_bv_bin (SmtOp_RotateRight a0) w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Bvule w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Bvugt w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Bvuge w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Bvslt w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Bvsle w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Bvsgt w x y = 0\<close>
+  \<open>smt_bv_bin SmtOp_Bvsge w x y = 0\<close>
+  by (simp_all add: smt_bv_bin_def)
 
 text \<open>A binary bit-vector predicate on the numbers of operands of width \<open>w\<close>, with the text of
   SMT-LIB 2.6:
@@ -262,16 +406,64 @@ text \<open>A binary bit-vector predicate on the numbers of operands of width \<
     \<open>(or (and (= msb_s #b1) (= msb_t #b0)) (and (= msb_s msb_t) (bvult s t)))\<close>: the two's
     complement value of \<open>s\<close> is below that of \<open>t\<close>; \<open>bvsle\<close>: the same with \<open>bvule\<close>;
     \<open>bvsgt s t\<close>: \<open>(bvslt t s)\<close>; \<open>bvsge s t\<close>: \<open>(bvsle t s)\<close>.\<close>
-fun smt_bv_cmp :: \<open>SmtOp \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool\<close> where
+definition smt_bv_cmp :: \<open>SmtOp \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool\<close> where
+  \<open>smt_bv_cmp op w x y \<equiv>
+     (case op of
+        SmtOp_Bvult \<Rightarrow> (x < y)
+      | SmtOp_Bvule \<Rightarrow> (x \<le> y)
+      | SmtOp_Bvugt \<Rightarrow> (y < x)
+      | SmtOp_Bvuge \<Rightarrow> (y \<le> x)
+      | SmtOp_Bvslt \<Rightarrow> (smt_sint w x < smt_sint w y)
+      | SmtOp_Bvsle \<Rightarrow> (smt_sint w x \<le> smt_sint w y)
+      | SmtOp_Bvsgt \<Rightarrow> (smt_sint w y < smt_sint w x)
+      | SmtOp_Bvsge \<Rightarrow> (smt_sint w y \<le> smt_sint w x)
+      | _ \<Rightarrow> False)\<close>
+
+lemma smt_bv_cmp_simps [simp]:
   \<open>smt_bv_cmp SmtOp_Bvult w x y = (x < y)\<close>
-| \<open>smt_bv_cmp SmtOp_Bvule w x y = (x \<le> y)\<close>
-| \<open>smt_bv_cmp SmtOp_Bvugt w x y = (y < x)\<close>
-| \<open>smt_bv_cmp SmtOp_Bvuge w x y = (y \<le> x)\<close>
-| \<open>smt_bv_cmp SmtOp_Bvslt w x y = (smt_sint w x < smt_sint w y)\<close>
-| \<open>smt_bv_cmp SmtOp_Bvsle w x y = (smt_sint w x \<le> smt_sint w y)\<close>
-| \<open>smt_bv_cmp SmtOp_Bvsgt w x y = (smt_sint w y < smt_sint w x)\<close>
-| \<open>smt_bv_cmp SmtOp_Bvsge w x y = (smt_sint w y \<le> smt_sint w x)\<close>
-| \<open>smt_bv_cmp _ w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvule w x y = (x \<le> y)\<close>
+  \<open>smt_bv_cmp SmtOp_Bvugt w x y = (y < x)\<close>
+  \<open>smt_bv_cmp SmtOp_Bvuge w x y = (y \<le> x)\<close>
+  \<open>smt_bv_cmp SmtOp_Bvslt w x y = (smt_sint w x < smt_sint w y)\<close>
+  \<open>smt_bv_cmp SmtOp_Bvsle w x y = (smt_sint w x \<le> smt_sint w y)\<close>
+  \<open>smt_bv_cmp SmtOp_Bvsgt w x y = (smt_sint w y < smt_sint w x)\<close>
+  \<open>smt_bv_cmp SmtOp_Bvsge w x y = (smt_sint w y \<le> smt_sint w x)\<close>
+  \<open>smt_bv_cmp SmtOp_Not w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_And w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Or w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Xor w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Implies w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Eq w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Distinct w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Ite w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Concat w x y = False\<close>
+  \<open>smt_bv_cmp (SmtOp_Extract a0 a1) w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvnot w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvand w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvor w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvneg w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvadd w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvmul w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvudiv w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvurem w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvshl w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvlshr w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvnand w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvnor w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvxor w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvxnor w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvcomp w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvsub w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvsdiv w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvsrem w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvsmod w x y = False\<close>
+  \<open>smt_bv_cmp SmtOp_Bvashr w x y = False\<close>
+  \<open>smt_bv_cmp (SmtOp_Repeat a0) w x y = False\<close>
+  \<open>smt_bv_cmp (SmtOp_ZeroExtend a0) w x y = False\<close>
+  \<open>smt_bv_cmp (SmtOp_SignExtend a0) w x y = False\<close>
+  \<open>smt_bv_cmp (SmtOp_RotateLeft a0) w x y = False\<close>
+  \<open>smt_bv_cmp (SmtOp_RotateRight a0) w x y = False\<close>
+  by (simp_all add: smt_bv_cmp_def)
 
 text \<open>A theory function applied to the values \<open>vs\<close> of its arguments. For a well-sorted application,
   the cases of Core: \<open>not\<close>; \<open>and\<close>, \<open>or\<close> (all, some argument true); \<open>xor\<close> (left-associative: an
@@ -301,46 +493,113 @@ text \<open>A theory function applied to the values \<open>vs\<close> of its arg
     \<open>((_ rotate_right |i-1|) (concat ((_ extract 0 0) t) ((_ extract |m-1| 1) t)))\<close>: with
     \<open>r = i mod m\<close>, the low \<open>r\<close> bits of \<open>t\<close> end up above its high \<open>m - r\<close> bits.
   \<^item> The other binary functions: \<^const>\<open>smt_bv_bin\<close>.\<close>
-fun smt_op_sem :: \<open>SmtOp \<Rightarrow> sval list \<Rightarrow> sval\<close> where
+definition smt_op_sem :: \<open>SmtOp \<Rightarrow> sval list \<Rightarrow> sval\<close> where
+  \<open>smt_op_sem op vs \<equiv>
+     (case op of
+        SmtOp_Not \<Rightarrow> (VBool (\<not> smt_true (hd vs)))
+      | SmtOp_And \<Rightarrow> (VBool (\<forall>v \<in> set vs. smt_true v))
+      | SmtOp_Or \<Rightarrow> (VBool (\<exists>v \<in> set vs. smt_true v))
+      | SmtOp_Xor \<Rightarrow> (VBool (odd (length (filter smt_true vs))))
+      | SmtOp_Implies \<Rightarrow> (VBool ((\<exists>v \<in> set (butlast vs). \<not> smt_true v) \<or> smt_true (last vs)))
+      | SmtOp_Eq \<Rightarrow> (VBool (\<forall>i. Suc i < length vs \<longrightarrow> vs ! i = vs ! Suc i))
+      | SmtOp_Distinct \<Rightarrow> (VBool (distinct vs))
+      | SmtOp_Ite \<Rightarrow> (if smt_true (vs ! 0) then vs ! 1 else vs ! 2)
+      | SmtOp_Concat \<Rightarrow> (VBv (smt_bv_width (vs ! 0) + smt_bv_width (vs ! 1))
+                   (smt_bv_val (vs ! 0) * 2 ^ smt_bv_width (vs ! 1) + smt_bv_val (vs ! 1)))
+      | SmtOp_Extract i j \<Rightarrow> (VBv (unat i - unat j + 1) ((smt_bv_val (hd vs) div 2 ^ unat j) mod 2 ^ (unat i - unat j + 1)))
+      | SmtOp_Bvnot \<Rightarrow> (let w = smt_bv_width (hd vs) in VBv w (2 ^ w - 1 - smt_bv_val (hd vs)))
+      | SmtOp_Bvneg \<Rightarrow> (let w = smt_bv_width (hd vs) in VBv w ((2 ^ w - smt_bv_val (hd vs)) mod 2 ^ w))
+      | SmtOp_Bvcomp \<Rightarrow> (VBv 1 (of_bool (vs ! 0 = vs ! 1)))
+      | SmtOp_Repeat i \<Rightarrow> (let w = smt_bv_width (hd vs) in VBv (w * unat i) (smt_repeat_val w (unat i) (smt_bv_val (hd vs))))
+      | SmtOp_ZeroExtend i \<Rightarrow> (VBv (smt_bv_width (hd vs) + unat i) (smt_bv_val (hd vs)))
+      | SmtOp_SignExtend i \<Rightarrow> (let w = smt_bv_width (hd vs) in VBv (w + unat i) (smt_to_bv (w + unat i) (smt_sint w (smt_bv_val (hd vs)))))
+      | SmtOp_RotateLeft i \<Rightarrow> (let w = smt_bv_width (hd vs) in let r = unat i mod w in let x = smt_bv_val (hd vs) in
+                VBv w ((x mod 2 ^ (w - r)) * 2 ^ r + x div 2 ^ (w - r)))
+      | SmtOp_RotateRight i \<Rightarrow> (let w = smt_bv_width (hd vs) in let r = unat i mod w in let x = smt_bv_val (hd vs) in
+                VBv w ((x mod 2 ^ r) * 2 ^ (w - r) + x div 2 ^ r))
+      | SmtOp_Bvult \<Rightarrow> (VBool (smt_bv_cmp SmtOp_Bvult (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1))))
+      | SmtOp_Bvule \<Rightarrow> (VBool (smt_bv_cmp SmtOp_Bvule (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1))))
+      | SmtOp_Bvugt \<Rightarrow> (VBool (smt_bv_cmp SmtOp_Bvugt (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1))))
+      | SmtOp_Bvuge \<Rightarrow> (VBool (smt_bv_cmp SmtOp_Bvuge (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1))))
+      | SmtOp_Bvslt \<Rightarrow> (VBool (smt_bv_cmp SmtOp_Bvslt (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1))))
+      | SmtOp_Bvsle \<Rightarrow> (VBool (smt_bv_cmp SmtOp_Bvsle (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1))))
+      | SmtOp_Bvsgt \<Rightarrow> (VBool (smt_bv_cmp SmtOp_Bvsgt (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1))))
+      | SmtOp_Bvsge \<Rightarrow> (VBool (smt_bv_cmp SmtOp_Bvsge (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1))))
+      | _ \<Rightarrow> (let w = smt_bv_width (hd vs) in
+                VBv w (foldl (\<lambda>x v. smt_bv_bin op w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs))))\<close>
+
+lemma smt_op_sem_simps [simp]:
   \<open>smt_op_sem SmtOp_Not vs = VBool (\<not> smt_true (hd vs))\<close>
-| \<open>smt_op_sem SmtOp_And vs = VBool (\<forall>v \<in> set vs. smt_true v)\<close>
-| \<open>smt_op_sem SmtOp_Or vs = VBool (\<exists>v \<in> set vs. smt_true v)\<close>
-| \<open>smt_op_sem SmtOp_Xor vs = VBool (odd (length (filter smt_true vs)))\<close>
-| \<open>smt_op_sem SmtOp_Implies vs = VBool ((\<exists>v \<in> set (butlast vs). \<not> smt_true v) \<or> smt_true (last vs))\<close>
-| \<open>smt_op_sem SmtOp_Eq vs = VBool (\<forall>i. Suc i < length vs \<longrightarrow> vs ! i = vs ! Suc i)\<close>
-| \<open>smt_op_sem SmtOp_Distinct vs = VBool (distinct vs)\<close>
-| \<open>smt_op_sem SmtOp_Ite vs = (if smt_true (vs ! 0) then vs ! 1 else vs ! 2)\<close>
-| \<open>smt_op_sem SmtOp_Concat vs =
-     VBv (smt_bv_width (vs ! 0) + smt_bv_width (vs ! 1))
-         (smt_bv_val (vs ! 0) * 2 ^ smt_bv_width (vs ! 1) + smt_bv_val (vs ! 1))\<close>
-| \<open>smt_op_sem (SmtOp_Extract i j) vs =
-     VBv (unat i - unat j + 1) ((smt_bv_val (hd vs) div 2 ^ unat j) mod 2 ^ (unat i - unat j + 1))\<close>
-| \<open>smt_op_sem SmtOp_Bvnot vs = (let w = smt_bv_width (hd vs) in VBv w (2 ^ w - 1 - smt_bv_val (hd vs)))\<close>
-| \<open>smt_op_sem SmtOp_Bvneg vs =
-     (let w = smt_bv_width (hd vs) in VBv w ((2 ^ w - smt_bv_val (hd vs)) mod 2 ^ w))\<close>
-| \<open>smt_op_sem SmtOp_Bvcomp vs = VBv 1 (of_bool (vs ! 0 = vs ! 1))\<close>
-| \<open>smt_op_sem (SmtOp_Repeat i) vs =
-     (let w = smt_bv_width (hd vs) in VBv (w * unat i) (smt_repeat_val w (unat i) (smt_bv_val (hd vs))))\<close>
-| \<open>smt_op_sem (SmtOp_ZeroExtend i) vs = VBv (smt_bv_width (hd vs) + unat i) (smt_bv_val (hd vs))\<close>
-| \<open>smt_op_sem (SmtOp_SignExtend i) vs =
-     (let w = smt_bv_width (hd vs) in VBv (w + unat i) (smt_to_bv (w + unat i) (smt_sint w (smt_bv_val (hd vs)))))\<close>
-| \<open>smt_op_sem (SmtOp_RotateLeft i) vs =
-     (let w = smt_bv_width (hd vs) in let r = unat i mod w in let x = smt_bv_val (hd vs) in
-      VBv w ((x mod 2 ^ (w - r)) * 2 ^ r + x div 2 ^ (w - r)))\<close>
-| \<open>smt_op_sem (SmtOp_RotateRight i) vs =
-     (let w = smt_bv_width (hd vs) in let r = unat i mod w in let x = smt_bv_val (hd vs) in
-      VBv w ((x mod 2 ^ r) * 2 ^ (w - r) + x div 2 ^ r))\<close>
-| \<open>smt_op_sem SmtOp_Bvult vs = VBool (smt_bv_cmp SmtOp_Bvult (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
-| \<open>smt_op_sem SmtOp_Bvule vs = VBool (smt_bv_cmp SmtOp_Bvule (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
-| \<open>smt_op_sem SmtOp_Bvugt vs = VBool (smt_bv_cmp SmtOp_Bvugt (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
-| \<open>smt_op_sem SmtOp_Bvuge vs = VBool (smt_bv_cmp SmtOp_Bvuge (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
-| \<open>smt_op_sem SmtOp_Bvslt vs = VBool (smt_bv_cmp SmtOp_Bvslt (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
-| \<open>smt_op_sem SmtOp_Bvsle vs = VBool (smt_bv_cmp SmtOp_Bvsle (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
-| \<open>smt_op_sem SmtOp_Bvsgt vs = VBool (smt_bv_cmp SmtOp_Bvsgt (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
-| \<open>smt_op_sem SmtOp_Bvsge vs = VBool (smt_bv_cmp SmtOp_Bvsge (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
-| \<open>smt_op_sem op vs =
-     (let w = smt_bv_width (hd vs) in
-      VBv w (foldl (\<lambda>x v. smt_bv_bin op w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_And vs = VBool (\<forall>v \<in> set vs. smt_true v)\<close>
+  \<open>smt_op_sem SmtOp_Or vs = VBool (\<exists>v \<in> set vs. smt_true v)\<close>
+  \<open>smt_op_sem SmtOp_Xor vs = VBool (odd (length (filter smt_true vs)))\<close>
+  \<open>smt_op_sem SmtOp_Implies vs = VBool ((\<exists>v \<in> set (butlast vs). \<not> smt_true v) \<or> smt_true (last vs))\<close>
+  \<open>smt_op_sem SmtOp_Eq vs = VBool (\<forall>i. Suc i < length vs \<longrightarrow> vs ! i = vs ! Suc i)\<close>
+  \<open>smt_op_sem SmtOp_Distinct vs = VBool (distinct vs)\<close>
+  \<open>smt_op_sem SmtOp_Ite vs = (if smt_true (vs ! 0) then vs ! 1 else vs ! 2)\<close>
+  \<open>smt_op_sem SmtOp_Concat vs =
+       VBv (smt_bv_width (vs ! 0) + smt_bv_width (vs ! 1))
+           (smt_bv_val (vs ! 0) * 2 ^ smt_bv_width (vs ! 1) + smt_bv_val (vs ! 1))\<close>
+  \<open>smt_op_sem (SmtOp_Extract i j) vs =
+       VBv (unat i - unat j + 1) ((smt_bv_val (hd vs) div 2 ^ unat j) mod 2 ^ (unat i - unat j + 1))\<close>
+  \<open>smt_op_sem SmtOp_Bvnot vs = (let w = smt_bv_width (hd vs) in VBv w (2 ^ w - 1 - smt_bv_val (hd vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvneg vs =
+       (let w = smt_bv_width (hd vs) in VBv w ((2 ^ w - smt_bv_val (hd vs)) mod 2 ^ w))\<close>
+  \<open>smt_op_sem SmtOp_Bvcomp vs = VBv 1 (of_bool (vs ! 0 = vs ! 1))\<close>
+  \<open>smt_op_sem (SmtOp_Repeat i) vs =
+       (let w = smt_bv_width (hd vs) in VBv (w * unat i) (smt_repeat_val w (unat i) (smt_bv_val (hd vs))))\<close>
+  \<open>smt_op_sem (SmtOp_ZeroExtend i) vs = VBv (smt_bv_width (hd vs) + unat i) (smt_bv_val (hd vs))\<close>
+  \<open>smt_op_sem (SmtOp_SignExtend i) vs =
+       (let w = smt_bv_width (hd vs) in VBv (w + unat i) (smt_to_bv (w + unat i) (smt_sint w (smt_bv_val (hd vs)))))\<close>
+  \<open>smt_op_sem (SmtOp_RotateLeft i) vs =
+       (let w = smt_bv_width (hd vs) in let r = unat i mod w in let x = smt_bv_val (hd vs) in
+        VBv w ((x mod 2 ^ (w - r)) * 2 ^ r + x div 2 ^ (w - r)))\<close>
+  \<open>smt_op_sem (SmtOp_RotateRight i) vs =
+       (let w = smt_bv_width (hd vs) in let r = unat i mod w in let x = smt_bv_val (hd vs) in
+        VBv w ((x mod 2 ^ r) * 2 ^ (w - r) + x div 2 ^ r))\<close>
+  \<open>smt_op_sem SmtOp_Bvult vs = VBool (smt_bv_cmp SmtOp_Bvult (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
+  \<open>smt_op_sem SmtOp_Bvule vs = VBool (smt_bv_cmp SmtOp_Bvule (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
+  \<open>smt_op_sem SmtOp_Bvugt vs = VBool (smt_bv_cmp SmtOp_Bvugt (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
+  \<open>smt_op_sem SmtOp_Bvuge vs = VBool (smt_bv_cmp SmtOp_Bvuge (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
+  \<open>smt_op_sem SmtOp_Bvslt vs = VBool (smt_bv_cmp SmtOp_Bvslt (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
+  \<open>smt_op_sem SmtOp_Bvsle vs = VBool (smt_bv_cmp SmtOp_Bvsle (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
+  \<open>smt_op_sem SmtOp_Bvsgt vs = VBool (smt_bv_cmp SmtOp_Bvsgt (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
+  \<open>smt_op_sem SmtOp_Bvsge vs = VBool (smt_bv_cmp SmtOp_Bvsge (smt_bv_width (vs ! 0)) (smt_bv_val (vs ! 0)) (smt_bv_val (vs ! 1)))\<close>
+  \<open>smt_op_sem SmtOp_Bvand vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvand w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvor vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvor w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvadd vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvadd w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvmul vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvmul w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvudiv vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvudiv w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvurem vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvurem w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvshl vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvshl w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvlshr vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvlshr w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvnand vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvnand w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvnor vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvnor w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvxor vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvxor w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvxnor vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvxnor w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvsub vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvsub w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvsdiv vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvsdiv w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvsrem vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvsrem w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvsmod vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvsmod w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  \<open>smt_op_sem SmtOp_Bvashr vs = (let w = smt_bv_width (hd vs) in
+        VBv w (foldl (\<lambda>x v. smt_bv_bin SmtOp_Bvashr w x (smt_bv_val v)) (smt_bv_val (hd vs)) (tl vs)))\<close>
+  by (simp_all add: smt_op_sem_def)
 
 text \<open>The last case: the binary functions of \<^const>\<open>smt_bv_bin\<close>, and the left-associative ones with
   any number of arguments (for two arguments the fold is one application).\<close>
@@ -379,10 +638,18 @@ definition smt_satisfiable :: \<open>SmtProblem \<Rightarrow> bool\<close> where
 
 subsection \<open>Models\<close>
 
-fun smt_val_of :: \<open>SmtValue \<Rightarrow> sval\<close> where
+definition smt_val_of :: \<open>SmtValue \<Rightarrow> sval\<close> where
+  \<open>smt_val_of val \<equiv>
+     (case val of
+        SmtValue_Bool b \<Rightarrow> (VBool b)
+      | SmtValue_Bv bs \<Rightarrow> (VBv (length bs) (smt_bits_nat bs))
+      | SmtValue_Elem e \<Rightarrow> (VElem (unat e)))\<close>
+
+lemma smt_val_of_simps [simp]:
   \<open>smt_val_of (SmtValue_Bool b) = VBool b\<close>
-| \<open>smt_val_of (SmtValue_Bv bs) = VBv (length bs) (smt_bits_nat bs)\<close>
-| \<open>smt_val_of (SmtValue_Elem e) = VElem (unat e)\<close>
+  \<open>smt_val_of (SmtValue_Bv bs) = VBv (length bs) (smt_bits_nat bs)\<close>
+  \<open>smt_val_of (SmtValue_Elem e) = VElem (unat e)\<close>
+  by (simp_all add: smt_val_of_def)
 
 text \<open>A table: at the arguments \<open>vs\<close>, the value of the first entry with these arguments, otherwise
   the default.\<close>
@@ -397,12 +664,27 @@ definition smt_model_interp :: \<open>SmtModel \<Rightarrow> nat \<Rightarrow> s
 
 text \<open>A value of sort \<open>s\<close> in a model with the domain sizes \<open>dms\<close>: an element is below the size of
   the domain of its sort.\<close>
-fun smt_model_value_ok :: \<open>64 word list \<Rightarrow> SmtSort \<Rightarrow> SmtValue \<Rightarrow> bool\<close> where
+definition smt_model_value_ok :: \<open>64 word list \<Rightarrow> SmtSort \<Rightarrow> SmtValue \<Rightarrow> bool\<close> where
+  \<open>smt_model_value_ok dms srt val \<equiv>
+     (case (srt, val) of
+        (SmtSort_Bool, SmtValue_Bool b) \<Rightarrow> True
+      | (SmtSort_BitVec w, SmtValue_Bv bs) \<Rightarrow> (length bs = unat w)
+      | (SmtSort_Uninterpreted s, SmtValue_Elem e) \<Rightarrow>
+          (unat s < length dms \<and> unat e < unat (dms ! unat s))
+      | _ \<Rightarrow> False)\<close>
+
+lemma smt_model_value_ok_simps [simp]:
   \<open>smt_model_value_ok dms SmtSort_Bool (SmtValue_Bool b) = True\<close>
-| \<open>smt_model_value_ok dms (SmtSort_BitVec w) (SmtValue_Bv bs) = (length bs = unat w)\<close>
-| \<open>smt_model_value_ok dms (SmtSort_Uninterpreted s) (SmtValue_Elem e) =
+  \<open>smt_model_value_ok dms (SmtSort_BitVec w) (SmtValue_Bv bs) = (length bs = unat w)\<close>
+  \<open>smt_model_value_ok dms (SmtSort_Uninterpreted s) (SmtValue_Elem e) =
      (unat s < length dms \<and> unat e < unat (dms ! unat s))\<close>
-| \<open>smt_model_value_ok dms _ _ = False\<close>
+  \<open>smt_model_value_ok dms SmtSort_Bool (SmtValue_Bv bs) = False\<close>
+  \<open>smt_model_value_ok dms SmtSort_Bool (SmtValue_Elem e) = False\<close>
+  \<open>smt_model_value_ok dms (SmtSort_BitVec w) (SmtValue_Bool b) = False\<close>
+  \<open>smt_model_value_ok dms (SmtSort_BitVec w) (SmtValue_Elem e) = False\<close>
+  \<open>smt_model_value_ok dms (SmtSort_Uninterpreted s) (SmtValue_Bool b) = False\<close>
+  \<open>smt_model_value_ok dms (SmtSort_Uninterpreted s) (SmtValue_Bv bs) = False\<close>
+  by (simp_all add: smt_model_value_ok_def)
 
 text \<open>A well-formed model of \<open>p\<close>: a non-empty domain for every uninterpreted sort, a table for
   every declared symbol, and every value in the tables of the right sort and in its domain.\<close>
