@@ -4,15 +4,19 @@ Written by the owner of this repository. Agents follow it and never edit it.
 
 ## Direction
 
-Work on this repository is directed by its owner through GitHub issues. There is no autonomous
-roadmap: planners do not invent work.
+The solver is verified; that is the start, not the finish. The proofs are a ratchet: they make
+aggressive improvement safe, as long as they hold at every commit. Proof churn is the expected cost
+of an improvement, not a reason to avoid one; never route a change around the proofs.
 
-- An issue labelled `agent-plan` is a work item; a worker claims and does it.
-- An issue labelled `directive` is a larger task from the owner; a planner splits it into
-  `agent-plan` issues (or a worker does it directly when it is small), and closes it when its
-  deliverables are merged.
-- When there is no open `directive` and no unclaimed `agent-plan` issue, planners create no issues
-  and signal `return-to-human`.
+- Make the solver solve more SMT-LIB benchmarks, and faster, while every proof holds and within the
+  unchanged input range. `tools/eval.py` measures the answers and times on the benchmarks; every
+  optimization reports its effect on them.
+- Issues from the owner come first. An issue labelled `agent-plan` is a work item; a worker claims
+  and does it. An issue labelled `directive` is a larger task; a planner splits it into `agent-plan`
+  issues (or a worker does it directly when it is small), and closes it when its deliverables are
+  merged.
+- When no owner's issue is waiting, planners take the next steps of the goal above: small
+  `agent-plan` issues, each with a measurable aim, ordered so that each builds on merged work.
 
 ## Rules
 
