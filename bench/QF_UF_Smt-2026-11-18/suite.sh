@@ -1,4 +1,4 @@
-# Suite qfuf-small: the first, easy frontier of the solver on SMT-LIB QF_UF (read by bench/run.sh).
+# Suite QF_UF_Smt-2026-11-18: the first, easy frontier of the solver on SMT-LIB QF_UF (read by bench/run.sh).
 #
 # What it measures: how many of 101 small SMT-LIB 2024 QF_UF instances the solver answers
 # correctly within the limits below, and how fast. Every instance is easy for a state-of-the-art

@@ -1,2 +1,2 @@
 # Active benchmark suites, one name of a directory bench/SUITE per line (PLAN.md, Benchmarks).
-qfuf-small
+QF_UF_Smt-2026-11-18
