@@ -180,19 +180,6 @@ proof (unfold solve_correct_def, intro allI impI)
     by (intro exI[of _ \<open>length (Problem_atoms p) + 1\<close>]) simp
 qed
 
-text \<open>The same statement for \<^const>\<open>QFUF_ctx.solve_contract_vals\<close>.\<close>
-theorem solve_correct_vals:
-  shows \<open>\<forall>p. wf_problem p \<and> sizes_ok p \<longrightarrow>
-           (\<exists>N. \<forall>fuel \<ge> N. \<Gamma>; solve fuel p \<Turnstile>\<^sub>F QFUF_ctx.solve_contract_vals can_alloc_reference p)\<close>
-proof (intro allI impI)
-  fix p
-  have \<open>\<Gamma>; solve fuel p \<Turnstile>\<^sub>F QFUF_ctx.solve_contract_vals can_alloc_reference p\<close>
-    if \<open>length (Problem_atoms p) < fuel\<close> for fuel
-    by (rule QFUF_ctx.solve_vals_spec[OF QFUF_ctxI that])
-  then show \<open>\<exists>N. \<forall>fuel \<ge> N. \<Gamma>; solve fuel p \<Turnstile>\<^sub>F QFUF_ctx.solve_contract_vals can_alloc_reference p\<close>
-    by (intro exI[of _ \<open>length (Problem_atoms p) + 1\<close>]) simp
-qed
-
 end
 
 end
