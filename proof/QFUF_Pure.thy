@@ -416,6 +416,34 @@ proof
   then show False using l(2) ne by simp
 qed
 
+text \<open>If the closure of the equalities asserted by the first \<open>k\<close> atoms joins the two sides of
+  one of them set false, no interpretation agrees with \<open>a\<close> on them.\<close>
+lemma ext_ok_cc_conflict:
+  assumes wf: \<open>wf_problem p\<close> and k: \<open>k \<le> length (Problem_atoms p)\<close>
+      and j: \<open>j < k\<close> \<open>\<not> a ! j\<close>
+      and cc: \<open>(unat (Atom_lhs (Problem_atoms p ! j)), unat (Atom_rhs (Problem_atoms p ! j))) \<in> cc p (asserted p a k)\<close>
+  shows \<open>\<not> ext_ok p a k\<close>
+proof
+  assume \<open>ext_ok p a k\<close>
+  then obtain I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where I: \<open>take k (atom_vals I p) = take k a\<close>
+    unfolding ext_ok_def by blast
+  have av: \<open>atom_vals I p ! i = a ! i\<close> if \<open>i < k\<close> for i
+    using I that by (metis nth_take)
+  have \<open>\<forall>(i, i') \<in> asserted p a k. term_val I (Problem_terms p) i = term_val I (Problem_terms p) i'\<close>
+  proof (clarsimp simp add: asserted_def)
+    fix i assume \<open>i < k\<close> \<open>a ! i\<close>
+    then have \<open>atom_true I p (Problem_atoms p ! i)\<close>
+      using av[of i] k by (simp add: atom_vals_def)
+    then show \<open>term_val I (Problem_terms p) (unat (Atom_lhs (Problem_atoms p ! i))) =
+               term_val I (Problem_terms p) (unat (Atom_rhs (Problem_atoms p ! i)))\<close>
+      by (simp add: atom_true_def)
+  qed
+  from cc_sound[OF wf this cc] have \<open>atom_true I p (Problem_atoms p ! j)\<close>
+    by (simp add: atom_true_def)
+  then show False
+    using av[OF j(1)] j k by (simp add: atom_vals_def)
+qed
+
 lemma ext_ok_start:
   \<open>ext_ok p (replicate n False) 0 \<longleftrightarrow> satisfiable p\<close>
   unfolding ext_ok_def satisfiable_def by simp

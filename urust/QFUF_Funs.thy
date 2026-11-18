@@ -147,20 +147,20 @@ definition "init_rep" :: \<open>(64 word) \<Rightarrow> ('s, (64 word) list, 'ab
   \<rbrakk>\<close>
 
 (* Rust: assert_eqs *)
-definition "assert_eqs" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>assert_eqs \<equiv> \<lambda>p a rep. FunctionBody \<lbrakk>
-    for k in 0_usize .. len(p.Problem_atoms) {
-      if a[k] {
-        merge(rep, p.Problem_atoms[k].Atom_lhs, p.Problem_atoms[k].Atom_rhs);
+definition "assert_eqs" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (64 word) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>assert_eqs \<equiv> \<lambda>p a m rep. FunctionBody \<lbrakk>
+    for j in 0_usize .. m {
+      if a[j] {
+        merge(rep, p.Problem_atoms[j].Atom_lhs, p.Problem_atoms[j].Atom_rhs);
       }
     }
   \<rbrakk>\<close>
 
 (* Rust: diseqs_ok *)
-definition "diseqs_ok" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>diseqs_ok \<equiv> \<lambda>p a rep. FunctionBody \<lbrakk>
-    for k in 0_usize .. len(p.Problem_atoms) {
-      if (!(a[k])) && ((rep[p.Problem_atoms[k].Atom_lhs]) == (rep[p.Problem_atoms[k].Atom_rhs])) {
+definition "diseqs_ok" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>diseqs_ok \<equiv> \<lambda>p a m rep. FunctionBody \<lbrakk>
+    for j in 0_usize .. m {
+      if (!(a[j])) && ((rep[p.Problem_atoms[j].Atom_lhs]) == (rep[p.Problem_atoms[j].Atom_rhs])) {
         return false;
       }
     };
@@ -170,20 +170,35 @@ definition "diseqs_ok" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow>
 (* Rust: finish *)
 definition "finish" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, Model option, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>finish \<equiv> \<lambda>p a rep. FunctionBody \<lbrakk>
-    if diseqs_ok(p, a, * rep) {
+    if diseqs_ok(p, a, len(p.Problem_atoms), * rep) {
       Some(build_model(p, * rep))
     } else {
       None
     }
   \<rbrakk>\<close>
 
+(* Rust: diseqs_broken *)
+definition "diseqs_broken" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (64 word) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>diseqs_broken \<equiv> \<lambda>p a m rep. FunctionBody \<lbrakk>
+    !diseqs_ok(p, a, m, * rep)
+  \<rbrakk>\<close>
+
 (* Rust: theory_check *)
 definition "theory_check" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ('s, Model option, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>theory_check \<equiv> \<lambda>p a. FunctionBody \<lbrakk>
     let mut rep = { let init_1 = init_rep(len(p.Problem_terms)); \<llangle>init_1 :: (64 word) list\<rrangle> };
-    assert_eqs(p, a, rep);
+    assert_eqs(p, a, len(p.Problem_atoms), rep);
     close(p, rep);
     finish(p, a, rep)
+  \<rbrakk>\<close>
+
+(* Rust: prefix_conflict *)
+definition "prefix_conflict" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>prefix_conflict \<equiv> \<lambda>p a m. FunctionBody \<lbrakk>
+    let mut rep = { let init_1 = init_rep(len(p.Problem_terms)); \<llangle>init_1 :: (64 word) list\<rrangle> };
+    assert_eqs(p, a, m, rep);
+    close(p, rep);
+    diseqs_broken(p, a, m, rep)
   \<rbrakk>\<close>
 
 text \<open>Recursive group search: defined by iterating search_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>
@@ -197,6 +212,9 @@ definition "search_rec_step" :: \<open>((Problem \<Rightarrow> (bool list) \<Rig
       return None;
     };
     if some_clause_falsified(p, a, k) {
+      return None;
+    };
+    if ((k > 0_usize) && (a[k - 1_usize])) && prefix_conflict(p, a, k) {
       return None;
     };
     let mut a1 = { let init_1 = a; \<llangle>init_1 :: bool list\<rrangle> };
