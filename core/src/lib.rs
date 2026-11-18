@@ -100,7 +100,8 @@ fn unset_lit(t: &[bool], f: &[bool], c: &Clause, skip: usize) -> usize {
 /// Examines clause `c` under the partial assignment in which atom `x` is true if `t[x]`, false
 /// if `f[x]`, and unset otherwise. Returns `Lit { atom: t.len(), pos: true }` if every literal of
 /// `c` is false, the literal itself if exactly one literal is unset and all others are false, and
-/// `Lit { atom: t.len(), pos: false }` otherwise.
+/// `Lit { atom: t.len(), pos: false }` otherwise. Literals are counted by position: a clause with
+/// a repeated or complementary unset literal is not unit.
 fn clause_unit(t: &[bool], f: &[bool], c: &Clause) -> Lit {
     if some_lit_true(t, f, c) {
         return Lit { atom: t.len(), pos: false };
@@ -163,9 +164,9 @@ fn congruent(p: &Problem, rep: &[usize], i: usize, j: usize) -> bool {
     true
 }
 
-/// Merges every term `j < i` congruent to term `i` but in another class into the class of `i`'s
-/// partner; returns whether it merged anything. Congruence is symmetric, so the rows of all terms
-/// together cover every pair.
+/// Merges the class of term `i` with that of every term `j < i` that is congruent to it but in
+/// another class; returns whether it merged anything. Congruence is symmetric, so the rows of all
+/// terms together cover every pair.
 fn scan_row(p: &Problem, rep: &mut Vec<usize>, i: usize) -> bool {
     let mut changed = false;
     for j in 0..i {

@@ -160,10 +160,6 @@ proof (intro allI impI)
     using ia ja ib jb ab s cc.sym cc.trans by metis+
 qed
 
-lemma card_set_merge_list_le:
-  \<open>card (set (merge_list rs a b)) \<le> card (set rs)\<close>
-  unfolding merge_list_def set_map by (rule card_image_le) simp
-
 lemma card_set_merge_list_less:
   assumes \<open>a < length rs\<close> \<open>b < length rs\<close> \<open>rs ! a \<noteq> rs ! b\<close>
   shows \<open>card (set (merge_list rs a b)) < card (set rs)\<close>
@@ -173,10 +169,6 @@ proof -
   moreover have \<open>rs ! a \<in> set rs\<close> using assms by simp
   ultimately show ?thesis by (metis card_Diff1_less finite_set)
 qed
-
-lemma card_set_le_length:
-  \<open>card (set rs) \<le> length rs\<close>
-  by (rule card_length)
 
 lemma congruent_cc:
   assumes \<open>wf_problem p\<close> \<open>rep_ok p E rs\<close> \<open>i < length rs\<close> \<open>j < length rs\<close> \<open>congruent_p p rs i j\<close>
@@ -228,10 +220,6 @@ proof -
   then show ?thesis
     unfolding rep_ok_def rep_sound_def rep_has_def by (auto intro: cc.refl)
 qed
-
-lemma rep_ok_mono:
-  \<open>rep_ok p E rs \<Longrightarrow> E \<subseteq> E' \<Longrightarrow> rep_has E' rs \<Longrightarrow> rep_ok p E' rs\<close>
-  unfolding rep_ok_def rep_sound_def using cc_mono by blast
 
 subsection \<open>The model of a closed partition\<close>
 
