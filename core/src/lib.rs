@@ -5,9 +5,9 @@
 //! term `i` is `terms[i].fun(terms[i].args[0], ...)` and every argument index is smaller than `i`.
 //! Propositional variables can be encoded as equalities `p = true_const`.
 //!
-//! Algorithm: enumerate the truth assignments of the atoms by backtracking, cutting a branch as
-//! soon as the assigned atoms falsify a clause or their equalities and disequalities contradict
-//! each other by congruence closure. For an assignment that satisfies the clauses
+//! Algorithm: enumerate the truth assignments of the atoms by backtracking with unit propagation,
+//! cutting a branch as soon as the assigned atoms falsify a clause or their equalities and
+//! disequalities contradict each other by congruence closure. For an assignment that satisfies the clauses
 //! propositionally, decide the conjunction of the asserted equalities and disequalities by
 //! congruence closure; if it is consistent, read a model off the congruence classes.
 //!
@@ -76,24 +76,65 @@ fn prop_holds(p: &Problem, a: &[bool]) -> bool {
     true
 }
 
-/// Is every literal of `c` on an atom below `k` and false under `a`?
-fn clause_falsified(a: &[bool], c: &Clause, k: usize) -> bool {
+/// Is some literal of `c` true under the partial assignment `t`, `f`?
+fn some_lit_true(t: &[bool], f: &[bool], c: &Clause) -> bool {
     for i in 0..c.lits.len() {
-        if c.lits[i].atom >= k || a[c.lits[i].atom] == c.lits[i].pos {
-            return false;
-        }
-    }
-    true
-}
-
-/// Does the assignment `a` of the atoms `0..k` falsify some clause of `p`?
-fn some_clause_falsified(p: &Problem, a: &[bool], k: usize) -> bool {
-    for i in 0..p.clauses.len() {
-        if clause_falsified(a, &p.clauses[i], k) {
+        if (c.lits[i].pos && t[c.lits[i].atom]) || (!c.lits[i].pos && f[c.lits[i].atom]) {
             return true;
         }
     }
     false
+}
+
+/// The index of the first literal of `c` other than literal `skip` whose atom is unset under `t`,
+/// `f`; the number of literals if there is none.
+fn unset_lit(t: &[bool], f: &[bool], c: &Clause, skip: usize) -> usize {
+    for i in 0..c.lits.len() {
+        if i != skip && !t[c.lits[i].atom] && !f[c.lits[i].atom] {
+            return i;
+        }
+    }
+    c.lits.len()
+}
+
+/// Examines clause `c` under the partial assignment in which atom `x` is true if `t[x]`, false
+/// if `f[x]`, and unset otherwise. Returns `Lit { atom: t.len(), pos: true }` if every literal of
+/// `c` is false, the literal itself if exactly one literal is unset and all others are false, and
+/// `Lit { atom: t.len(), pos: false }` otherwise.
+fn clause_unit(t: &[bool], f: &[bool], c: &Clause) -> Lit {
+    if some_lit_true(t, f, c) {
+        return Lit { atom: t.len(), pos: false };
+    }
+    let i = unset_lit(t, f, c, c.lits.len());
+    if i == c.lits.len() {
+        return Lit { atom: t.len(), pos: true };
+    }
+    if unset_lit(t, f, c, i) < c.lits.len() {
+        return Lit { atom: t.len(), pos: false };
+    }
+    Lit { atom: c.lits[i].atom, pos: c.lits[i].pos }
+}
+
+/// The result of `clause_unit` for the first clause of `p` that is falsified or unit under the
+/// partial assignment `t`, `f`; `Lit { atom: t.len(), pos: false }` if there is none.
+fn find_unit(p: &Problem, t: &[bool], f: &[bool]) -> Lit {
+    for i in 0..p.clauses.len() {
+        let l = clause_unit(t, f, &p.clauses[i]);
+        if l.atom < t.len() || l.pos {
+            return l;
+        }
+    }
+    Lit { atom: t.len(), pos: false }
+}
+
+/// The first atom that is neither true nor false under `t`, `f`; `t.len()` if there is none.
+fn first_unset(t: &[bool], f: &[bool]) -> usize {
+    for i in 0..t.len() {
+        if !t[i] && !f[i] {
+            return i;
+        }
+    }
+    t.len()
 }
 
 /// Merges the class of `a` into the class of `b`.
@@ -210,10 +251,20 @@ fn finish(p: &Problem, a: &[bool], rep: &mut Vec<usize>) -> Option<Model> {
     if diseqs_ok(p, a, p.atoms.len(), rep) { Some(build_model(p, rep)) } else { None }
 }
 
-/// Whether the closed partition `rep` joins the two sides of an atom `j < m` without `a[j]`.
+/// Are the two sides of every atom `j` with `f[j]` in different classes?
+fn false_apart(p: &Problem, f: &[bool], rep: &[usize]) -> bool {
+    for j in 0..p.atoms.len() {
+        if f[j] && rep[p.atoms[j].lhs] == rep[p.atoms[j].rhs] {
+            return false;
+        }
+    }
+    true
+}
+
+/// Whether the closed partition `rep` joins the two sides of an atom `j` with `f[j]`.
 /// `rep` is `&mut` for the reason given at `finish`.
-fn diseqs_broken(p: &Problem, a: &[bool], m: usize, rep: &mut Vec<usize>) -> bool {
-    !diseqs_ok(p, a, m, rep)
+fn false_joined(p: &Problem, f: &[bool], rep: &mut Vec<usize>) -> bool {
+    !false_apart(p, f, rep)
 }
 
 /// A model in which exactly the atoms `k` with `a[k]` hold, if there is one.
@@ -224,47 +275,59 @@ fn theory_check(p: &Problem, a: &[bool]) -> Option<Model> {
     finish(p, a, &mut rep)
 }
 
-/// Do the equalities asserted by the atoms `0..m`, closed under congruence, contradict a
-/// disequality asserted by these atoms?
-fn prefix_conflict(p: &Problem, a: &[bool], m: usize) -> bool {
+/// Do the equalities of the atoms `j` with `t[j]`, closed under congruence, contradict the
+/// disequality of an atom `j` with `f[j]`?
+fn cc_conflict(p: &Problem, t: &[bool], f: &[bool]) -> bool {
     let mut rep = init_rep(p.terms.len());
-    assert_eqs(p, a, m, &mut rep);
+    assert_eqs(p, t, p.atoms.len(), &mut rep);
     close(p, &mut rep);
-    diseqs_broken(p, a, m, &mut rep)
+    false_joined(p, f, &mut rep)
 }
 
-/// Tries every completion of the assignment `a` of atoms `k..`; cuts the branch as soon as the
-/// assigned atoms `0..k` falsify a clause or (checked after some atoms, see below) contradict each
-/// other by congruence closure.
-fn search(p: &Problem, a: Vec<bool>, k: usize) -> Option<Model> {
-    if k == a.len() {
-        if prop_holds(p, &a) {
-            return theory_check(p, &a);
+/// Tries every completion of the partial assignment in which atom `x` is true if `t[x]`, false if
+/// `f[x]`, and unset otherwise. First propagates: a clause with all literals false cuts the
+/// branch, and the unset literal of a clause whose other literals are all false is set true (one
+/// literal per call). Without such clauses, cuts the branch when the true and false atoms
+/// contradict each other by congruence closure, and otherwise branches on the first unset atom.
+/// Every call sets one more atom, so the calls are nested at most `p.atoms.len() + 1` deep.
+fn search(p: &Problem, t: Vec<bool>, f: Vec<bool>) -> Option<Model> {
+    let u = find_unit(p, &t, &f);
+    if u.atom == t.len() && u.pos {
+        return None;
+    }
+    if u.atom < t.len() {
+        let mut t1 = t.clone();
+        let mut f1 = f.clone();
+        if u.pos {
+            t1[u.atom] = true;
+        } else {
+            f1[u.atom] = true;
+        }
+        return search(p, t1, f1);
+    }
+    if cc_conflict(p, &t, &f) {
+        return None;
+    }
+    let k = first_unset(&t, &f);
+    if k == t.len() {
+        if prop_holds(p, &t) {
+            return theory_check(p, &t);
         }
         return None;
     }
-    if some_clause_falsified(p, &a, k) {
-        return None;
-    }
-    // The closure is checked only when atom `k - 1` was set true, so that it asserts a new
-    // equality: a conflict that a false atom brings in is found after the next true atom, or at the
-    // leaf.
-    if k > 0 && a[k - 1] && prefix_conflict(p, &a, k) {
-        return None;
-    }
-    let mut a1 = a.clone();
-    a1[k] = true;
-    let r = search(p, a1, k + 1);
+    let mut t1 = t.clone();
+    t1[k] = true;
+    let r = search(p, t1, f.clone());
     if r.is_some() {
         return r;
     }
-    let mut a2 = a.clone();
-    a2[k] = false;
-    search(p, a2, k + 1)
+    let mut f2 = f.clone();
+    f2[k] = true;
+    search(p, t.clone(), f2)
 }
 
 pub fn solve(p: &Problem) -> Answer {
-    match search(p, vec![false; p.atoms.len()], 0) {
+    match search(p, vec![false; p.atoms.len()], vec![false; p.atoms.len()]) {
         Some(m) => Answer::Sat(m),
         None => Answer::Unsat,
     }

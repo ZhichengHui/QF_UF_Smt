@@ -384,84 +384,159 @@ proof (rule nth_equalityI)
     using k neg pos by (cases \<open>a ! k\<close>) auto
 qed (simp add: atom_vals_def len)
 
-subsection \<open>Search\<close>
+subsection \<open>Partial assignments and the search\<close>
 
-text \<open>Some interpretation makes the problem true and agrees with \<open>a\<close> on the first \<open>k\<close> atoms.\<close>
-definition ext_ok :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> nat \<Rightarrow> bool\<close> where
-  \<open>ext_ok p a k \<equiv> \<exists>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. problem_true I p \<and> take k (atom_vals I p) = take k a\<close>
+text \<open>A partial assignment of the atoms is a pair of lists \<open>t\<close>, \<open>f\<close>: atom \<open>j\<close> is set true if
+  \<open>t ! j\<close>, set false if \<open>f ! j\<close>, and unset if neither.\<close>
 
-lemma ext_ok_step:
-  assumes \<open>ext_ok p a k\<close> \<open>k < length a\<close> \<open>length a = length (Problem_atoms p)\<close>
-  shows \<open>ext_ok p (a[k := True]) (Suc k) \<or> ext_ok p (a[k := False]) (Suc k)\<close>
+text \<open>Some interpretation makes the problem true and agrees with the partial assignment.\<close>
+definition pext :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> bool\<close> where
+  \<open>pext p t f \<equiv> \<exists>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. problem_true I p \<and>
+     (\<forall>j < length (Problem_atoms p). (t ! j \<longrightarrow> atom_vals I p ! j) \<and> (f ! j \<longrightarrow> \<not> atom_vals I p ! j))\<close>
+
+text \<open>The literal \<open>l\<close> is false under the partial assignment.\<close>
+definition lit_false :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Lit \<Rightarrow> bool\<close> where
+  \<open>lit_false t f l \<equiv> if Lit_pos l then f ! unat (Lit_atom l) else t ! unat (Lit_atom l)\<close>
+
+text \<open>The literal \<open>l\<close> is true under the partial assignment.\<close>
+definition lit_set_true :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Lit \<Rightarrow> bool\<close> where
+  \<open>lit_set_true t f l \<equiv> if Lit_pos l then t ! unat (Lit_atom l) else f ! unat (Lit_atom l)\<close>
+
+text \<open>The atom of the literal \<open>l\<close> is unset.\<close>
+definition lit_unset :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Lit \<Rightarrow> bool\<close> where
+  \<open>lit_unset t f l \<equiv> \<not> t ! unat (Lit_atom l) \<and> \<not> f ! unat (Lit_atom l)\<close>
+
+lemma lit_falseI:
+  \<open>\<not> lit_set_true t f l \<Longrightarrow> \<not> lit_unset t f l \<Longrightarrow> lit_false t f l\<close>
+  unfolding lit_set_true_def lit_unset_def lit_false_def by (simp split: if_splits)
+
+text \<open>The number of unset atoms: the measure of the search.\<close>
+definition unset_count :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> nat\<close> where
+  \<open>unset_count t f \<equiv> card {j. j < length t \<and> \<not> t ! j \<and> \<not> f ! j}\<close>
+
+lemma pext_start:
+  \<open>pext p (replicate (length (Problem_atoms p)) False) (replicate (length (Problem_atoms p)) False) \<longleftrightarrow>
+   satisfiable p\<close>
+  unfolding pext_def satisfiable_def by simp
+
+lemma pext_lit_false:
+  assumes wf: \<open>wf_problem p\<close> and c: \<open>c \<in> set (Problem_clauses p)\<close> and l: \<open>l \<in> set (Clause_lits c)\<close>
+      and I: \<open>\<forall>j < length (Problem_atoms p). (t ! j \<longrightarrow> atom_vals I p ! j) \<and> (f ! j \<longrightarrow> \<not> atom_vals I p ! j)\<close>
+      and lf: \<open>lit_false t f l\<close>
+  shows \<open>\<not> lit_true I p l\<close>
 proof -
-  obtain I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where I: \<open>problem_true I p\<close> \<open>take k (atom_vals I p) = take k a\<close>
-    using assms(1) unfolding ext_ok_def by blast
-  have l: \<open>length (atom_vals I p) = length a\<close> using assms(3) by (simp add: atom_vals_def)
-  have \<open>take (Suc k) (atom_vals I p) = take (Suc k) (a[k := atom_vals I p ! k])\<close>
-    using I(2) assms(2) l by (simp add: take_Suc_conv_app_nth take_update_cancel)
-  then have \<open>ext_ok p (a[k := atom_vals I p ! k]) (Suc k)\<close>
-    using I(1) unfolding ext_ok_def by blast
-  then show ?thesis by (cases \<open>atom_vals I p ! k\<close>) simp_all
+  have \<open>unat (Lit_atom l) < length (Problem_atoms p)\<close> using wf_lit[OF wf c l] .
+  then show ?thesis
+    using I lf unfolding lit_false_def lit_true_def atom_vals_def by (cases \<open>Lit_pos l\<close>) auto
 qed
 
-lemma ext_ok_all:
-  \<open>length a = length (Problem_atoms p) \<Longrightarrow>
-   ext_ok p a (length a) \<longleftrightarrow> (\<exists>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. problem_true I p \<and> atom_vals I p = a)\<close>
-  unfolding ext_ok_def by (auto simp add: atom_vals_def)
-
-text \<open>Every literal of \<open>c\<close> is on one of the first \<open>k\<close> atoms and false under \<open>a\<close>.\<close>
-definition clause_false_upto :: \<open>bool list \<Rightarrow> Clause \<Rightarrow> nat \<Rightarrow> bool\<close> where
-  \<open>clause_false_upto a c k \<equiv>
-     \<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < k \<and> a ! unat (Lit_atom l) \<noteq> Lit_pos l\<close>
-
-text \<open>A clause falsified on the first \<open>k\<close> atoms is false under every interpretation that agrees
-  with \<open>a\<close> on them.\<close>
-lemma ext_ok_clause_false:
-  assumes wf: \<open>wf_problem p\<close> and c: \<open>c \<in> set (Problem_clauses p)\<close> and f: \<open>clause_false_upto a c k\<close>
-  shows \<open>\<not> ext_ok p a k\<close>
+text \<open>A clause whose literals are all false cuts the branch.\<close>
+lemma pext_conflict:
+  assumes wf: \<open>wf_problem p\<close> and c: \<open>c \<in> set (Problem_clauses p)\<close>
+      and f: \<open>\<forall>l \<in> set (Clause_lits c). lit_false t f l\<close>
+  shows \<open>\<not> pext p t f\<close>
 proof
-  assume \<open>ext_ok p a k\<close>
-  then obtain I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where I: \<open>problem_true I p\<close> \<open>take k (atom_vals I p) = take k a\<close>
-    unfolding ext_ok_def by blast
-  obtain l where l: \<open>l \<in> set (Clause_lits c)\<close> \<open>atom_vals I p ! unat (Lit_atom l) = Lit_pos l\<close>
-    using I(1) problem_true_prop_true[OF wf] c unfolding prop_true_def by blast
-  have lt: \<open>unat (Lit_atom l) < k\<close> and ne: \<open>a ! unat (Lit_atom l) \<noteq> Lit_pos l\<close>
-    using f l(1) unfolding clause_false_upto_def by blast+
-  have \<open>atom_vals I p ! unat (Lit_atom l) = a ! unat (Lit_atom l)\<close>
-    using I(2) lt by (metis nth_take)
-  then show False using l(2) ne by simp
+  assume \<open>pext p t f\<close>
+  then obtain I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where I: \<open>problem_true I p\<close>
+    \<open>\<forall>j < length (Problem_atoms p). (t ! j \<longrightarrow> atom_vals I p ! j) \<and> (f ! j \<longrightarrow> \<not> atom_vals I p ! j)\<close>
+    unfolding pext_def by blast
+  obtain l where \<open>l \<in> set (Clause_lits c)\<close> \<open>lit_true I p l\<close>
+    using I(1) c unfolding problem_true_def clause_true_def by blast
+  then show False using pext_lit_false[OF wf c _ I(2)] f by blast
 qed
 
-text \<open>If the closure of the equalities asserted by the first \<open>k\<close> atoms joins the two sides of
-  one of them set false, no interpretation agrees with \<open>a\<close> on them.\<close>
-lemma ext_ok_cc_conflict:
-  assumes wf: \<open>wf_problem p\<close> and k: \<open>k \<le> length (Problem_atoms p)\<close>
-      and j: \<open>j < k\<close> \<open>\<not> a ! j\<close>
-      and cc: \<open>(unat (Atom_lhs (Problem_atoms p ! j)), unat (Atom_rhs (Problem_atoms p ! j))) \<in> cc p (asserted p a k)\<close>
-  shows \<open>\<not> ext_ok p a k\<close>
-proof
-  assume \<open>ext_ok p a k\<close>
-  then obtain I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where I: \<open>take k (atom_vals I p) = take k a\<close>
-    unfolding ext_ok_def by blast
-  have av: \<open>atom_vals I p ! i = a ! i\<close> if \<open>i < k\<close> for i
-    using I that by (metis nth_take)
-  have \<open>\<forall>(i, i') \<in> asserted p a k. term_val I (Problem_terms p) i = term_val I (Problem_terms p) i'\<close>
-  proof (clarsimp simp add: asserted_def)
-    fix i assume \<open>i < k\<close> \<open>a ! i\<close>
-    then have \<open>atom_true I p (Problem_atoms p ! i)\<close>
-      using av[of i] k by (simp add: atom_vals_def)
-    then show \<open>term_val I (Problem_terms p) (unat (Atom_lhs (Problem_atoms p ! i))) =
-               term_val I (Problem_terms p) (unat (Atom_rhs (Problem_atoms p ! i)))\<close>
-      by (simp add: atom_true_def)
+text \<open>The literal \<open>u\<close> of a clause whose other literals are all false holds in every
+  interpretation that extends the partial assignment and makes the problem true.\<close>
+lemma pext_unit:
+  assumes wf: \<open>wf_problem p\<close> and c: \<open>c \<in> set (Problem_clauses p)\<close>
+      and u: \<open>\<forall>l \<in> set (Clause_lits c). l = u \<or> lit_false t f l\<close>
+      and e: \<open>pext p t f\<close> and len: \<open>length t = length (Problem_atoms p)\<close> \<open>length f = length (Problem_atoms p)\<close>
+  shows \<open>if Lit_pos u then pext p (t[unat (Lit_atom u) := True]) f else pext p t (f[unat (Lit_atom u) := True])\<close>
+proof -
+  obtain I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where I: \<open>problem_true I p\<close>
+    \<open>\<forall>j < length (Problem_atoms p). (t ! j \<longrightarrow> atom_vals I p ! j) \<and> (f ! j \<longrightarrow> \<not> atom_vals I p ! j)\<close>
+    using e unfolding pext_def by blast
+  obtain l where l: \<open>l \<in> set (Clause_lits c)\<close> \<open>lit_true I p l\<close>
+    using I(1) c unfolding problem_true_def clause_true_def by blast
+  have lu: \<open>l = u\<close> using u l pext_lit_false[OF wf c l(1) I(2)] by blast
+  have x: \<open>unat (Lit_atom u) < length (Problem_atoms p)\<close> using wf_lit[OF wf c l(1)] lu by simp
+  have v: \<open>atom_vals I p ! unat (Lit_atom u) = Lit_pos u\<close>
+    using l(2) lu x unfolding lit_true_def atom_vals_def by simp
+  show ?thesis
+    using I v x len unfolding pext_def by (auto simp add: nth_list_update)
+qed
+
+lemma pext_branch:
+  assumes \<open>pext p t f\<close>
+  shows \<open>pext p (t[k := True]) f \<or> pext p t (f[k := True])\<close>
+proof -
+  obtain I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where I: \<open>problem_true I p\<close>
+    \<open>\<forall>j < length (Problem_atoms p). (t ! j \<longrightarrow> atom_vals I p ! j) \<and> (f ! j \<longrightarrow> \<not> atom_vals I p ! j)\<close>
+    using assms unfolding pext_def by blast
+  show ?thesis
+  proof (cases \<open>k < length (Problem_atoms p) \<and> atom_vals I p ! k\<close>)
+    case True
+    then have \<open>pext p (t[k := True]) f\<close>
+      using I unfolding pext_def by (metis length_list_update nth_list_update nth_list_update_neq)
+    then show ?thesis ..
+  next
+    case False
+    then have \<open>pext p t (f[k := True])\<close>
+      using I unfolding pext_def by (metis nth_list_update nth_list_update_neq)
+    then show ?thesis ..
   qed
+qed
+
+text \<open>When every atom is set, the extensions of the partial assignment are exactly the
+  interpretations whose atom values are \<open>t\<close>.\<close>
+lemma pext_leaf:
+  assumes len: \<open>length t = length (Problem_atoms p)\<close>
+      and all: \<open>\<forall>j < length t. t ! j \<or> f ! j\<close> and e: \<open>pext p t f\<close>
+  shows \<open>\<exists>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. problem_true I p \<and> atom_vals I p = t\<close>
+proof -
+  obtain I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where I: \<open>problem_true I p\<close>
+    \<open>\<forall>j < length (Problem_atoms p). (t ! j \<longrightarrow> atom_vals I p ! j) \<and> (f ! j \<longrightarrow> \<not> atom_vals I p ! j)\<close>
+    using e unfolding pext_def by blast
+  have \<open>atom_vals I p = t\<close>
+    using I(2) all len by (intro nth_equalityI) (auto simp add: atom_vals_def)
+  then show ?thesis using I(1) by blast
+qed
+
+text \<open>If the closure of the equalities set true joins the two sides of an atom set false, the
+  branch is cut.\<close>
+lemma pext_cc_conflict:
+  assumes wf: \<open>wf_problem p\<close> and len: \<open>length t = length (Problem_atoms p)\<close>
+      and j: \<open>j < length (Problem_atoms p)\<close> \<open>f ! j\<close>
+      and cc: \<open>(unat (Atom_lhs (Problem_atoms p ! j)), unat (Atom_rhs (Problem_atoms p ! j)))
+                 \<in> cc p (asserted p t (length (Problem_atoms p)))\<close>
+  shows \<open>\<not> pext p t f\<close>
+proof
+  assume \<open>pext p t f\<close>
+  then obtain I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where
+    I: \<open>\<forall>j < length (Problem_atoms p). (t ! j \<longrightarrow> atom_vals I p ! j) \<and> (f ! j \<longrightarrow> \<not> atom_vals I p ! j)\<close>
+    unfolding pext_def by blast
+  have \<open>\<forall>(i, i') \<in> asserted p t (length (Problem_atoms p)).
+          term_val I (Problem_terms p) i = term_val I (Problem_terms p) i'\<close>
+    using I unfolding asserted_def atom_vals_def atom_true_def by auto
   from cc_sound[OF wf this cc] have \<open>atom_true I p (Problem_atoms p ! j)\<close>
     by (simp add: atom_true_def)
   then show False
-    using av[OF j(1)] j k by (simp add: atom_vals_def)
+    using I j unfolding atom_vals_def by auto
 qed
 
-lemma ext_ok_start:
-  \<open>ext_ok p (replicate n False) 0 \<longleftrightarrow> satisfiable p\<close>
-  unfolding ext_ok_def satisfiable_def by simp
+lemma unset_count_less:
+  assumes \<open>j < length t\<close> \<open>\<not> t ! j\<close> \<open>\<not> f ! j\<close> \<open>length f = length t\<close>
+  shows \<open>unset_count (t[j := True]) f < unset_count t f\<close> \<open>unset_count t (f[j := True]) < unset_count t f\<close>
+proof -
+  let ?S = \<open>{j. j < length t \<and> \<not> t ! j \<and> \<not> f ! j}\<close>
+  have \<open>{i. i < length (t[j := True]) \<and> \<not> t[j := True] ! i \<and> \<not> f ! i} = ?S - {j}\<close>
+    using assms by (auto simp add: nth_list_update)
+  moreover have \<open>{i. i < length t \<and> \<not> t ! i \<and> \<not> f[j := True] ! i} = ?S - {j}\<close>
+    using assms by (auto simp add: nth_list_update)
+  moreover have \<open>card (?S - {j}) < card ?S\<close>
+    using assms by (intro card_Diff1_less) auto
+  ultimately show \<open>unset_count (t[j := True]) f < unset_count t f\<close> \<open>unset_count t (f[j := True]) < unset_count t f\<close>
+    unfolding unset_count_def by simp_all
+qed
 
 end

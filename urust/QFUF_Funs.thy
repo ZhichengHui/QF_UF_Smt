@@ -31,26 +31,65 @@ definition "prop_holds" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow
     true
   \<rbrakk>\<close>
 
-(* Rust: clause_falsified *)
-definition "clause_falsified" :: \<open>(bool list) \<Rightarrow> Clause \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>clause_falsified \<equiv> \<lambda>a c k. FunctionBody \<lbrakk>
+(* Rust: some_lit_true *)
+definition "some_lit_true" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightarrow> Clause \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>some_lit_true \<equiv> \<lambda>t f c. FunctionBody \<lbrakk>
     for i in 0_usize .. len(c.Clause_lits) {
-      if ((c.Clause_lits[i].Lit_atom) >= k) || ((a[c.Clause_lits[i].Lit_atom]) == (c.Clause_lits[i].Lit_pos)) {
-        return false;
-      }
-    };
-    true
-  \<rbrakk>\<close>
-
-(* Rust: some_clause_falsified *)
-definition "some_clause_falsified" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>some_clause_falsified \<equiv> \<lambda>p a k. FunctionBody \<lbrakk>
-    for i in 0_usize .. len(p.Problem_clauses) {
-      if clause_falsified(a, p.Problem_clauses[i], k) {
+      if ((c.Clause_lits[i].Lit_pos) && (t[c.Clause_lits[i].Lit_atom])) || ((!(c.Clause_lits[i].Lit_pos)) && (f[c.Clause_lits[i].Lit_atom])) {
         return true;
       }
     };
     false
+  \<rbrakk>\<close>
+
+(* Rust: unset_lit *)
+definition "unset_lit" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightarrow> Clause \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>unset_lit \<equiv> \<lambda>t f c skip_v. FunctionBody \<lbrakk>
+    for i in 0_usize .. len(c.Clause_lits) {
+      if ((i != skip_v) && (!(t[c.Clause_lits[i].Lit_atom]))) && (!(f[c.Clause_lits[i].Lit_atom])) {
+        return i;
+      }
+    };
+    len(c.Clause_lits)
+  \<rbrakk>\<close>
+
+(* Rust: clause_unit *)
+definition "clause_unit" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightarrow> Clause \<Rightarrow> ('s, Lit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>clause_unit \<equiv> \<lambda>t f c. FunctionBody \<lbrakk>
+    if some_lit_true(t, f, c) {
+      return Lit_mk { Lit_atom: len(t), Lit_pos: false };
+    };
+    let i = unset_lit(t, f, c, len(c.Clause_lits));
+    if i == len(c.Clause_lits) {
+      return Lit_mk { Lit_atom: len(t), Lit_pos: true };
+    };
+    if unset_lit(t, f, c, i) < len(c.Clause_lits) {
+      return Lit_mk { Lit_atom: len(t), Lit_pos: false };
+    };
+    Lit_mk { Lit_atom: c.Clause_lits[i].Lit_atom, Lit_pos: c.Clause_lits[i].Lit_pos }
+  \<rbrakk>\<close>
+
+(* Rust: find_unit *)
+definition "find_unit" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, Lit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>find_unit \<equiv> \<lambda>p t f. FunctionBody \<lbrakk>
+    for i in 0_usize .. len(p.Problem_clauses) {
+      let l = clause_unit(t, f, p.Problem_clauses[i]);
+      if ((l.Lit_atom) < len(t)) || (l.Lit_pos) {
+        return l;
+      }
+    };
+    Lit_mk { Lit_atom: len(t), Lit_pos: false }
+  \<rbrakk>\<close>
+
+(* Rust: first_unset *)
+definition "first_unset" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>first_unset \<equiv> \<lambda>t f. FunctionBody \<lbrakk>
+    for i in 0_usize .. len(t) {
+      if (!(t[i])) && (!(f[i])) {
+        return i;
+      }
+    };
+    len(t)
   \<rbrakk>\<close>
 
 (* Rust: merge *)
@@ -177,10 +216,21 @@ definition "finish" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ((
     }
   \<rbrakk>\<close>
 
-(* Rust: diseqs_broken *)
-definition "diseqs_broken" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (64 word) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>diseqs_broken \<equiv> \<lambda>p a m rep. FunctionBody \<lbrakk>
-    !diseqs_ok(p, a, m, * rep)
+(* Rust: false_apart *)
+definition "false_apart" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>false_apart \<equiv> \<lambda>p f rep. FunctionBody \<lbrakk>
+    for j in 0_usize .. len(p.Problem_atoms) {
+      if (f[j]) && ((rep[p.Problem_atoms[j].Atom_lhs]) == (rep[p.Problem_atoms[j].Atom_rhs])) {
+        return false;
+      }
+    };
+    true
+  \<rbrakk>\<close>
+
+(* Rust: false_joined *)
+definition "false_joined" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>false_joined \<equiv> \<lambda>p f rep. FunctionBody \<lbrakk>
+    !false_apart(p, f, * rep)
   \<rbrakk>\<close>
 
 (* Rust: theory_check *)
@@ -192,50 +242,62 @@ definition "theory_check" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarr
     finish(p, a, rep)
   \<rbrakk>\<close>
 
-(* Rust: prefix_conflict *)
-definition "prefix_conflict" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>prefix_conflict \<equiv> \<lambda>p a m. FunctionBody \<lbrakk>
+(* Rust: cc_conflict *)
+definition "cc_conflict" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>cc_conflict \<equiv> \<lambda>p t f. FunctionBody \<lbrakk>
     let mut rep = { let init_1 = init_rep(len(p.Problem_terms)); \<llangle>init_1 :: (64 word) list\<rrangle> };
-    assert_eqs(p, a, m, rep);
+    assert_eqs(p, t, len(p.Problem_atoms), rep);
     close(p, rep);
-    diseqs_broken(p, a, m, rep)
+    false_joined(p, f, rep)
   \<rbrakk>\<close>
 
 text \<open>Recursive group search: defined by iterating search_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>
 
-definition "search_rec_step" :: \<open>((Problem \<Rightarrow> (bool list) \<Rightarrow> (64 word) \<Rightarrow> ('s, Model option, 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> ((Problem \<Rightarrow> (bool list) \<Rightarrow> (64 word) \<Rightarrow> ('s, Model option, 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
-  \<open>search_rec_step \<equiv> \<lambda>rec_search. (\<lambda>p a k. FunctionBody \<lbrakk>
-    if k == len(a) {
-      if prop_holds(p, a) {
-        return theory_check(p, a);
+definition "search_rec_step" :: \<open>((Problem \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, Model option, 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> ((Problem \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, Model option, 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
+  \<open>search_rec_step \<equiv> \<lambda>rec_search. (\<lambda>p t f. FunctionBody \<lbrakk>
+    let u = find_unit(p, t, f);
+    if ((u.Lit_atom) == len(t)) && (u.Lit_pos) {
+      return None;
+    };
+    if (u.Lit_atom) < len(t) {
+      let mut t1 = { let init_1 = t; \<llangle>init_1 :: bool list\<rrangle> };
+      let mut f1 = { let init_2 = f; \<llangle>init_2 :: bool list\<rrangle> };
+      if u.Lit_pos {
+        * (t1[u.Lit_atom]) = true;
+      } else {
+        * (f1[u.Lit_atom]) = true;
+      };
+      return \<epsilon>\<open>rec_search\<close>(p, * t1, * f1);
+    };
+    if cc_conflict(p, t, f) {
+      return None;
+    };
+    let k = first_unset(t, f);
+    if k == len(t) {
+      if prop_holds(p, t) {
+        return theory_check(p, t);
       };
       return None;
     };
-    if some_clause_falsified(p, a, k) {
-      return None;
-    };
-    if ((k > 0_usize) && (a[k - 1_usize])) && prefix_conflict(p, a, k) {
-      return None;
-    };
-    let mut a1 = { let init_1 = a; \<llangle>init_1 :: bool list\<rrangle> };
-    * (a1[k]) = true;
-    let r = \<epsilon>\<open>rec_search\<close>(p, * a1, k + 1_usize);
+    let mut t1 = { let init_3 = t; \<llangle>init_3 :: bool list\<rrangle> };
+    * (t1[k]) = true;
+    let r = \<epsilon>\<open>rec_search\<close>(p, * t1, f);
     if urust_func_option_is_some(r) {
       return r;
     };
-    let mut a2 = { let init_2 = a; \<llangle>init_2 :: bool list\<rrangle> };
-    * (a2[k]) = false;
-    \<epsilon>\<open>rec_search\<close>(p, * a2, k + 1_usize)
+    let mut f2 = { let init_4 = f; \<llangle>init_4 :: bool list\<rrangle> };
+    * (f2[k]) = true;
+    \<epsilon>\<open>rec_search\<close>(p, t, * f2)
   \<rbrakk>)\<close>
 
 (* Rust: search *)
-definition "search" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (64 word) \<Rightarrow> ('s, Model option, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>search \<equiv> ((search_rec_step ^^ urust_fuel) (\<lambda>p a k. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>))\<close>
+definition "search" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, Model option, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>search \<equiv> ((search_rec_step ^^ urust_fuel) (\<lambda>p t f. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>))\<close>
 
 (* Rust: solve *)
 definition "solve" :: \<open>Problem \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>solve \<equiv> \<lambda>p. FunctionBody \<lbrakk>
-    match search(p, vec_from_elem(false, len(p.Problem_atoms)), 0_usize) {
+    match search(p, vec_from_elem(false, len(p.Problem_atoms)), vec_from_elem(false, len(p.Problem_atoms))) {
       Some(m) \<Rightarrow> {
         Answer_Sat_mk(m)
       },
