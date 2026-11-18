@@ -168,7 +168,10 @@ text \<open>The translation bounds every loop without an iteration bound and eve
   the fuel share their assumptions. The locale \<open>QFUF_heap\<close> has the parameters and assumptions of
   \<^locale>\<open>QFUF_ctx\<close> except the fuel (it repeats \<^verbatim>\<open>urust/QFUF_Locale.thy\<close> without its last
   line); each value of the fuel gives an instance of \<^locale>\<open>QFUF_ctx\<close> with the parameters of
-  \<open>QFUF_heap\<close>.\<close>
+  \<open>QFUF_heap\<close>. The abbreviation \<open>check_sat\<close> below passes to \<^verbatim>\<open>QFUF_ctx.check_sat\<close> the prisms
+  of the locale that this function takes, in order. Like the locale, this list follows the
+  implementation (\<^verbatim>\<open>tools/check-spec.sh\<close> checks its form, type checking that it is the
+  function's list); the contract is stated on the input and output types only.\<close>
 
 locale QFUF_heap =
   reference reference_types

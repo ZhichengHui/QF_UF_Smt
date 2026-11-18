@@ -30,11 +30,17 @@ of an improvement, not a reason to avoid one; never route a change around the pr
 
 - `spec/` is the specification: the meaning of the top-level theorem `QFUF_heap.check_sat_correct`
   depends on nothing else.
-- `spec/` is fixed, with one exception: the locale `QFUF_heap` in `spec/QFUF_Spec.thy` is the
-  generated locale `QFUF_ctx` of `urust/QFUF_Locale.thy` without its fuel line. When the
-  implementation uses a new type of mutable local, the generated locale gains a parameter, and
-  `QFUF_heap` is updated to match it exactly. Nothing else in `spec/` changes unless the owner
-  changes it.
+- `spec/` is fixed, with two exceptions that follow the implementation:
+  - the locale `QFUF_heap` in `spec/QFUF_Spec.thy` is the generated locale `QFUF_ctx` of
+    `urust/QFUF_Locale.thy` without its fuel line. When the implementation uses a new type of
+    mutable local, the generated locale gains a parameter, and `QFUF_heap` is updated to match it
+    exactly;
+  - each application of a generated function in `spec/` (`QFUF_ctx.check_sat update_raw_fun
+    dereference_raw_fun reference_raw_fun prism_i ... prism_k fuel`) lists, between
+    `reference_raw_fun` and `fuel`, the prisms of the locale that the function takes, in
+    increasing order. When the function takes a new prism, the list is updated to match.
+
+  Nothing else in `spec/` changes unless the owner changes it.
 - A task that needs any other change of `spec/` stops there: say why on its issue and label the
   issue `needs-owner`.
 - This includes the input range `smt_in_range`: a change of the solver must keep answering (`Sat`
@@ -43,8 +49,10 @@ of an improvement, not a reason to avoid one; never route a change around the pr
 - `spec/SMT_Types.thy` and `spec/SMT_Semantics.thy` are the same in the QF_UF_Smt and QF_BV_Smt
   repositories (`SMT_Types.thy` up to its `imports` line).
 - The front end (the `frontend` submodule) is fixed, like the specification.
-- `tools/check-spec.sh` enforces the rules on `spec/` in CI: outside the locale `QFUF_heap`,
-  `spec/` must match the manifest `tools/spec.sha256`, and the locale must match the generated one.
+- `tools/check-spec.sh` enforces the rules on `spec/` in CI: outside the locale `QFUF_heap` and the prism
+  lists, `spec/` must match the manifest `tools/spec.sha256`; the locale must match the generated
+  one, and each prism list must name prisms of the locale in increasing order (type checking does
+  the rest).
   Only the owner updates the manifest (`tools/check-spec.sh --update`).
 
 ### The verification framework
