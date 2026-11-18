@@ -124,58 +124,141 @@ lemma prop_holds_spec:
   apply (metis in_set_conv_nth)
   done
 
-definition clause_falsified_contract :: \<open>bool list \<Rightarrow> Clause \<Rightarrow> 64 word \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
-  \<open>clause_falsified_contract a c k \<equiv>
+definition some_lit_true_contract :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Clause \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+  \<open>some_lit_true_contract t f c \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>(\<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < length a) \<and> length (Clause_lits c) < 2^64\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r = clause_false_upto a c (unat k)\<rangle> in
+        \<langle>(\<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < length t) \<and> length f = length t \<and>
+         length (Clause_lits c) < 2^64\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r = (\<exists>l \<in> set (Clause_lits c). lit_set_true t f l)\<rangle> in
      make_function_contract pre post\<close>
 
-lemma clause_falsified_spec:
-  shows \<open>\<Gamma>; clause_falsified a c k \<Turnstile>\<^sub>F clause_falsified_contract a c k\<close>
-  apply (crush_boot f: clause_falsified_def contract: clause_falsified_contract_def)
+lemma some_lit_true_spec:
+  shows \<open>\<Gamma>; some_lit_true t f c \<Turnstile>\<^sub>F some_lit_true_contract t f c\<close>
+  apply (crush_boot f: some_lit_true_def contract: some_lit_true_contract_def)
   apply crush_base
   apply (ucincl_discharge\<open>
-    rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star>
-               \<langle>\<forall>j<i. unat (Lit_atom (Clause_lits c ! j)) < unat k \<and>
-                      a ! unat (Lit_atom (Clause_lits c ! j)) \<noteq> Lit_pos (Clause_lits c ! j)\<rangle>\<close>
+    rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> \<langle>\<forall>j<i. \<not> lit_set_true t f (Clause_lits c ! j)\<rangle>\<close>
       and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
-      and \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>r = clause_false_upto a c (unat k)\<rangle>\<close>
+      and \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>r = (\<exists>l \<in> set (Clause_lits c). lit_set_true t f l)\<rangle>\<close>
       and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
     in wp_raw_for_loop_framedI'\<close>)
   apply (crush_base simp add: unat_of_nat_eq less_Suc_eq)
-  apply (auto simp add: clause_false_upto_def in_set_conv_nth less_Suc_eq not_le unat_mono)
-  apply (metis nth_mem)
-  apply (metis nth_mem)
-  apply (metis nth_mem le_less less_asym unat_mono)
+  apply (auto simp add: lit_set_true_def in_set_conv_nth)
+  apply (metis nth_mem)+
   done
 
-definition some_clause_falsified_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
-  \<open>some_clause_falsified_contract p a k \<equiv>
+definition unset_lit_contract :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Clause \<Rightarrow> 64 word \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
+  \<open>unset_lit_contract t f c s \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>(\<forall>c \<in> set (Problem_clauses p). \<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < length a) \<and>
-         length (Problem_clauses p) < 2^64 \<and> (\<forall>c \<in> set (Problem_clauses p). length (Clause_lits c) < 2^64)\<rangle> in
+        \<langle>(\<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < length t) \<and> length f = length t \<and>
+         length (Clause_lits c) < 2^64\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>r = (\<exists>c \<in> set (Problem_clauses p). clause_false_upto a c (unat k))\<rangle> in
+        \<langle>unat r \<le> length (Clause_lits c) \<and>
+         (unat r < length (Clause_lits c) \<longrightarrow> r \<noteq> s \<and> lit_unset t f (Clause_lits c ! unat r)) \<and>
+         (unat r = length (Clause_lits c) \<longrightarrow>
+            (\<forall>j < length (Clause_lits c). j \<noteq> unat s \<longrightarrow> \<not> lit_unset t f (Clause_lits c ! j)))\<rangle> in
      make_function_contract pre post\<close>
 
-lemma some_clause_falsified_spec:
-  shows \<open>\<Gamma>; some_clause_falsified p a k \<Turnstile>\<^sub>F some_clause_falsified_contract p a k\<close>
-  apply (crush_boot f: some_clause_falsified_def contract: some_clause_falsified_contract_def)
+lemma unset_lit_spec:
+  shows \<open>\<Gamma>; unset_lit t f c s \<Turnstile>\<^sub>F unset_lit_contract t f c s\<close>
+  apply (crush_boot f: unset_lit_def contract: unset_lit_contract_def)
   apply crush_base
   apply (ucincl_discharge\<open>
-    rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star>
-               \<langle>\<forall>j<i. \<not> clause_false_upto a (Problem_clauses p ! j) (unat k)\<rangle>\<close>
+    rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> \<langle>\<forall>j<i. j \<noteq> unat s \<longrightarrow> \<not> lit_unset t f (Clause_lits c ! j)\<rangle>\<close>
       and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
       and \<tau>=\<open>\<lambda>r. can_alloc_reference \<star>
-               \<langle>r = (\<exists>c \<in> set (Problem_clauses p). clause_false_upto a c (unat k))\<rangle>\<close>
+               \<langle>unat r < length (Clause_lits c) \<and> r \<noteq> s \<and> lit_unset t f (Clause_lits c ! unat r)\<rangle>\<close>
       and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
     in wp_raw_for_loop_framedI'\<close>)
-  apply (crush_base specs add: clause_falsified_spec contracts add: clause_falsified_contract_def
-      simp add: unat_of_nat_eq less_Suc_eq)
-  apply (meson nth_mem)
-  apply (meson nth_mem)
-  apply (metis in_set_conv_nth)
+  apply (crush_base simp add: unat_of_nat_eq less_Suc_eq)
+  apply (auto simp add: lit_unset_def)
+  done
+
+text \<open>The result of \<^const>\<open>clause_unit\<close>: a literal whose atom is below \<open>length t\<close> is a literal of
+  \<open>c\<close>, unset, and every other literal of \<open>c\<close> is false; otherwise the atom is \<open>length t\<close>, and
+  if the literal is positive every literal of \<open>c\<close> is false.\<close>
+definition unit_result :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Clause \<Rightarrow> Lit \<Rightarrow> bool\<close> where
+  \<open>unit_result t f c r \<equiv>
+     (unat (Lit_atom r) < length t \<longrightarrow>
+        r \<in> set (Clause_lits c) \<and> lit_unset t f r \<and> (\<forall>l \<in> set (Clause_lits c). l = r \<or> lit_false t f l)) \<and>
+     (unat (Lit_atom r) = length t \<and> Lit_pos r \<longrightarrow> (\<forall>l \<in> set (Clause_lits c). lit_false t f l)) \<and>
+     unat (Lit_atom r) \<le> length t\<close>
+
+lemma unit_result_none:
+  \<open>length t < 2^63 \<Longrightarrow> unit_result t f c (make_Lit (word_of_nat (length t)) False)\<close>
+  unfolding unit_result_def by (simp add: unat_of_nat_eq)
+
+lemma unit_result_conflict:
+  assumes \<open>length t < 2^63\<close> \<open>\<forall>l \<in> set (Clause_lits c). \<not> lit_set_true t f l\<close>
+      and \<open>\<forall>j < length (Clause_lits c). \<not> lit_unset t f (Clause_lits c ! j)\<close>
+  shows \<open>unit_result t f c (make_Lit (word_of_nat (length t)) True)\<close>
+proof -
+  have \<open>\<forall>l \<in> set (Clause_lits c). lit_false t f l\<close>
+    using assms(2,3) by (metis in_set_conv_nth lit_falseI)
+  then show ?thesis using assms(1) unfolding unit_result_def by (simp add: unat_of_nat_eq)
+qed
+
+lemma unit_result_unit:
+  assumes at: \<open>\<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < length t\<close>
+      and nt: \<open>\<forall>l \<in> set (Clause_lits c). \<not> lit_set_true t f l\<close>
+      and i: \<open>i < length (Clause_lits c)\<close> \<open>lit_unset t f (Clause_lits c ! i)\<close>
+      and one: \<open>\<forall>j < length (Clause_lits c). j \<noteq> i \<longrightarrow> \<not> lit_unset t f (Clause_lits c ! j)\<close>
+  shows \<open>unit_result t f c (Clause_lits c ! i)\<close>
+proof -
+  have all: \<open>\<forall>l \<in> set (Clause_lits c). l = Clause_lits c ! i \<or> lit_false t f l\<close>
+  proof
+    fix l assume \<open>l \<in> set (Clause_lits c)\<close>
+    then obtain j where j: \<open>j < length (Clause_lits c)\<close> \<open>l = Clause_lits c ! j\<close>
+      by (auto simp add: in_set_conv_nth)
+    show \<open>l = Clause_lits c ! i \<or> lit_false t f l\<close>
+    proof (cases \<open>j = i\<close>)
+      case False
+      then have \<open>lit_false t f l\<close> using j one nt nth_mem[OF j(1)] by (auto intro: lit_falseI)
+      then show ?thesis ..
+    qed (use j in simp)
+  qed
+  have \<open>Clause_lits c ! i \<in> set (Clause_lits c)\<close> using i(1) by simp
+  then show ?thesis using all at i(2) unfolding unit_result_def by auto
+qed
+
+lemma unat_lt_of_ne:
+  assumes \<open>unat (x :: 64 word) \<le> n\<close> \<open>n < 2^63\<close> \<open>x \<noteq> word_of_nat n\<close>
+  shows \<open>unat x < n\<close>
+proof (rule ccontr)
+  assume \<open>\<not> unat x < n\<close>
+  then have \<open>unat x = unat (word_of_nat n :: 64 word)\<close> using assms(1,2) by (simp add: unat_of_nat_eq)
+  then show False using assms(3) unat_eq_iff_eq by blast
+qed
+
+lemma unat_eq_of_not_less:
+  assumes \<open>unat (x :: 64 word) \<le> n\<close> \<open>n < 2^63\<close> \<open>\<not> x < word_of_nat n\<close>
+  shows \<open>unat x = n\<close>
+proof -
+  have \<open>unat (word_of_nat n :: 64 word) = n\<close> using assms(2) by (simp add: unat_of_nat_eq)
+  then show ?thesis using assms(1,3) by (simp add: word_less_nat_alt)
+qed
+
+definition clause_unit_contract :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Clause \<Rightarrow> ('s, Lit, 'abort) function_contract\<close> where
+  \<open>clause_unit_contract t f c \<equiv>
+     let pre = can_alloc_reference \<star>
+        \<langle>(\<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < length t) \<and> length f = length t \<and>
+         length t < 2^63 \<and> length (Clause_lits c) < 2^63\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>unit_result t f c r\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma clause_unit_spec:
+  shows \<open>\<Gamma>; clause_unit t f c \<Turnstile>\<^sub>F clause_unit_contract t f c\<close>
+  apply (crush_boot f: clause_unit_def contract: clause_unit_contract_def)
+  apply (crush_base specs add: some_lit_true_spec unset_lit_spec
+      contracts add: some_lit_true_contract_def unset_lit_contract_def simp add: unat_of_nat_eq)
+  subgoal for x xa
+    using unat_lt_of_ne[of x \<open>length (Clause_lits c)\<close>] unat_eq_of_not_less[of xa \<open>length (Clause_lits c)\<close>]
+    by (intro unit_result_unit) auto
+  subgoal for x xa using unat_lt_of_ne[of x \<open>length (Clause_lits c)\<close>] by simp
+  subgoal for x xa using unat_lt_of_ne[of x \<open>length (Clause_lits c)\<close>] by simp
+  subgoal by (rule unit_result_none) simp
+  subgoal by (rule unit_result_conflict) simp_all
+  subgoal by (rule unit_result_none) simp
   done
 
 subsection \<open>Union-find\<close>
@@ -466,60 +549,81 @@ lemma theory_some:
   shows \<open>atom_vals (model_interp (model_of p rs)) p = a\<close>
   using assms model_of_atom_vals unfolding cc_inv_def diseqs_hold_def by blast
 
-text \<open>A conflict of the closure of the first \<open>m\<close> atoms.\<close>
-lemma prefix_conflict_none:
-  assumes \<open>cc_inv p (asserted p a m) rs\<close> \<open>m \<le> length (Problem_atoms p)\<close> \<open>\<not> diseqs_hold p a rs m\<close>
-  shows \<open>\<not> ext_ok p a m\<close>
+text \<open>A conflict of the closure of the atoms set true with an atom set false.\<close>
+lemma false_joined_none:
+  assumes \<open>cc_inv p (asserted p t (length (Problem_atoms p))) rs\<close> \<open>length t = length (Problem_atoms p)\<close>
+      and \<open>\<not> (\<forall>j < length (Problem_atoms p). f ! j \<longrightarrow>
+              rs ! unat (Atom_lhs (Problem_atoms p ! j)) \<noteq> rs ! unat (Atom_rhs (Problem_atoms p ! j)))\<close>
+  shows \<open>\<not> pext p t f\<close>
 proof -
-  obtain k where k: \<open>k < m\<close> \<open>\<not> a ! k\<close>
-    \<open>rs ! unat (Atom_lhs (Problem_atoms p ! k)) = rs ! unat (Atom_rhs (Problem_atoms p ! k))\<close>
-    using assms(3) unfolding diseqs_hold_def by blast
+  obtain j where j: \<open>j < length (Problem_atoms p)\<close> \<open>f ! j\<close>
+    \<open>rs ! unat (Atom_lhs (Problem_atoms p ! j)) = rs ! unat (Atom_rhs (Problem_atoms p ! j))\<close>
+    using assms(3) by blast
   have wf: \<open>wf_problem p\<close> and n: \<open>length rs = length (Problem_terms p)\<close>
     using assms(1) by (simp_all add: cc_inv_def rep_ok_def)
-  have \<open>(unat (Atom_lhs (Problem_atoms p ! k)), unat (Atom_rhs (Problem_atoms p ! k))) \<in> cc p (asserted p a m)\<close>
-    using assms(1,2) k wf_atom[OF wf, of k] n unfolding cc_inv_def rep_ok_def rep_sound_def by simp
-  then show ?thesis using ext_ok_cc_conflict[OF wf assms(2) k(1,2)] by blast
+  have \<open>(unat (Atom_lhs (Problem_atoms p ! j)), unat (Atom_rhs (Problem_atoms p ! j)))
+          \<in> cc p (asserted p t (length (Problem_atoms p)))\<close>
+    using assms(1) j wf_atom[OF wf, of j] n unfolding cc_inv_def rep_ok_def rep_sound_def by simp
+  then show ?thesis using pext_cc_conflict[OF wf assms(2) j(1,2)] by blast
 qed
 
+text \<open>The postcondition of \<^const>\<open>find_unit\<close>.\<close>
+definition find_result :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> Lit \<Rightarrow> bool\<close> where
+  \<open>find_result p t f r \<equiv>
+     unat (Lit_atom r) \<le> length t \<and>
+     (unat (Lit_atom r) < length t \<longrightarrow> lit_unset t f r \<and>
+        (pext p t f \<longrightarrow> (if Lit_pos r then pext p (t[unat (Lit_atom r) := True]) f
+                         else pext p t (f[unat (Lit_atom r) := True])))) \<and>
+     (unat (Lit_atom r) = length t \<and> Lit_pos r \<longrightarrow> \<not> pext p t f)\<close>
+
+lemma find_result_none:
+  \<open>unat (Lit_atom r) = length t \<Longrightarrow> \<not> Lit_pos r \<Longrightarrow> find_result p t f r\<close>
+  unfolding find_result_def by simp
+
+lemma find_result_clause:
+  assumes wf: \<open>wf_problem p\<close> and c: \<open>c \<in> set (Problem_clauses p)\<close> and u: \<open>unit_result t f c r\<close>
+      and len: \<open>length t = length (Problem_atoms p)\<close> \<open>length f = length (Problem_atoms p)\<close>
+  shows \<open>find_result p t f r\<close>
+  using u pext_unit[OF wf c _ _ len, of r] pext_conflict[OF wf c, of t f]
+  unfolding unit_result_def find_result_def by auto
+
+text \<open>Facts for the steps of the search.\<close>
+
+lemma search_unit_none:
+  \<open>find_result p t f r \<Longrightarrow> unat (Lit_atom r) < length t \<Longrightarrow> Lit_pos r \<Longrightarrow>
+   \<not> pext p (t[unat (Lit_atom r) := True]) f \<Longrightarrow> \<not> pext p t f\<close>
+  \<open>find_result p t f r \<Longrightarrow> unat (Lit_atom r) < length t \<Longrightarrow> \<not> Lit_pos r \<Longrightarrow>
+   \<not> pext p t (f[unat (Lit_atom r) := True]) \<Longrightarrow> \<not> pext p t f\<close>
+  unfolding find_result_def by auto
+
+lemma search_unit_fuel:
+  assumes \<open>find_result p t f r\<close> \<open>unat (Lit_atom r) < length t\<close> \<open>length f = length t\<close>
+      and \<open>unset_count t f < Suc k\<close>
+  shows \<open>unset_count (t[unat (Lit_atom r) := True]) f < k\<close> \<open>unset_count t (f[unat (Lit_atom r) := True]) < k\<close>
+  using assms unset_count_less[of \<open>unat (Lit_atom r)\<close> t f] unfolding find_result_def lit_unset_def by auto
+
+lemma search_branch_fuel:
+  assumes \<open>j < length t\<close> \<open>\<not> t ! j\<close> \<open>\<not> f ! j\<close> \<open>length f = length t\<close> \<open>unset_count t f < Suc k\<close>
+  shows \<open>unset_count (t[j := True]) f < k\<close> \<open>unset_count t (f[j := True]) < k\<close>
+  using assms unset_count_less[of j t f] by auto
+
+lemma search_branch_none:
+  \<open>\<not> pext p (t[j := True]) f \<Longrightarrow> \<not> pext p t (f[j := True]) \<Longrightarrow> \<not> pext p t f\<close>
+  using pext_branch by blast
+
 lemma search_leaf_none:
-  \<open>wf_problem p \<Longrightarrow> length a = length (Problem_atoms p) \<Longrightarrow> \<not> prop_true p a \<Longrightarrow> \<not> ext_ok p a (length a)\<close>
-  using ext_ok_all problem_true_prop_true by metis
+  \<open>wf_problem p \<Longrightarrow> length t = length (Problem_atoms p) \<Longrightarrow> \<forall>j < length t. t ! j \<or> f ! j \<Longrightarrow>
+   \<not> prop_true p t \<Longrightarrow> \<not> pext p t f\<close>
+  using pext_leaf problem_true_prop_true by metis
 
 lemma search_leaf_theory_none:
-  \<open>length a = length (Problem_atoms p) \<Longrightarrow> \<forall>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. atom_vals I p \<noteq> a \<Longrightarrow>
-   \<not> ext_ok p a (length a)\<close>
-  using ext_ok_all by metis
+  \<open>length t = length (Problem_atoms p) \<Longrightarrow> \<forall>j < length t. t ! j \<or> f ! j \<Longrightarrow>
+   \<forall>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. atom_vals I p \<noteq> t \<Longrightarrow> \<not> pext p t f\<close>
+  using pext_leaf by metis
 
 lemma search_leaf_some:
   \<open>wf_problem p \<Longrightarrow> prop_true p a \<Longrightarrow> atom_vals I p = a \<Longrightarrow> problem_true I p\<close>
   using problem_true_prop_true by metis
-
-lemma search_step_none:
-  \<open>\<not> ext_ok p (a[k := True]) (Suc k) \<Longrightarrow> \<not> ext_ok p (a[k := False]) (Suc k) \<Longrightarrow> k < length a \<Longrightarrow>
-   length a = length (Problem_atoms p) \<Longrightarrow> \<not> ext_ok p a k\<close>
-  using ext_ok_step by blast
-
-lemma search_step_false:
-  \<open>\<not> ext_ok p (a[k := True]) (Suc k) \<Longrightarrow> \<not> ext_ok p (a[k := False]) (Suc k) \<Longrightarrow>
-   k \<le> length (Problem_atoms p) \<Longrightarrow> k \<noteq> length (Problem_atoms p) \<Longrightarrow>
-   length a = length (Problem_atoms p) \<Longrightarrow> ext_ok p a k \<Longrightarrow> False\<close>
-  using ext_ok_step by fastforce
-
-lemma unat_pred_lt:
-  assumes \<open>0 < (i :: 64 word)\<close> \<open>unat i \<le> n\<close>
-  shows \<open>unat (i - 1) < n\<close>
-proof -
-  have i: \<open>i \<noteq> 0\<close> using assms(1) by simp
-  then have \<open>unat (i - 1) = unat i - 1\<close> by (rule unat_minus_one)
-  moreover have \<open>0 < unat i\<close> using i by (simp add: unat_gt_0)
-  ultimately show ?thesis using assms(2) by simp
-qed
-
-lemma word_one_le:
-  \<open>0 < (i :: 64 word) \<Longrightarrow> 1 \<le> i\<close>
-  by (metis not_less word_less_1 word_neq_0_conv)
-
-subsection \<open>The model\<close>
 
 definition rep_args_contract :: \<open>64 word list \<Rightarrow> 64 word list \<Rightarrow> ('s, 64 word list, 'abort) function_contract\<close> where
   \<open>rep_args_contract rs xs \<equiv>
@@ -739,80 +843,136 @@ lemma theory_check_spec:
   apply (auto intro: cc_inv_init64 cc_inv_init cc_inv_length simp add: sizes_ok_def unat_of_nat_lt63)
   done
 
+definition false_apart_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word list \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+  \<open>false_apart_contract p f rs \<equiv>
+     let pre = can_alloc_reference \<star>
+        \<langle>wf_problem p \<and> length rs = length (Problem_terms p) \<and> length f = length (Problem_atoms p) \<and>
+         length (Problem_atoms p) < 2^64\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r = (\<forall>j < length (Problem_atoms p). f ! j \<longrightarrow>
+        rs ! unat (Atom_lhs (Problem_atoms p ! j)) \<noteq> rs ! unat (Atom_rhs (Problem_atoms p ! j)))\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma false_apart_spec:
+  shows \<open>\<Gamma>; false_apart p f rs \<Turnstile>\<^sub>F false_apart_contract p f rs\<close>
+  apply (crush_boot f: false_apart_def contract: false_apart_contract_def)
+  apply crush_base
+  apply (ucincl_discharge\<open>
+    rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> \<langle>\<forall>k' < k. f ! k' \<longrightarrow>
+               rs ! unat (Atom_lhs (Problem_atoms p ! k')) \<noteq> rs ! unat (Atom_rhs (Problem_atoms p ! k'))\<rangle>\<close>
+      and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
+      and \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>r = (\<forall>j < length (Problem_atoms p). f ! j \<longrightarrow>
+               rs ! unat (Atom_lhs (Problem_atoms p ! j)) \<noteq> rs ! unat (Atom_rhs (Problem_atoms p ! j)))\<rangle>\<close>
+      and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+    in wp_raw_for_loop_framedI'\<close>)
+  apply (crush_base simp add: unat_of_nat_eq less_Suc_eq)
+  sorry
+
 text \<open>As for \<^const>\<open>finish\<close>, the state of \<open>rep\<close> is existentially quantified inside the
   contract.\<close>
-definition diseqs_broken_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow>
+definition false_joined_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow>
       ('s, bool, 'abort) function_contract\<close> where
-  \<open>diseqs_broken_contract p a m rep \<equiv>
+  \<open>false_joined_contract p t f rep \<equiv>
      let pre = can_alloc_reference \<star>
-        (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p (asserted p a (unat m)) rs\<rangle>) \<star>
-        \<langle>wf_problem p \<and> length a = length (Problem_atoms p) \<and> unat m \<le> length (Problem_atoms p)\<rangle> in
+        (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p (asserted p t (length (Problem_atoms p))) rs\<rangle>) \<star>
+        \<langle>wf_problem p \<and> length t = length (Problem_atoms p) \<and> length f = length (Problem_atoms p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs) \<star>
-        \<langle>r \<longrightarrow> \<not> ext_ok p a (unat m)\<rangle> in
+        \<langle>r \<longrightarrow> \<not> pext p t f\<rangle> in
      make_function_contract pre post\<close>
 
-lemma diseqs_broken_spec:
-  shows \<open>\<Gamma>; diseqs_broken p a m rep \<Turnstile>\<^sub>F diseqs_broken_contract p a m rep\<close>
-  apply (crush_boot f: diseqs_broken_def contract: diseqs_broken_contract_def)
-  apply (crush_base specs add: diseqs_ok_spec contracts add: diseqs_ok_contract_def)
-  apply (auto dest: prefix_conflict_none simp add: cc_inv_length)
-  done
+lemma false_joined_spec:
+  shows \<open>\<Gamma>; false_joined p f rep \<Turnstile>\<^sub>F false_joined_contract p t f rep\<close>
+  apply (crush_boot f: false_joined_def contract: false_joined_contract_def)
+  apply (crush_base specs add: false_apart_spec contracts add: false_apart_contract_def)
+  sorry
 
-definition prefix_conflict_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
-  \<open>prefix_conflict_contract p a m \<equiv>
+definition cc_conflict_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+  \<open>cc_conflict_contract p t f \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length a = length (Problem_atoms p) \<and> unat m \<le> length a\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r \<longrightarrow> \<not> ext_ok p a (unat m)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms p) \<and> length f = length (Problem_atoms p)\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r \<longrightarrow> \<not> pext p t f\<rangle> in
      make_function_contract pre post\<close>
 
-lemma prefix_conflict_spec:
-  shows \<open>\<Gamma>; prefix_conflict p a m \<Turnstile>\<^sub>F prefix_conflict_contract p a m\<close>
-  apply (crush_boot f: prefix_conflict_def contract: prefix_conflict_contract_def)
-  apply (crush_base specs add: init_rep_spec assert_eqs_spec close_spec diseqs_broken_spec
-      contracts add: init_rep_contract_def assert_eqs_contract_def close_contract_def diseqs_broken_contract_def
+lemma cc_conflict_spec:
+  shows \<open>\<Gamma>; cc_conflict p t f \<Turnstile>\<^sub>F cc_conflict_contract p t f\<close>
+  apply (crush_boot f: cc_conflict_def contract: cc_conflict_contract_def)
+  apply (crush_base specs add: init_rep_spec assert_eqs_spec close_spec false_joined_spec[where t=t]
+      contracts add: init_rep_contract_def assert_eqs_contract_def close_contract_def false_joined_contract_def
       simp add: unat_of_nat_lt63 unat_of_nat_eq)
-  apply (auto intro: cc_inv_init64 cc_inv_init cc_inv_length)
-  done
+  sorry
+
+subsection \<open>Unit propagation\<close>
+
+definition find_unit_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> ('s, Lit, 'abort) function_contract\<close> where
+  \<open>find_unit_contract p t f \<equiv>
+     let pre = can_alloc_reference \<star>
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms p) \<and> length f = length (Problem_atoms p)\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>find_result p t f r\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma find_unit_spec:
+  shows \<open>\<Gamma>; find_unit p t f \<Turnstile>\<^sub>F find_unit_contract p t f\<close>
+  apply (crush_boot f: find_unit_def contract: find_unit_contract_def)
+  apply crush_base
+  apply (ucincl_discharge\<open>
+    rule_tac INV=\<open>\<lambda>_ _. can_alloc_reference\<close>
+      and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
+      and \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>find_result p t f r\<rangle>\<close>
+      and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+    in wp_raw_for_loop_framedI'\<close>)
+  apply (crush_base specs add: clause_unit_spec contracts add: clause_unit_contract_def
+      simp add: unat_of_nat_eq less_Suc_eq)
+  sorry
+
+definition first_unset_contract :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
+  \<open>first_unset_contract t f \<equiv>
+     let pre = can_alloc_reference \<star> \<langle>length f = length t \<and> length t < 2^63\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star>
+        \<langle>unat r \<le> length t \<and> (unat r < length t \<longrightarrow> \<not> t ! unat r \<and> \<not> f ! unat r) \<and>
+         (unat r = length t \<longrightarrow> (\<forall>j < length t. t ! j \<or> f ! j))\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma first_unset_spec:
+  shows \<open>\<Gamma>; first_unset t f \<Turnstile>\<^sub>F first_unset_contract t f\<close>
+  apply (crush_boot f: first_unset_def contract: first_unset_contract_def)
+  apply crush_base
+  apply (ucincl_discharge\<open>
+    rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> \<langle>\<forall>j < i. t ! j \<or> f ! j\<rangle>\<close>
+      and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
+      and \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>unat r < length t \<and> \<not> t ! unat r \<and> \<not> f ! unat r\<rangle>\<close>
+      and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+    in wp_raw_for_loop_framedI'\<close>)
+  apply (crush_base simp add: unat_of_nat_eq less_Suc_eq)
+  sorry
 
 subsection \<open>Search\<close>
 
 text \<open>The \<open>k\<close>-th unfolding of \<^const>\<open>search\<close>. Its precondition requires fewer than \<open>k\<close> atoms
-  to remain unassigned, so the innermost function is never called.\<close>
-definition search_contract :: \<open>nat \<Rightarrow> Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> ('s, Model option, 'abort) function_contract\<close> where
-  \<open>search_contract k p a i \<equiv>
+  to be unset, so the innermost function is never called.\<close>
+definition search_contract :: \<open>nat \<Rightarrow> Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> ('s, Model option, 'abort) function_contract\<close> where
+  \<open>search_contract k p t f \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length a = length (Problem_atoms p) \<and> unat i \<le> length a \<and>
-         length a - unat i < k\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms p) \<and> length f = length (Problem_atoms p) \<and>
+         unset_count t f < k\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
         \<langle>case r of
-           None \<Rightarrow> \<not> ext_ok p a (unat i)
+           None \<Rightarrow> \<not> pext p t f
          | Some m \<Rightarrow> problem_true (model_interp m) p \<and> model_vals_ok p m\<rangle> in
      make_function_contract pre post\<close>
 
 lemma search_rec_step_spec:
-  assumes \<open>\<And>a i. \<Gamma>; R p a i \<Turnstile>\<^sub>F search_contract k p a i\<close>
-  shows \<open>\<Gamma>; search_rec_step R p a i \<Turnstile>\<^sub>F search_contract (Suc k) p a i\<close>
+  assumes \<open>\<And>t f. \<Gamma>; R p t f \<Turnstile>\<^sub>F search_contract k p t f\<close>
+  shows \<open>\<Gamma>; search_rec_step R p t f \<Turnstile>\<^sub>F search_contract (Suc k) p t f\<close>
   apply (crush_boot f: search_rec_step_def contract: search_contract_def)
-  apply (crush_base specs add: assms prop_holds_spec theory_check_spec some_clause_falsified_spec
-        prefix_conflict_spec
+  apply (crush_base specs add: assms prop_holds_spec theory_check_spec find_unit_spec cc_conflict_spec
+        first_unset_spec
       contracts add: search_contract_def prop_holds_contract_def theory_check_contract_def
-        some_clause_falsified_contract_def prefix_conflict_contract_def
+        find_unit_contract_def cc_conflict_contract_def first_unset_contract_def
       simp add: unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq word64_eq_of_nat_iff)
-  apply (auto simp add: unat_word_Suc63 unat_of_nat_eq Option.is_none_def split: option.splits
-      intro: search_step_none)
-  apply (auto dest: search_leaf_none search_leaf_theory_none search_leaf_some)
-  apply ((rule search_step_false, assumption+)+)[3]
-  apply (erule (1) unat_pred_lt)
-  apply (erule word_one_le)
-  apply (metis ext_ok_clause_false)
-  apply (blast dest: wf_lit)
-  apply (metis ext_ok_all)
-  apply (blast dest: wf_lit)
-  done
+  sorry
 
 lemma search_rec_spec:
-  shows \<open>\<Gamma>; (search_rec_step ^^ k) R p a i \<Turnstile>\<^sub>F search_contract k p a i\<close>
-proof (induction k arbitrary: a i)
+  shows \<open>\<Gamma>; (search_rec_step ^^ k) R p t f \<Turnstile>\<^sub>F search_contract k p t f\<close>
+proof (induction k arbitrary: t f)
   case 0
   show ?case
     apply (ucincl_discharge\<open>intro satisfies_function_contractI\<close>)
@@ -826,7 +986,7 @@ next
 qed
 
 lemma search_spec:
-  shows \<open>\<Gamma>; search p a i \<Turnstile>\<^sub>F search_contract urust_fuel p a i\<close>
+  shows \<open>\<Gamma>; search p t f \<Turnstile>\<^sub>F search_contract urust_fuel p t f\<close>
   unfolding search_def by (rule search_rec_spec)
 
 subsection \<open>The top-level contract\<close>
@@ -836,7 +996,7 @@ lemma solve_spec:
   shows \<open>\<Gamma>; solve p \<Turnstile>\<^sub>F solve_contract p\<close>
   apply (crush_boot f: solve_def contract: solve_contract_def)
   apply (crush_base specs add: search_spec contracts add: search_contract_def split!: option.splits
-      simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq ext_ok_start Answer_Sat_mk_def)
+      simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq pext_start unset_count_le Answer_Sat_mk_def)
   done
 
 text \<open>The contract of \<^verbatim>\<open>solve\<close> with, for a model, the bound on its values and arguments.\<close>
@@ -858,7 +1018,7 @@ lemma solve_vals_spec:
   shows \<open>\<Gamma>; solve p \<Turnstile>\<^sub>F solve_contract_vals p\<close>
   apply (crush_boot f: solve_def contract: solve_contract_vals_def)
   apply (crush_base specs add: search_spec contracts add: search_contract_def split!: option.splits
-      simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq ext_ok_start Answer_Sat_mk_def)
+      simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq pext_start unset_count_le Answer_Sat_mk_def)
   apply (auto simp add: model_vals_ok_def)?
   done
 

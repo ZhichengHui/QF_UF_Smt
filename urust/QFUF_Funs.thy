@@ -31,37 +31,41 @@ definition "prop_holds" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow
     true
   \<rbrakk>\<close>
 
-(* Rust: unset_lit *)
-definition "unset_lit" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightarrow> Clause \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>unset_lit \<equiv> \<lambda>t f c. FunctionBody \<lbrakk>
+(* Rust: some_lit_true *)
+definition "some_lit_true" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightarrow> Clause \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>some_lit_true \<equiv> \<lambda>t f c. FunctionBody \<lbrakk>
     for i in 0_usize .. len(c.Clause_lits) {
-      if (!(t[c.Clause_lits[i].Lit_atom])) && (!(f[c.Clause_lits[i].Lit_atom])) {
+      if ((c.Clause_lits[i].Lit_pos) && (t[c.Clause_lits[i].Lit_atom])) || ((!(c.Clause_lits[i].Lit_pos)) && (f[c.Clause_lits[i].Lit_atom])) {
+        return true;
+      }
+    };
+    false
+  \<rbrakk>\<close>
+
+(* Rust: unset_lit *)
+definition "unset_lit" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightarrow> Clause \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>unset_lit \<equiv> \<lambda>t f c skip_v. FunctionBody \<lbrakk>
+    for i in 0_usize .. len(c.Clause_lits) {
+      if ((i != skip_v) && (!(t[c.Clause_lits[i].Lit_atom]))) && (!(f[c.Clause_lits[i].Lit_atom])) {
         return i;
       }
     };
-    0_usize
+    len(c.Clause_lits)
   \<rbrakk>\<close>
 
 (* Rust: clause_unit *)
 definition "clause_unit" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightarrow> Clause \<Rightarrow> ('s, Lit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>clause_unit \<equiv> \<lambda>t f c. FunctionBody \<lbrakk>
-    let mut one = false;
-    for i in 0_usize .. len(c.Clause_lits) {
-      let x = c.Clause_lits[i].Lit_atom;
-      if ((c.Clause_lits[i].Lit_pos) && (t[x])) || ((!(c.Clause_lits[i].Lit_pos)) && (f[x])) {
-        return Lit_mk { Lit_atom: len(t), Lit_pos: false };
-      };
-      if (!(t[x])) && (!(f[x])) {
-        if * one {
-          return Lit_mk { Lit_atom: len(t), Lit_pos: false };
-        };
-        * one = true;
-      }
+    if some_lit_true(t, f, c) {
+      return Lit_mk { Lit_atom: len(t), Lit_pos: false };
     };
-    if !(* one) {
+    let i = unset_lit(t, f, c, len(c.Clause_lits));
+    if i == len(c.Clause_lits) {
       return Lit_mk { Lit_atom: len(t), Lit_pos: true };
     };
-    let i = unset_lit(t, f, c);
+    if unset_lit(t, f, c, i) < len(c.Clause_lits) {
+      return Lit_mk { Lit_atom: len(t), Lit_pos: false };
+    };
     Lit_mk { Lit_atom: c.Clause_lits[i].Lit_atom, Lit_pos: c.Clause_lits[i].Lit_pos }
   \<rbrakk>\<close>
 
@@ -212,15 +216,21 @@ definition "finish" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ((
     }
   \<rbrakk>\<close>
 
+(* Rust: false_apart *)
+definition "false_apart" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>false_apart \<equiv> \<lambda>p f rep. FunctionBody \<lbrakk>
+    for j in 0_usize .. len(p.Problem_atoms) {
+      if (f[j]) && ((rep[p.Problem_atoms[j].Atom_lhs]) == (rep[p.Problem_atoms[j].Atom_rhs])) {
+        return false;
+      }
+    };
+    true
+  \<rbrakk>\<close>
+
 (* Rust: false_joined *)
 definition "false_joined" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>false_joined \<equiv> \<lambda>p f rep. FunctionBody \<lbrakk>
-    for j in 0_usize .. len(p.Problem_atoms) {
-      if (f[j]) && (((* rep)[p.Problem_atoms[j].Atom_lhs]) == ((* rep)[p.Problem_atoms[j].Atom_rhs])) {
-        return true;
-      }
-    };
-    false
+    !false_apart(p, f, * rep)
   \<rbrakk>\<close>
 
 (* Rust: theory_check *)

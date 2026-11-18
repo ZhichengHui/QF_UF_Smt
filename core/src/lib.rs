@@ -76,14 +76,25 @@ fn prop_holds(p: &Problem, a: &[bool]) -> bool {
     true
 }
 
-/// The index of the first literal of `c` whose atom is unset under `t`, `f`; 0 if there is none.
-fn unset_lit(t: &[bool], f: &[bool], c: &Clause) -> usize {
+/// Is some literal of `c` true under the partial assignment `t`, `f`?
+fn some_lit_true(t: &[bool], f: &[bool], c: &Clause) -> bool {
     for i in 0..c.lits.len() {
-        if !t[c.lits[i].atom] && !f[c.lits[i].atom] {
+        if (c.lits[i].pos && t[c.lits[i].atom]) || (!c.lits[i].pos && f[c.lits[i].atom]) {
+            return true;
+        }
+    }
+    false
+}
+
+/// The index of the first literal of `c` other than literal `skip` whose atom is unset under `t`,
+/// `f`; the number of literals if there is none.
+fn unset_lit(t: &[bool], f: &[bool], c: &Clause, skip: usize) -> usize {
+    for i in 0..c.lits.len() {
+        if i != skip && !t[c.lits[i].atom] && !f[c.lits[i].atom] {
             return i;
         }
     }
-    0
+    c.lits.len()
 }
 
 /// Examines clause `c` under the partial assignment in which atom `x` is true if `t[x]`, false
@@ -91,24 +102,16 @@ fn unset_lit(t: &[bool], f: &[bool], c: &Clause) -> usize {
 /// `c` is false, the literal itself if exactly one literal is unset and all others are false, and
 /// `Lit { atom: t.len(), pos: false }` otherwise.
 fn clause_unit(t: &[bool], f: &[bool], c: &Clause) -> Lit {
-    // Whether some literal before `i` is unset.
-    let mut one = false;
-    for i in 0..c.lits.len() {
-        let x = c.lits[i].atom;
-        if (c.lits[i].pos && t[x]) || (!c.lits[i].pos && f[x]) {
-            return Lit { atom: t.len(), pos: false };
-        }
-        if !t[x] && !f[x] {
-            if one {
-                return Lit { atom: t.len(), pos: false };
-            }
-            one = true;
-        }
+    if some_lit_true(t, f, c) {
+        return Lit { atom: t.len(), pos: false };
     }
-    if !one {
+    let i = unset_lit(t, f, c, c.lits.len());
+    if i == c.lits.len() {
         return Lit { atom: t.len(), pos: true };
     }
-    let i = unset_lit(t, f, c);
+    if unset_lit(t, f, c, i) < c.lits.len() {
+        return Lit { atom: t.len(), pos: false };
+    }
     Lit { atom: c.lits[i].atom, pos: c.lits[i].pos }
 }
 
@@ -248,15 +251,20 @@ fn finish(p: &Problem, a: &[bool], rep: &mut Vec<usize>) -> Option<Model> {
     if diseqs_ok(p, a, p.atoms.len(), rep) { Some(build_model(p, rep)) } else { None }
 }
 
+/// Are the two sides of every atom `j` with `f[j]` in different classes?
+fn false_apart(p: &Problem, f: &[bool], rep: &[usize]) -> bool {
+    for j in 0..p.atoms.len() {
+        if f[j] && rep[p.atoms[j].lhs] == rep[p.atoms[j].rhs] {
+            return false;
+        }
+    }
+    true
+}
+
 /// Whether the closed partition `rep` joins the two sides of an atom `j` with `f[j]`.
 /// `rep` is `&mut` for the reason given at `finish`.
 fn false_joined(p: &Problem, f: &[bool], rep: &mut Vec<usize>) -> bool {
-    for j in 0..p.atoms.len() {
-        if f[j] && rep[p.atoms[j].lhs] == rep[p.atoms[j].rhs] {
-            return true;
-        }
-    }
-    false
+    !false_apart(p, f, rep)
 }
 
 /// A model in which exactly the atoms `k` with `a[k]` hold, if there is one.
