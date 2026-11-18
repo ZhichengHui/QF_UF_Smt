@@ -393,6 +393,29 @@ lemma ext_ok_all:
    ext_ok p a (length a) \<longleftrightarrow> (\<exists>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. problem_true I p \<and> atom_vals I p = a)\<close>
   unfolding ext_ok_def by (auto simp add: atom_vals_def)
 
+text \<open>Every literal of \<open>c\<close> is on one of the first \<open>k\<close> atoms and false under \<open>a\<close>.\<close>
+definition clause_false_upto :: \<open>bool list \<Rightarrow> Clause \<Rightarrow> nat \<Rightarrow> bool\<close> where
+  \<open>clause_false_upto a c k \<equiv>
+     \<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < k \<and> a ! unat (Lit_atom l) \<noteq> Lit_pos l\<close>
+
+text \<open>A clause falsified on the first \<open>k\<close> atoms is false under every interpretation that agrees
+  with \<open>a\<close> on them.\<close>
+lemma ext_ok_clause_false:
+  assumes wf: \<open>wf_problem p\<close> and c: \<open>c \<in> set (Problem_clauses p)\<close> and f: \<open>clause_false_upto a c k\<close>
+  shows \<open>\<not> ext_ok p a k\<close>
+proof
+  assume \<open>ext_ok p a k\<close>
+  then obtain I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where I: \<open>problem_true I p\<close> \<open>take k (atom_vals I p) = take k a\<close>
+    unfolding ext_ok_def by blast
+  obtain l where l: \<open>l \<in> set (Clause_lits c)\<close> \<open>atom_vals I p ! unat (Lit_atom l) = Lit_pos l\<close>
+    using I(1) problem_true_prop_true[OF wf] c unfolding prop_true_def by blast
+  have lt: \<open>unat (Lit_atom l) < k\<close> and ne: \<open>a ! unat (Lit_atom l) \<noteq> Lit_pos l\<close>
+    using f l(1) unfolding clause_false_upto_def by blast+
+  have \<open>atom_vals I p ! unat (Lit_atom l) = a ! unat (Lit_atom l)\<close>
+    using I(2) lt by (metis nth_take)
+  then show False using l(2) ne by simp
+qed
+
 lemma ext_ok_start:
   \<open>ext_ok p (replicate n False) 0 \<longleftrightarrow> satisfiable p\<close>
   unfolding ext_ok_def satisfiable_def by simp

@@ -5,10 +5,10 @@
 //! term `i` is `terms[i].fun(terms[i].args[0], ...)` and every argument index is smaller than `i`.
 //! Propositional variables can be encoded as equalities `p = true_const`.
 //!
-//! Algorithm: enumerate every truth assignment of the atoms (naive backtracking). For an
-//! assignment that satisfies the clauses propositionally, decide the conjunction of the asserted
-//! equalities and disequalities by congruence closure; if it is consistent, read a model off the
-//! congruence classes.
+//! Algorithm: enumerate the truth assignments of the atoms by backtracking, cutting a branch as
+//! soon as the assigned atoms falsify a clause. For an assignment that satisfies the clauses
+//! propositionally, decide the conjunction of the asserted equalities and disequalities by
+//! congruence closure; if it is consistent, read a model off the congruence classes.
 //!
 //! The model interprets the sort as natural numbers (the class representative of each term) and
 //! each function symbol by a table of entries; an application not in the table has value 0.
@@ -73,6 +73,26 @@ fn prop_holds(p: &Problem, a: &[bool]) -> bool {
         }
     }
     true
+}
+
+/// Is every literal of `c` on an atom below `k` and false under `a`?
+fn clause_falsified(a: &[bool], c: &Clause, k: usize) -> bool {
+    for i in 0..c.lits.len() {
+        if c.lits[i].atom >= k || a[c.lits[i].atom] == c.lits[i].pos {
+            return false;
+        }
+    }
+    true
+}
+
+/// Does the assignment `a` of the atoms `0..k` falsify some clause of `p`?
+fn some_clause_falsified(p: &Problem, a: &[bool], k: usize) -> bool {
+    for i in 0..p.clauses.len() {
+        if clause_falsified(a, &p.clauses[i], k) {
+            return true;
+        }
+    }
+    false
 }
 
 /// Merges the class of `a` into the class of `b`.
@@ -196,12 +216,16 @@ fn theory_check(p: &Problem, a: &[bool]) -> Option<Model> {
     finish(p, a, &mut rep)
 }
 
-/// Tries every completion of the assignment `a` of atoms `k..`.
+/// Tries every completion of the assignment `a` of atoms `k..`; cuts the branch as soon as the
+/// assigned atoms `0..k` falsify a clause.
 fn search(p: &Problem, a: Vec<bool>, k: usize) -> Option<Model> {
     if k == a.len() {
         if prop_holds(p, &a) {
             return theory_check(p, &a);
         }
+        return None;
+    }
+    if some_clause_falsified(p, &a, k) {
         return None;
     }
     let mut a1 = a.clone();
