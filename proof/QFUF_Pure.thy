@@ -96,6 +96,22 @@ text \<open>Congruent terms lie in the same class.\<close>
 definition closed :: \<open>Problem \<Rightarrow> 64 word list \<Rightarrow> bool\<close> where
   \<open>closed p rs \<equiv> \<forall>i < length rs. \<forall>j < length rs. congruent_p p rs i j \<longrightarrow> rs ! i = rs ! j\<close>
 
+lemma congruent_p_sym:
+  \<open>congruent_p p rs i j \<Longrightarrow> congruent_p p rs j i\<close>
+  unfolding congruent_p_def by metis
+
+text \<open>Congruence is symmetric, so it suffices to check every pair \<open>(i, j)\<close> with \<open>j < i\<close>.\<close>
+lemma closed_lowerI:
+  assumes \<open>\<forall>i < length rs. \<forall>j < i. congruent_p p rs i j \<longrightarrow> rs ! i = rs ! j\<close>
+  shows \<open>closed p rs\<close>
+  unfolding closed_def
+proof (intro allI impI)
+  fix i j assume ij: \<open>i < length rs\<close> \<open>j < length rs\<close> \<open>congruent_p p rs i j\<close>
+  consider \<open>j < i\<close> | \<open>i = j\<close> | \<open>i < j\<close> by linarith
+  then show \<open>rs ! i = rs ! j\<close>
+    using assms ij congruent_p_sym by cases metis+
+qed
+
 text \<open>All invariants of the representative list during the closure, for the asserted pairs \<open>E\<close>.\<close>
 definition rep_ok :: \<open>Problem \<Rightarrow> (nat \<times> nat) set \<Rightarrow> 64 word list \<Rightarrow> bool\<close> where
   \<open>rep_ok p E rs \<equiv> length rs = length (Problem_terms p) \<and> rep_sound p E rs \<and> rep_has E rs\<close>

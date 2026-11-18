@@ -85,7 +85,7 @@ definition "congruent" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Righta
 definition "scan_row" :: \<open>Problem \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>scan_row \<equiv> \<lambda>p rep i. FunctionBody \<lbrakk>
     let mut changed = false;
-    for j in 0_usize .. len(p.Problem_terms) {
+    for j in 0_usize .. i {
       if (((* rep)[i]) != ((* rep)[j])) && congruent(p, * rep, i, j) {
         merge(rep, i, j);
         * changed = true;

@@ -121,11 +121,12 @@ fn congruent(p: &Problem, rep: &[usize], i: usize, j: usize) -> bool {
     true
 }
 
-/// Merges every term congruent to term `i` but in another class into the class of `i`'s partner;
-/// returns whether it merged anything.
+/// Merges every term `j < i` congruent to term `i` but in another class into the class of `i`'s
+/// partner; returns whether it merged anything. Congruence is symmetric, so the rows of all terms
+/// together cover every pair.
 fn scan_row(p: &Problem, rep: &mut Vec<usize>, i: usize) -> bool {
     let mut changed = false;
-    for j in 0..p.terms.len() {
+    for j in 0..i {
         if rep[i] != rep[j] && congruent(p, rep, i, j) {
             merge(rep, i, j);
             changed = true;
