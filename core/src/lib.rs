@@ -116,16 +116,25 @@ fn clause_unit(t: &[bool], f: &[bool], c: &Clause) -> Lit {
     Lit { atom: c.lits[i].atom, pos: c.lits[i].pos }
 }
 
-/// The result of `clause_unit` for the first clause of `p` that is falsified or unit under the
+/// The result of `clause_unit` for the first clause of `cs` that is falsified or unit under the
 /// partial assignment `t`, `f`; `Lit { atom: t.len(), pos: false }` if there is none.
-fn find_unit(p: &Problem, t: &[bool], f: &[bool]) -> Lit {
-    for i in 0..p.clauses.len() {
-        let l = clause_unit(t, f, &p.clauses[i]);
+fn find_unit(cs: &[Clause], t: &[bool], f: &[bool]) -> Lit {
+    for i in 0..cs.len() {
+        let l = clause_unit(t, f, &cs[i]);
         if l.atom < t.len() || l.pos {
             return l;
         }
     }
     Lit { atom: t.len(), pos: false }
+}
+
+/// `find_unit` on the clauses of `p`, then, if none is falsified or unit, on the learned clauses `l`.
+fn next_unit(p: &Problem, l: &[Clause], t: &[bool], f: &[bool]) -> Lit {
+    let u = find_unit(&p.clauses, t, f);
+    if u.atom < t.len() || u.pos {
+        return u;
+    }
+    find_unit(l, t, f)
 }
 
 /// The first atom that is neither true nor false under `t`, `f`; `t.len()` if there is none.
@@ -252,20 +261,21 @@ fn finish(p: &Problem, a: &[bool], rep: &mut Vec<usize>) -> Option<Model> {
     if diseqs_ok(p, a, p.atoms.len(), rep) { Some(build_model(p, rep)) } else { None }
 }
 
-/// Are the two sides of every atom `j` with `f[j]` in different classes?
-fn false_apart(p: &Problem, f: &[bool], rep: &[usize]) -> bool {
+/// The first atom `j` with `f[j]` whose two sides the closed partition `rep` joins;
+/// `p.atoms.len()` if there is none. `rep` is `&mut` for the reason given at `finish`.
+fn false_joined(p: &Problem, f: &[bool], rep: &mut Vec<usize>) -> usize {
     for j in 0..p.atoms.len() {
         if f[j] && rep[p.atoms[j].lhs] == rep[p.atoms[j].rhs] {
-            return false;
+            return j;
         }
     }
-    true
+    p.atoms.len()
 }
 
-/// Whether the closed partition `rep` joins the two sides of an atom `j` with `f[j]`.
+/// Whether the partition `rep` joins the two sides of atom `k`.
 /// `rep` is `&mut` for the reason given at `finish`.
-fn false_joined(p: &Problem, f: &[bool], rep: &mut Vec<usize>) -> bool {
-    !false_apart(p, f, rep)
+fn joined(p: &Problem, k: usize, rep: &mut Vec<usize>) -> bool {
+    rep[p.atoms[k].lhs] == rep[p.atoms[k].rhs]
 }
 
 /// A model in which exactly the atoms `k` with `a[k]` hold, if there is one.
@@ -276,9 +286,9 @@ fn theory_check(p: &Problem, a: &[bool]) -> Option<Model> {
     finish(p, a, &mut rep)
 }
 
-/// Do the equalities of the atoms `j` with `t[j]`, closed under congruence, contradict the
-/// disequality of an atom `j` with `f[j]`?
-fn cc_conflict(p: &Problem, t: &[bool], f: &[bool]) -> bool {
+/// The first atom `j` with `f[j]` whose two sides the equalities of the atoms with `t[j]`, closed
+/// under congruence, join; `p.atoms.len()` if there is none.
+fn cc_conflict(p: &Problem, t: &[bool], f: &[bool]) -> usize {
     let mut rep = init_rep(p.terms.len());
     assert_eqs(p, t, p.atoms.len(), &mut rep);
     close(p, &mut rep);
@@ -286,15 +296,17 @@ fn cc_conflict(p: &Problem, t: &[bool], f: &[bool]) -> bool {
 }
 
 /// Tries every completion of the partial assignment in which atom `x` is true if `t[x]`, false if
-/// `f[x]`, and unset otherwise. First propagates: a clause with all literals false cuts the
+/// `f[x]`, and unset otherwise; `l` are clauses learned so far, which every interpretation
+/// satisfies. First propagates: a clause of the problem or of `l` with all literals false cuts the
 /// branch, and the unset literal of a clause whose other literals are all false is set true (one
 /// literal per call). Without such clauses, cuts the branch when the true and false atoms
-/// contradict each other by congruence closure, and otherwise branches on the first unset atom.
+/// contradict each other by congruence closure, learning a clause that excludes the conflict, and
+/// otherwise branches on the first unset atom. Returns the learned clauses with the result.
 /// Every call sets one more atom, so the calls are nested at most `p.atoms.len() + 1` deep.
-fn search(p: &Problem, t: Vec<bool>, f: Vec<bool>) -> Option<Model> {
-    let u = find_unit(p, &t, &f);
+fn search(p: &Problem, l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>) -> (Option<Model>, Vec<Clause>) {
+    let u = next_unit(p, &l, &t, &f);
     if u.atom == t.len() && u.pos {
-        return None;
+        return (None, l);
     }
     if u.atom < t.len() {
         let mut t1 = t.clone();
@@ -304,31 +316,33 @@ fn search(p: &Problem, t: Vec<bool>, f: Vec<bool>) -> Option<Model> {
         } else {
             f1[u.atom] = true;
         }
-        return search(p, t1, f1);
+        return search(p, l, t1, f1);
     }
-    if cc_conflict(p, &t, &f) {
-        return None;
+    let c = cc_conflict(p, &t, &f);
+    if c < t.len() {
+        return (None, learn(l, conflict_clause(&explain(p, &t, c), c)));
     }
     let k = first_unset(&t, &f);
     if k == t.len() {
         if prop_holds(p, &t) {
-            return theory_check(p, &t);
+            return (theory_check(p, &t), l);
         }
-        return None;
+        return (None, l);
     }
     let mut t1 = t.clone();
     t1[k] = true;
-    let r = search(p, t1, f.clone());
+    let (r, l1) = search(p, l, t1, f.clone());
     if r.is_some() {
-        return r;
+        return (r, l1);
     }
     let mut f2 = f.clone();
     f2[k] = true;
-    search(p, t.clone(), f2)
+    search(p, l1, t.clone(), f2)
 }
 
 pub fn solve(p: &Problem) -> Answer {
-    match search(p, vec![false; p.atoms.len()], vec![false; p.atoms.len()]) {
+    let (r, _l) = search(p, Vec::new(), vec![false; p.atoms.len()], vec![false; p.atoms.len()]);
+    match r {
         Some(m) => Answer::Sat(m),
         None => Answer::Unsat,
     }
@@ -1088,4 +1102,215 @@ pub fn check_sat(p: &SmtProblem) -> SmtAnswer {
         Answer::Sat(m) => SmtAnswer::Sat(tr_model(p, &m)),
         Answer::Unsat => SmtAnswer::Unsat,
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Helpers of the search with mutable locals of the types `usize`, `Vec<Lit>` and `Vec<Clause>`.
+// They stay at the end of the file: the generated locale numbers the types of mutable locals in
+// the order of their first occurrence, and the specification fixes that order.
+
+/// `scan_row` restricted to the terms `j` with `rows[j]`.
+fn scan_row_in(p: &Problem, rows: &[bool], rep: &mut Vec<usize>, i: usize) -> bool {
+    let mut changed = false;
+    for j in 0..i {
+        if rows[j] && rep[i] != rep[j] && congruent(p, rep, i, j) {
+            merge(rep, i, j);
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// One round of `scan_row_in` over the terms `i` with `rows[i]`; returns whether it merged anything.
+fn scan_rows(p: &Problem, rows: &[bool], rep: &mut Vec<usize>) -> bool {
+    let mut changed = false;
+    for i in 0..p.terms.len() {
+        if rows[i] && scan_row_in(p, rows, rep, i) {
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// Merges congruent terms among those with `rows` until a round merges nothing (at most `n + 1`
+/// rounds). The result need not be closed, but it only joins terms that the closure joins.
+fn close_rows(p: &Problem, rows: &[bool], rep: &mut Vec<usize>) {
+    for _round in 0..p.terms.len() + 1 {
+        if !scan_rows(p, rows, rep) {
+            return;
+        }
+    }
+}
+
+/// Whether the equalities of the atoms `j` with `e[j]`, merged by `close_rows`, join the two
+/// sides of atom `k`; if so, so does their congruence closure.
+fn rows_join(p: &Problem, e: &[bool], rows: &[bool], k: usize) -> bool {
+    let mut rep = init_rep(p.terms.len());
+    assert_eqs(p, e, p.atoms.len(), &mut rep);
+    close_rows(p, rows, &mut rep);
+    joined(p, k, &mut rep)
+}
+
+/// The merges of a congruence closure of the atoms set in `t`, in order, as edges `(xs[i], ys[i])`
+/// with label `ls[i]`: an atom `j < p.atoms.len()` whose sides are `xs[i]` and `ys[i]`, or
+/// `p.atoms.len()` for a merge of the congruent terms `xs[i]` and `ys[i]`. Every edge joins two
+/// classes, so the edges form a forest, and the two sides of a congruence edge are joined by
+/// earlier edges.
+fn merge_log(p: &Problem, t: &[bool]) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
+    let n = p.terms.len();
+    let m = p.atoms.len();
+    let mut rep = init_rep(n);
+    let mut xs = Vec::new();
+    let mut ys = Vec::new();
+    let mut ls = Vec::new();
+    for j in 0..m {
+        let x = p.atoms[j].lhs;
+        let y = p.atoms[j].rhs;
+        if t[j] && rep[x] != rep[y] {
+            merge(&mut rep, x, y);
+            xs.push(x);
+            ys.push(y);
+            ls.push(j);
+        }
+    }
+    for _round in 0..n + 1 {
+        let mut changed = false;
+        for i in 0..n {
+            for j in 0..i {
+                if rep[i] != rep[j] && congruent(p, &rep, i, j) {
+                    merge(&mut rep, i, j);
+                    xs.push(i);
+                    ys.push(j);
+                    ls.push(m);
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            return (xs, ys, ls);
+        }
+    }
+    (xs, ys, ls)
+}
+
+/// One round of a breadth-first search along the edges `(xs[i], ys[i])`: a reached term `y` has a
+/// predecessor `pv[y] < n` reached before it, and the index `pe[y]` of the edge. Returns whether
+/// it reached a new term.
+fn bfs_round(n: usize, xs: &[usize], ys: &[usize], pv: &mut Vec<usize>, pe: &mut Vec<usize>) -> bool {
+    let mut changed = false;
+    for i in 0..xs.len() {
+        let x = xs[i];
+        let y = ys[i];
+        if x < n && y < n {
+            if pv[x] < n && pv[y] == n {
+                pv[y] = x;
+                pe[y] = i;
+                changed = true;
+            } else if pv[y] < n && pv[x] == n {
+                pv[x] = y;
+                pe[x] = i;
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
+/// Breadth-first search from term `a` until term `b` is reached (see `bfs_round`); returns `pv`
+/// and `pe`.
+fn bfs(n: usize, xs: &[usize], ys: &[usize], a: usize, b: usize) -> (Vec<usize>, Vec<usize>) {
+    let mut pv = vec![n; n];
+    let mut pe = vec![0; n];
+    pv[a] = a;
+    for _round in 0..n {
+        if pv[b] < n || !bfs_round(n, xs, ys, &mut pv, &mut pe) {
+            return (pv, pe);
+        }
+    }
+    (pv, pe)
+}
+
+/// A set of atoms set in `t` whose equalities, closed under congruence, join the two sides of atom
+/// `k`, read off `merge_log`: the atom edges on the path between the two sides in the forest, and
+/// recursively those that explain the arguments of its congruence edges. Returns the atoms and the
+/// terms of the congruence edges used.
+fn path_explain(p: &Problem, t: &[bool], k: usize) -> (Vec<bool>, Vec<bool>) {
+    let n = p.terms.len();
+    let m = p.atoms.len();
+    let (xs, ys, ls) = merge_log(p, t);
+    let mut e = vec![false; m];
+    let mut rows = vec![false; n];
+    let mut used = vec![false; xs.len()];
+    let mut qa = Vec::new();
+    let mut qb = Vec::new();
+    qa.push(p.atoms[k].lhs);
+    qb.push(p.atoms[k].rhs);
+    let mut bound = 1;
+    for u in 0..n {
+        bound = bound + p.terms[u].args.len();
+    }
+    for i in 0..bound {
+        if i < qa.len() {
+            let a = qa[i];
+            let b = qb[i];
+            if a != b && a < n && b < n {
+                let (pv, pe) = bfs(n, &xs, &ys, a, b);
+                let mut x = b;
+                for _s in 0..n {
+                    if x != a && x < n && pv[x] < n {
+                        let g = pe[x];
+                        if g < ls.len() && !used[g] {
+                            used[g] = true;
+                            if ls[g] < m {
+                                e[ls[g]] = true;
+                            } else {
+                                let u = xs[g];
+                                let v = ys[g];
+                                rows[u] = true;
+                                rows[v] = true;
+                                for r in 0..p.terms[u].args.len() {
+                                    if r < p.terms[v].args.len() {
+                                        qa.push(p.terms[u].args[r]);
+                                        qb.push(p.terms[v].args[r]);
+                                    }
+                                }
+                            }
+                        }
+                        x = pv[x];
+                    }
+                }
+            }
+        }
+    }
+    (e, rows)
+}
+
+/// A subset of the atoms set in `t` whose equalities, closed under congruence, join the two sides
+/// of atom `k`, if those of `t` do: `path_explain`, if `rows_join` confirms it, and `t` itself
+/// otherwise.
+fn explain(p: &Problem, t: &[bool], k: usize) -> Vec<bool> {
+    let (e, rows) = path_explain(p, t, k);
+    if rows_join(p, &e, &rows, k) {
+        return e;
+    }
+    t.to_vec()
+}
+
+/// The clause "some atom set in `e` is false, or atom `k` is true".
+fn conflict_clause(e: &[bool], k: usize) -> Clause {
+    let mut lits = Vec::new();
+    lits.push(Lit { atom: k, pos: true });
+    for j in 0..e.len() {
+        if e[j] {
+            lits.push(Lit { atom: j, pos: false });
+        }
+    }
+    Clause { lits: lits }
+}
+
+/// `l` with the clause `c` appended.
+fn learn(l: Vec<Clause>, c: Clause) -> Vec<Clause> {
+    let mut l1 = l;
+    l1.push(c);
+    l1
 }

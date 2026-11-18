@@ -407,20 +407,26 @@ lemma pext_start:
    satisfiable p\<close>
   unfolding pext_def satisfiable_def by simp
 
+text \<open>A clause over the atoms of \<open>p\<close> that every interpretation making \<open>p\<close> true satisfies: a
+  clause of \<open>p\<close>, or a clause the search has learned.\<close>
+definition clause_ok :: \<open>Problem \<Rightarrow> Clause \<Rightarrow> bool\<close> where
+  \<open>clause_ok p c \<equiv> (\<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < length (Problem_atoms p)) \<and>
+     (\<forall>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. problem_true I p \<longrightarrow> clause_true I p c)\<close>
+
+lemma clause_ok_problem:
+  \<open>wf_problem p \<Longrightarrow> c \<in> set (Problem_clauses p) \<Longrightarrow> clause_ok p c\<close>
+  unfolding clause_ok_def problem_true_def using wf_lit by blast
+
 lemma pext_lit_false:
-  assumes wf: \<open>wf_problem p\<close> and c: \<open>c \<in> set (Problem_clauses p)\<close> and l: \<open>l \<in> set (Clause_lits c)\<close>
+  assumes l: \<open>unat (Lit_atom l) < length (Problem_atoms p)\<close>
       and I: \<open>\<forall>j < length (Problem_atoms p). (t ! j \<longrightarrow> atom_vals I p ! j) \<and> (f ! j \<longrightarrow> \<not> atom_vals I p ! j)\<close>
       and lf: \<open>lit_false t f l\<close>
   shows \<open>\<not> lit_true I p l\<close>
-proof -
-  have \<open>unat (Lit_atom l) < length (Problem_atoms p)\<close> using wf_lit[OF wf c l] .
-  then show ?thesis
-    using I lf unfolding lit_false_def lit_true_def atom_vals_def by (cases \<open>Lit_pos l\<close>) auto
-qed
+  using l I lf unfolding lit_false_def lit_true_def atom_vals_def by (cases \<open>Lit_pos l\<close>) auto
 
 text \<open>A clause whose literals are all false cuts the branch.\<close>
 lemma pext_conflict:
-  assumes wf: \<open>wf_problem p\<close> and c: \<open>c \<in> set (Problem_clauses p)\<close>
+  assumes c: \<open>clause_ok p c\<close>
       and f: \<open>\<forall>l \<in> set (Clause_lits c). lit_false t f l\<close>
   shows \<open>\<not> pext p t f\<close>
 proof
@@ -429,14 +435,14 @@ proof
     \<open>\<forall>j < length (Problem_atoms p). (t ! j \<longrightarrow> atom_vals I p ! j) \<and> (f ! j \<longrightarrow> \<not> atom_vals I p ! j)\<close>
     unfolding pext_def by blast
   obtain l where \<open>l \<in> set (Clause_lits c)\<close> \<open>lit_true I p l\<close>
-    using I(1) c unfolding problem_true_def clause_true_def by blast
-  then show False using pext_lit_false[OF wf c _ I(2)] f by blast
+    using I(1) c unfolding clause_ok_def clause_true_def by blast
+  then show False using pext_lit_false[OF _ I(2)] f c unfolding clause_ok_def by blast
 qed
 
 text \<open>The literal \<open>u\<close> of a clause whose other literals are all false holds in every
   interpretation that extends the partial assignment and makes the problem true.\<close>
 lemma pext_unit:
-  assumes wf: \<open>wf_problem p\<close> and c: \<open>c \<in> set (Problem_clauses p)\<close>
+  assumes c: \<open>clause_ok p c\<close>
       and u: \<open>\<forall>l \<in> set (Clause_lits c). l = u \<or> lit_false t f l\<close>
       and e: \<open>pext p t f\<close> and len: \<open>length t = length (Problem_atoms p)\<close> \<open>length f = length (Problem_atoms p)\<close>
   shows \<open>if Lit_pos u then pext p (t[unat (Lit_atom u) := True]) f else pext p t (f[unat (Lit_atom u) := True])\<close>
@@ -445,14 +451,49 @@ proof -
     \<open>\<forall>j < length (Problem_atoms p). (t ! j \<longrightarrow> atom_vals I p ! j) \<and> (f ! j \<longrightarrow> \<not> atom_vals I p ! j)\<close>
     using e unfolding pext_def by blast
   obtain l where l: \<open>l \<in> set (Clause_lits c)\<close> \<open>lit_true I p l\<close>
-    using I(1) c unfolding problem_true_def clause_true_def by blast
-  have lu: \<open>l = u\<close> using u l pext_lit_false[OF wf c l(1) I(2)] by blast
-  have x: \<open>unat (Lit_atom u) < length (Problem_atoms p)\<close> using wf_lit[OF wf c l(1)] lu by simp
+    using I(1) c unfolding clause_ok_def clause_true_def by blast
+  have r: \<open>unat (Lit_atom l) < length (Problem_atoms p)\<close> using c l(1) unfolding clause_ok_def by blast
+  have lu: \<open>l = u\<close> using u l pext_lit_false[OF r I(2)] by blast
+  have x: \<open>unat (Lit_atom u) < length (Problem_atoms p)\<close> using r lu by simp
   have v: \<open>atom_vals I p ! unat (Lit_atom u) = Lit_pos u\<close>
     using l(2) lu x unfolding lit_true_def atom_vals_def by simp
   show ?thesis
     using I v x len unfolding pext_def by (auto simp add: nth_list_update)
 qed
+
+text \<open>A learned clause: if the closure of the atoms set in \<open>e\<close> joins the two sides of atom
+  \<open>k\<close>, the clause whose literals are \<open>k\<close> and the negations of the atoms set in \<open>e\<close> holds in every
+  interpretation.\<close>
+lemma conflict_clause_ok:
+  assumes wf: \<open>wf_problem p\<close> and k: \<open>k < length (Problem_atoms p)\<close>
+      and cc: \<open>(unat (Atom_lhs (Problem_atoms p ! k)), unat (Atom_rhs (Problem_atoms p ! k)))
+                 \<in> cc p (asserted p e (length (Problem_atoms p)))\<close>
+      and lits: \<open>\<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < length (Problem_atoms p)\<close>
+      and kin: \<open>\<exists>l \<in> set (Clause_lits c). unat (Lit_atom l) = k \<and> Lit_pos l\<close>
+      and ein: \<open>\<forall>j < length (Problem_atoms p). e ! j \<longrightarrow>
+                  (\<exists>l \<in> set (Clause_lits c). unat (Lit_atom l) = j \<and> \<not> Lit_pos l)\<close>
+  shows \<open>clause_ok p c\<close>
+  unfolding clause_ok_def
+proof (intro conjI allI impI)
+  fix I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close>
+  show \<open>clause_true I p c\<close>
+  proof (cases \<open>\<exists>j < length (Problem_atoms p). e ! j \<and> \<not> atom_true I p (Problem_atoms p ! j)\<close>)
+    case True
+    then obtain j where j: \<open>j < length (Problem_atoms p)\<close> \<open>e ! j\<close> \<open>\<not> atom_true I p (Problem_atoms p ! j)\<close>
+      by blast
+    then obtain l where \<open>l \<in> set (Clause_lits c)\<close> \<open>unat (Lit_atom l) = j\<close> \<open>\<not> Lit_pos l\<close>
+      using ein by blast
+    then show ?thesis using j(3) unfolding clause_true_def lit_true_def by auto
+  next
+    case False
+    then have \<open>\<forall>(i, i') \<in> asserted p e (length (Problem_atoms p)).
+                 term_val I (Problem_terms p) i = term_val I (Problem_terms p) i'\<close>
+      unfolding asserted_def atom_true_def by auto
+    from cc_sound[OF wf this cc] have \<open>atom_true I p (Problem_atoms p ! k)\<close>
+      by (simp add: atom_true_def)
+    then show ?thesis using kin unfolding clause_true_def lit_true_def by auto
+  qed
+qed (use lits in blast)
 
 lemma pext_branch:
   assumes \<open>pext p t f\<close>
