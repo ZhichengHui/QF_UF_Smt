@@ -6,7 +6,8 @@
 //! Propositional variables can be encoded as equalities `p = true_const`.
 //!
 //! Algorithm: enumerate the truth assignments of the atoms by backtracking, cutting a branch as
-//! soon as the assigned atoms falsify a clause. For an assignment that satisfies the clauses
+//! soon as the assigned atoms falsify a clause or their equalities and disequalities contradict
+//! each other by congruence closure. For an assignment that satisfies the clauses
 //! propositionally, decide the conjunction of the asserted equalities and disequalities by
 //! congruence closure; if it is consistent, read a model off the congruence classes.
 //!
@@ -183,19 +184,19 @@ fn init_rep(n: usize) -> Vec<usize> {
     rep
 }
 
-/// Merges the two sides of every atom `k` with `a[k]`.
-fn assert_eqs(p: &Problem, a: &[bool], rep: &mut Vec<usize>) {
-    for k in 0..p.atoms.len() {
-        if a[k] {
-            merge(rep, p.atoms[k].lhs, p.atoms[k].rhs);
+/// Merges the two sides of every atom `j < m` with `a[j]`.
+fn assert_eqs(p: &Problem, a: &[bool], m: usize, rep: &mut Vec<usize>) {
+    for j in 0..m {
+        if a[j] {
+            merge(rep, p.atoms[j].lhs, p.atoms[j].rhs);
         }
     }
 }
 
-/// Are the two sides of every atom `k` without `a[k]` in different classes?
-fn diseqs_ok(p: &Problem, a: &[bool], rep: &[usize]) -> bool {
-    for k in 0..p.atoms.len() {
-        if !a[k] && rep[p.atoms[k].lhs] == rep[p.atoms[k].rhs] {
+/// Are the two sides of every atom `j < m` without `a[j]` in different classes?
+fn diseqs_ok(p: &Problem, a: &[bool], m: usize, rep: &[usize]) -> bool {
+    for j in 0..m {
+        if !a[j] && rep[p.atoms[j].lhs] == rep[p.atoms[j].rhs] {
             return false;
         }
     }
@@ -206,19 +207,35 @@ fn diseqs_ok(p: &Problem, a: &[bool], rep: &[usize]) -> bool {
 /// `rep` is `&mut` although `finish` only reads it: then `theory_check` passes `rep` on without
 /// reading it after `close`, which AutoCorrode's `crush` could not handle.
 fn finish(p: &Problem, a: &[bool], rep: &mut Vec<usize>) -> Option<Model> {
-    if diseqs_ok(p, a, rep) { Some(build_model(p, rep)) } else { None }
+    if diseqs_ok(p, a, p.atoms.len(), rep) { Some(build_model(p, rep)) } else { None }
+}
+
+/// Whether the closed partition `rep` joins the two sides of an atom `j < m` without `a[j]`.
+/// `rep` is `&mut` for the reason given at `finish`.
+fn diseqs_broken(p: &Problem, a: &[bool], m: usize, rep: &mut Vec<usize>) -> bool {
+    !diseqs_ok(p, a, m, rep)
 }
 
 /// A model in which exactly the atoms `k` with `a[k]` hold, if there is one.
 fn theory_check(p: &Problem, a: &[bool]) -> Option<Model> {
     let mut rep = init_rep(p.terms.len());
-    assert_eqs(p, a, &mut rep);
+    assert_eqs(p, a, p.atoms.len(), &mut rep);
     close(p, &mut rep);
     finish(p, a, &mut rep)
 }
 
+/// Do the equalities asserted by the atoms `0..m`, closed under congruence, contradict a
+/// disequality asserted by these atoms?
+fn prefix_conflict(p: &Problem, a: &[bool], m: usize) -> bool {
+    let mut rep = init_rep(p.terms.len());
+    assert_eqs(p, a, m, &mut rep);
+    close(p, &mut rep);
+    diseqs_broken(p, a, m, &mut rep)
+}
+
 /// Tries every completion of the assignment `a` of atoms `k..`; cuts the branch as soon as the
-/// assigned atoms `0..k` falsify a clause.
+/// assigned atoms `0..k` falsify a clause or (checked after some atoms, see below) contradict each
+/// other by congruence closure.
 fn search(p: &Problem, a: Vec<bool>, k: usize) -> Option<Model> {
     if k == a.len() {
         if prop_holds(p, &a) {
@@ -227,6 +244,12 @@ fn search(p: &Problem, a: Vec<bool>, k: usize) -> Option<Model> {
         return None;
     }
     if some_clause_falsified(p, &a, k) {
+        return None;
+    }
+    // The closure is checked only when atom `k - 1` was set true, so that it asserts a new
+    // equality: a conflict that a false atom brings in is found after the next true atom, or at the
+    // leaf.
+    if k > 0 && a[k - 1] && prefix_conflict(p, &a, k) {
         return None;
     }
     let mut a1 = a.clone();

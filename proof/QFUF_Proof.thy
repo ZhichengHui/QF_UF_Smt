@@ -335,8 +335,9 @@ proof -
   then show ?thesis by (simp add: model_of_def entry_of_def)
 qed
 
-definition diseqs_hold :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word list \<Rightarrow> bool\<close> where
-  \<open>diseqs_hold p a rs \<equiv> \<forall>k < length (Problem_atoms p). \<not> a ! k \<longrightarrow>
+text \<open>The partition \<open>rs\<close> keeps apart the two sides of every atom below \<open>m\<close> set false.\<close>
+definition diseqs_hold :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word list \<Rightarrow> nat \<Rightarrow> bool\<close> where
+  \<open>diseqs_hold p a rs m \<equiv> \<forall>k < m. \<not> a ! k \<longrightarrow>
      rs ! unat (Atom_lhs (Problem_atoms p ! k)) \<noteq> rs ! unat (Atom_rhs (Problem_atoms p ! k))\<close>
 
 lemma reps_lt_merge:
@@ -444,7 +445,7 @@ text \<open>Facts for the leaves of the search.\<close>
 
 lemma theory_none:
   assumes \<open>cc_inv p (asserted p a (length (Problem_atoms p))) rs\<close> \<open>length a = length (Problem_atoms p)\<close>
-      and \<open>\<not> diseqs_hold p a rs\<close>
+      and \<open>\<not> diseqs_hold p a rs (length (Problem_atoms p))\<close>
   shows \<open>atom_vals I p \<noteq> a\<close>
 proof
   assume av: \<open>atom_vals I p = a\<close>
@@ -461,9 +462,24 @@ qed
 
 lemma theory_some:
   assumes \<open>cc_inv p (asserted p a (length (Problem_atoms p))) rs\<close> \<open>closed p rs\<close>
-      \<open>length a = length (Problem_atoms p)\<close> \<open>diseqs_hold p a rs\<close>
+      \<open>length a = length (Problem_atoms p)\<close> \<open>diseqs_hold p a rs (length (Problem_atoms p))\<close>
   shows \<open>atom_vals (model_interp (model_of p rs)) p = a\<close>
   using assms model_of_atom_vals unfolding cc_inv_def diseqs_hold_def by blast
+
+text \<open>A conflict of the closure of the first \<open>m\<close> atoms.\<close>
+lemma prefix_conflict_none:
+  assumes \<open>cc_inv p (asserted p a m) rs\<close> \<open>m \<le> length (Problem_atoms p)\<close> \<open>\<not> diseqs_hold p a rs m\<close>
+  shows \<open>\<not> ext_ok p a m\<close>
+proof -
+  obtain k where k: \<open>k < m\<close> \<open>\<not> a ! k\<close>
+    \<open>rs ! unat (Atom_lhs (Problem_atoms p ! k)) = rs ! unat (Atom_rhs (Problem_atoms p ! k))\<close>
+    using assms(3) unfolding diseqs_hold_def by blast
+  have wf: \<open>wf_problem p\<close> and n: \<open>length rs = length (Problem_terms p)\<close>
+    using assms(1) by (simp_all add: cc_inv_def rep_ok_def)
+  have \<open>(unat (Atom_lhs (Problem_atoms p ! k)), unat (Atom_rhs (Problem_atoms p ! k))) \<in> cc p (asserted p a m)\<close>
+    using assms(1,2) k wf_atom[OF wf, of k] n unfolding cc_inv_def rep_ok_def rep_sound_def by simp
+  then show ?thesis using ext_ok_cc_conflict[OF wf assms(2) k(1,2)] by blast
+qed
 
 lemma search_leaf_none:
   \<open>wf_problem p \<Longrightarrow> length a = length (Problem_atoms p) \<Longrightarrow> \<not> prop_true p a \<Longrightarrow> \<not> ext_ok p a (length a)\<close>
@@ -482,6 +498,26 @@ lemma search_step_none:
   \<open>\<not> ext_ok p (a[k := True]) (Suc k) \<Longrightarrow> \<not> ext_ok p (a[k := False]) (Suc k) \<Longrightarrow> k < length a \<Longrightarrow>
    length a = length (Problem_atoms p) \<Longrightarrow> \<not> ext_ok p a k\<close>
   using ext_ok_step by blast
+
+lemma search_step_false:
+  \<open>\<not> ext_ok p (a[k := True]) (Suc k) \<Longrightarrow> \<not> ext_ok p (a[k := False]) (Suc k) \<Longrightarrow>
+   k \<le> length (Problem_atoms p) \<Longrightarrow> k \<noteq> length (Problem_atoms p) \<Longrightarrow>
+   length a = length (Problem_atoms p) \<Longrightarrow> ext_ok p a k \<Longrightarrow> False\<close>
+  using ext_ok_step by fastforce
+
+lemma unat_pred_lt:
+  assumes \<open>0 < (i :: 64 word)\<close> \<open>unat i \<le> n\<close>
+  shows \<open>unat (i - 1) < n\<close>
+proof -
+  have i: \<open>i \<noteq> 0\<close> using assms(1) by simp
+  then have \<open>unat (i - 1) = unat i - 1\<close> by (rule unat_minus_one)
+  moreover have \<open>0 < unat i\<close> using i by (simp add: unat_gt_0)
+  ultimately show ?thesis using assms(2) by simp
+qed
+
+lemma word_one_le:
+  \<open>0 < (i :: 64 word) \<Longrightarrow> 1 \<le> i\<close>
+  by (metis not_less word_less_1 word_neq_0_conv)
 
 subsection \<open>The model\<close>
 
@@ -586,20 +622,20 @@ lemma init_rep_spec:
     done
   done
 
-definition assert_eqs_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow>
+definition assert_eqs_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow>
       64 word list \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
-  \<open>assert_eqs_contract p a rep g rs \<equiv>
+  \<open>assert_eqs_contract p a m rep g rs \<equiv>
      let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star>
-        \<langle>cc_inv p {} rs \<and> length a = length (Problem_atoms p)\<rangle> in
+        \<langle>cc_inv p {} rs \<and> length a = length (Problem_atoms p) \<and> unat m \<le> length (Problem_atoms p)\<rangle> in
      let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
-        \<langle>cc_inv p (asserted p a (length (Problem_atoms p))) rs'\<rangle>) in
+        \<langle>cc_inv p (asserted p a (unat m)) rs'\<rangle>) in
      make_function_contract pre post\<close>
 
 text \<open>The loop body ends with a call whose postcondition is existential. With schematics
   allowed, crush would instantiate the invariant's existentials before opening the callee's,
   so the steps below run with schematics off and instantiate by hand.\<close>
 lemma assert_eqs_spec:
-  shows \<open>\<Gamma>; assert_eqs p a rep \<Turnstile>\<^sub>F assert_eqs_contract p a rep g rs\<close>
+  shows \<open>\<Gamma>; assert_eqs p a m rep \<Turnstile>\<^sub>F assert_eqs_contract p a m rep g rs\<close>
   apply (crush_boot f: assert_eqs_def contract: assert_eqs_contract_def)
   apply (crush_base simp add: unat_of_nat_lt63 cc_inv_def sizes_ok_def)
   apply (ucincl_discharge\<open>
@@ -633,27 +669,28 @@ lemma assert_eqs_spec:
   apply (auto simp add: cc_inv_def sizes_ok_def dest: wf_atom)?
   done
 
-definition diseqs_ok_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word list \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
-  \<open>diseqs_ok_contract p a rs \<equiv>
+definition diseqs_ok_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> 64 word list \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+  \<open>diseqs_ok_contract p a m rs \<equiv>
      let pre = can_alloc_reference \<star>
         \<langle>wf_problem p \<and> length rs = length (Problem_terms p) \<and> length a = length (Problem_atoms p) \<and>
-         length (Problem_atoms p) < 2^64\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r = diseqs_hold p a rs\<rangle> in
+         unat m \<le> length (Problem_atoms p)\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r = diseqs_hold p a rs (unat m)\<rangle> in
      make_function_contract pre post\<close>
 
 lemma diseqs_ok_spec:
-  shows \<open>\<Gamma>; diseqs_ok p a rs \<Turnstile>\<^sub>F diseqs_ok_contract p a rs\<close>
+  shows \<open>\<Gamma>; diseqs_ok p a m rs \<Turnstile>\<^sub>F diseqs_ok_contract p a m rs\<close>
   apply (crush_boot f: diseqs_ok_def contract: diseqs_ok_contract_def)
+  apply (insert unat_lt2p[of m])
   apply crush_base
   apply (ucincl_discharge\<open>
     rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> \<langle>\<forall>k' < k. \<not> a ! k' \<longrightarrow>
                rs ! unat (Atom_lhs (Problem_atoms p ! k')) \<noteq> rs ! unat (Atom_rhs (Problem_atoms p ! k'))\<rangle>\<close>
       and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
-      and \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>r = diseqs_hold p a rs\<rangle>\<close>
+      and \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>r = diseqs_hold p a rs (unat m)\<rangle>\<close>
       and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
     in wp_raw_for_loop_framedI'\<close>)
   apply (crush_base simp add: unat_of_nat_eq less_Suc_eq diseqs_hold_def)
-  apply (blast dest: wf_atom)+
+  apply (meson wf_atom order_less_le_trans)+
   done
 
 definition theory_check_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> ('s, Model option, 'abort) function_contract\<close> where
@@ -688,7 +725,7 @@ lemma finish_spec:
   apply (crush_boot f: finish_def contract: finish_contract_def)
   apply (crush_base specs add: diseqs_ok_spec build_model_spec
       contracts add: diseqs_ok_contract_def build_model_contract_def
-      simp add: sizes_ok_def)
+      simp add: sizes_ok_def unat_of_nat_lt63)
   apply (auto intro: theory_none theory_some model_of_vals_ok simp add: sizes_ok_def)
   apply ((metis theory_none)+)?
   done
@@ -698,6 +735,41 @@ lemma theory_check_spec:
   apply (crush_boot f: theory_check_def contract: theory_check_contract_def)
   apply (crush_base specs add: init_rep_spec assert_eqs_spec close_spec finish_spec
       contracts add: init_rep_contract_def assert_eqs_contract_def close_contract_def finish_contract_def
+      simp add: unat_of_nat_lt63 unat_of_nat_eq)
+  apply (auto intro: cc_inv_init64 cc_inv_init cc_inv_length simp add: sizes_ok_def unat_of_nat_lt63)
+  done
+
+text \<open>As for \<^const>\<open>finish\<close>, the state of \<open>rep\<close> is existentially quantified inside the
+  contract.\<close>
+definition diseqs_broken_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow>
+      ('s, bool, 'abort) function_contract\<close> where
+  \<open>diseqs_broken_contract p a m rep \<equiv>
+     let pre = can_alloc_reference \<star>
+        (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p (asserted p a (unat m)) rs\<rangle>) \<star>
+        \<langle>wf_problem p \<and> length a = length (Problem_atoms p) \<and> unat m \<le> length (Problem_atoms p)\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs) \<star>
+        \<langle>r \<longrightarrow> \<not> ext_ok p a (unat m)\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma diseqs_broken_spec:
+  shows \<open>\<Gamma>; diseqs_broken p a m rep \<Turnstile>\<^sub>F diseqs_broken_contract p a m rep\<close>
+  apply (crush_boot f: diseqs_broken_def contract: diseqs_broken_contract_def)
+  apply (crush_base specs add: diseqs_ok_spec contracts add: diseqs_ok_contract_def)
+  apply (auto dest: prefix_conflict_none simp add: cc_inv_length)
+  done
+
+definition prefix_conflict_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+  \<open>prefix_conflict_contract p a m \<equiv>
+     let pre = can_alloc_reference \<star>
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length a = length (Problem_atoms p) \<and> unat m \<le> length a\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r \<longrightarrow> \<not> ext_ok p a (unat m)\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma prefix_conflict_spec:
+  shows \<open>\<Gamma>; prefix_conflict p a m \<Turnstile>\<^sub>F prefix_conflict_contract p a m\<close>
+  apply (crush_boot f: prefix_conflict_def contract: prefix_conflict_contract_def)
+  apply (crush_base specs add: init_rep_spec assert_eqs_spec close_spec diseqs_broken_spec
+      contracts add: init_rep_contract_def assert_eqs_contract_def close_contract_def diseqs_broken_contract_def
       simp add: unat_of_nat_lt63 unat_of_nat_eq)
   apply (auto intro: cc_inv_init64 cc_inv_init cc_inv_length)
   done
@@ -722,13 +794,16 @@ lemma search_rec_step_spec:
   shows \<open>\<Gamma>; search_rec_step R p a i \<Turnstile>\<^sub>F search_contract (Suc k) p a i\<close>
   apply (crush_boot f: search_rec_step_def contract: search_contract_def)
   apply (crush_base specs add: assms prop_holds_spec theory_check_spec some_clause_falsified_spec
+        prefix_conflict_spec
       contracts add: search_contract_def prop_holds_contract_def theory_check_contract_def
-        some_clause_falsified_contract_def
+        some_clause_falsified_contract_def prefix_conflict_contract_def
       simp add: unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq word64_eq_of_nat_iff)
   apply (auto simp add: unat_word_Suc63 unat_of_nat_eq Option.is_none_def split: option.splits
       intro: search_step_none)
   apply (auto dest: search_leaf_none search_leaf_theory_none search_leaf_some)
-  apply (metis ext_ok_step le_neq_implies_less)
+  apply ((rule search_step_false, assumption+)+)[3]
+  apply (erule (1) unat_pred_lt)
+  apply (erule word_one_le)
   apply (metis ext_ok_clause_false)
   apply (blast dest: wf_lit)
   apply (metis ext_ok_all)
