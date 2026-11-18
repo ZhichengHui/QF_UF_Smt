@@ -238,7 +238,7 @@ definition scan_row_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 wor
      let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
         \<langle>cc_inv p E rs' \<and>
          (if r then card (set rs') < card (set rs)
-          else rs' = rs \<and> (\<forall>j < length rs. congruent_p p rs (unat i) j \<longrightarrow> rs ! unat i = rs ! j))\<rangle>) in
+          else rs' = rs \<and> (\<forall>j < unat i. congruent_p p rs (unat i) j \<longrightarrow> rs ! unat i = rs ! j))\<rangle>) in
      make_function_contract pre post\<close>
 
 lemma scan_row_spec:
@@ -260,6 +260,7 @@ lemma scan_row_spec:
     apply (auto simp add: cc_inv_length split: if_splits intro: cc_inv_merge card_merge_lt args_len_lt
         dest: wf_args_lt_length)
     apply (auto simp add: cc_inv_def sizes_ok_def intro: args_len_lt)
+    apply (meson wf_args order.strict_trans)+
     done
   done
 
@@ -280,14 +281,14 @@ lemma scan_spec:
       rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c g' rs'. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
                  \<langle>cc_inv p E rs' \<and>
                   (if c then card (set rs') < card (set rs)
-                   else rs' = rs \<and> (\<forall>i < k. \<forall>j < length rs. congruent_p p rs i j \<longrightarrow> rs ! i = rs ! j))\<rangle>)\<close>
+                   else rs' = rs \<and> (\<forall>i < k. \<forall>j < i. congruent_p p rs i j \<longrightarrow> rs ! i = rs ! j))\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_raw_for_loop_framedI'\<close>)
     apply (crush_base specs add: scan_row_spec contracts add: scan_row_contract_def
         simp add: unat_of_nat_eq less_Suc_eq cc_inv_length)
-    apply (auto simp add: closed_def cc_inv_length split: if_splits)
+    apply (auto simp add: cc_inv_length split: if_splits intro: closed_lowerI)
     apply (auto simp add: cc_inv_def sizes_ok_def)
     done
   done
