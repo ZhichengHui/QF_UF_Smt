@@ -384,83 +384,7 @@ proof (rule nth_equalityI)
     using k neg pos by (cases \<open>a ! k\<close>) auto
 qed (simp add: atom_vals_def len)
 
-subsection \<open>Search\<close>
-
-text \<open>Some interpretation makes the problem true and agrees with \<open>a\<close> on the first \<open>k\<close> atoms.\<close>
-definition ext_ok :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> nat \<Rightarrow> bool\<close> where
-  \<open>ext_ok p a k \<equiv> \<exists>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. problem_true I p \<and> take k (atom_vals I p) = take k a\<close>
-
-lemma ext_ok_step:
-  assumes \<open>ext_ok p a k\<close> \<open>k < length a\<close> \<open>length a = length (Problem_atoms p)\<close>
-  shows \<open>ext_ok p (a[k := True]) (Suc k) \<or> ext_ok p (a[k := False]) (Suc k)\<close>
-proof -
-  obtain I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where I: \<open>problem_true I p\<close> \<open>take k (atom_vals I p) = take k a\<close>
-    using assms(1) unfolding ext_ok_def by blast
-  have l: \<open>length (atom_vals I p) = length a\<close> using assms(3) by (simp add: atom_vals_def)
-  have \<open>take (Suc k) (atom_vals I p) = take (Suc k) (a[k := atom_vals I p ! k])\<close>
-    using I(2) assms(2) l by (simp add: take_Suc_conv_app_nth take_update_cancel)
-  then have \<open>ext_ok p (a[k := atom_vals I p ! k]) (Suc k)\<close>
-    using I(1) unfolding ext_ok_def by blast
-  then show ?thesis by (cases \<open>atom_vals I p ! k\<close>) simp_all
-qed
-
-lemma ext_ok_all:
-  \<open>length a = length (Problem_atoms p) \<Longrightarrow>
-   ext_ok p a (length a) \<longleftrightarrow> (\<exists>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. problem_true I p \<and> atom_vals I p = a)\<close>
-  unfolding ext_ok_def by (auto simp add: atom_vals_def)
-
-text \<open>Every literal of \<open>c\<close> is on one of the first \<open>k\<close> atoms and false under \<open>a\<close>.\<close>
-definition clause_false_upto :: \<open>bool list \<Rightarrow> Clause \<Rightarrow> nat \<Rightarrow> bool\<close> where
-  \<open>clause_false_upto a c k \<equiv>
-     \<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < k \<and> a ! unat (Lit_atom l) \<noteq> Lit_pos l\<close>
-
-text \<open>A clause falsified on the first \<open>k\<close> atoms is false under every interpretation that agrees
-  with \<open>a\<close> on them.\<close>
-lemma ext_ok_clause_false:
-  assumes wf: \<open>wf_problem p\<close> and c: \<open>c \<in> set (Problem_clauses p)\<close> and f: \<open>clause_false_upto a c k\<close>
-  shows \<open>\<not> ext_ok p a k\<close>
-proof
-  assume \<open>ext_ok p a k\<close>
-  then obtain I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where I: \<open>problem_true I p\<close> \<open>take k (atom_vals I p) = take k a\<close>
-    unfolding ext_ok_def by blast
-  obtain l where l: \<open>l \<in> set (Clause_lits c)\<close> \<open>atom_vals I p ! unat (Lit_atom l) = Lit_pos l\<close>
-    using I(1) problem_true_prop_true[OF wf] c unfolding prop_true_def by blast
-  have lt: \<open>unat (Lit_atom l) < k\<close> and ne: \<open>a ! unat (Lit_atom l) \<noteq> Lit_pos l\<close>
-    using f l(1) unfolding clause_false_upto_def by blast+
-  have \<open>atom_vals I p ! unat (Lit_atom l) = a ! unat (Lit_atom l)\<close>
-    using I(2) lt by (metis nth_take)
-  then show False using l(2) ne by simp
-qed
-
-text \<open>If the closure of the equalities asserted by the first \<open>k\<close> atoms joins the two sides of
-  one of them set false, no interpretation agrees with \<open>a\<close> on them.\<close>
-lemma ext_ok_cc_conflict:
-  assumes wf: \<open>wf_problem p\<close> and k: \<open>k \<le> length (Problem_atoms p)\<close>
-      and j: \<open>j < k\<close> \<open>\<not> a ! j\<close>
-      and cc: \<open>(unat (Atom_lhs (Problem_atoms p ! j)), unat (Atom_rhs (Problem_atoms p ! j))) \<in> cc p (asserted p a k)\<close>
-  shows \<open>\<not> ext_ok p a k\<close>
-proof
-  assume \<open>ext_ok p a k\<close>
-  then obtain I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where I: \<open>take k (atom_vals I p) = take k a\<close>
-    unfolding ext_ok_def by blast
-  have av: \<open>atom_vals I p ! i = a ! i\<close> if \<open>i < k\<close> for i
-    using I that by (metis nth_take)
-  have \<open>\<forall>(i, i') \<in> asserted p a k. term_val I (Problem_terms p) i = term_val I (Problem_terms p) i'\<close>
-  proof (clarsimp simp add: asserted_def)
-    fix i assume \<open>i < k\<close> \<open>a ! i\<close>
-    then have \<open>atom_true I p (Problem_atoms p ! i)\<close>
-      using av[of i] k by (simp add: atom_vals_def)
-    then show \<open>term_val I (Problem_terms p) (unat (Atom_lhs (Problem_atoms p ! i))) =
-               term_val I (Problem_terms p) (unat (Atom_rhs (Problem_atoms p ! i)))\<close>
-      by (simp add: atom_true_def)
-  qed
-  from cc_sound[OF wf this cc] have \<open>atom_true I p (Problem_atoms p ! j)\<close>
-    by (simp add: atom_true_def)
-  then show False
-    using av[OF j(1)] j k by (simp add: atom_vals_def)
-qed
-
-subsection \<open>Partial assignments\<close>
+subsection \<open>Partial assignments and the search\<close>
 
 text \<open>A partial assignment of the atoms is a pair of lists \<open>t\<close>, \<open>f\<close>: atom \<open>j\<close> is set true if
   \<open>t ! j\<close>, set false if \<open>f ! j\<close>, and unset if neither.\<close>
@@ -481,10 +405,6 @@ definition lit_set_true :: \<open>bool list \<Rightarrow> bool list \<Rightarrow
 text \<open>The atom of the literal \<open>l\<close> is unset.\<close>
 definition lit_unset :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Lit \<Rightarrow> bool\<close> where
   \<open>lit_unset t f l \<equiv> \<not> t ! unat (Lit_atom l) \<and> \<not> f ! unat (Lit_atom l)\<close>
-
-lemma lit_unset_not_false:
-  \<open>lit_unset t f l \<Longrightarrow> \<not> lit_false t f l\<close>
-  unfolding lit_unset_def lit_false_def by simp
 
 lemma lit_falseI:
   \<open>\<not> lit_set_true t f l \<Longrightarrow> \<not> lit_unset t f l \<Longrightarrow> lit_false t f l\<close>
@@ -618,16 +538,5 @@ proof -
   ultimately show \<open>unset_count (t[j := True]) f < unset_count t f\<close> \<open>unset_count t (f[j := True]) < unset_count t f\<close>
     unfolding unset_count_def by simp_all
 qed
-
-lemma unset_count_le:
-  \<open>unset_count t f \<le> length t\<close>
-proof -
-  have \<open>{j. j < length t \<and> \<not> t ! j \<and> \<not> f ! j} \<subseteq> {..<length t}\<close> by auto
-  then show ?thesis unfolding unset_count_def by (metis card_lessThan card_mono finite_lessThan)
-qed
-
-lemma ext_ok_start:
-  \<open>ext_ok p (replicate n False) 0 \<longleftrightarrow> satisfiable p\<close>
-  unfolding ext_ok_def satisfiable_def by simp
 
 end
