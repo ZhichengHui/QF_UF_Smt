@@ -31,6 +31,28 @@ definition "prop_holds" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow
     true
   \<rbrakk>\<close>
 
+(* Rust: clause_falsified *)
+definition "clause_falsified" :: \<open>(bool list) \<Rightarrow> Clause \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>clause_falsified \<equiv> \<lambda>a c k. FunctionBody \<lbrakk>
+    for i in 0_usize .. len(c.Clause_lits) {
+      if ((c.Clause_lits[i].Lit_atom) >= k) || ((a[c.Clause_lits[i].Lit_atom]) == (c.Clause_lits[i].Lit_pos)) {
+        return false;
+      }
+    };
+    true
+  \<rbrakk>\<close>
+
+(* Rust: some_clause_falsified *)
+definition "some_clause_falsified" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>some_clause_falsified \<equiv> \<lambda>p a k. FunctionBody \<lbrakk>
+    for i in 0_usize .. len(p.Problem_clauses) {
+      if clause_falsified(a, p.Problem_clauses[i], k) {
+        return true;
+      }
+    };
+    false
+  \<rbrakk>\<close>
+
 (* Rust: merge *)
 definition "merge" :: \<open>(('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>merge \<equiv> \<lambda>rep a b. FunctionBody \<lbrakk>
@@ -172,6 +194,9 @@ definition "search_rec_step" :: \<open>((Problem \<Rightarrow> (bool list) \<Rig
       if prop_holds(p, a) {
         return theory_check(p, a);
       };
+      return None;
+    };
+    if some_clause_falsified(p, a, k) {
       return None;
     };
     let mut a1 = { let init_1 = a; \<llangle>init_1 :: bool list\<rrangle> };

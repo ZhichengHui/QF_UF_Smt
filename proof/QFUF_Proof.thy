@@ -124,6 +124,60 @@ lemma prop_holds_spec:
   apply (metis in_set_conv_nth)
   done
 
+definition clause_falsified_contract :: \<open>bool list \<Rightarrow> Clause \<Rightarrow> 64 word \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+  \<open>clause_falsified_contract a c k \<equiv>
+     let pre = can_alloc_reference \<star>
+        \<langle>(\<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < length a) \<and> length (Clause_lits c) < 2^64\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r = clause_false_upto a c (unat k)\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma clause_falsified_spec:
+  shows \<open>\<Gamma>; clause_falsified a c k \<Turnstile>\<^sub>F clause_falsified_contract a c k\<close>
+  apply (crush_boot f: clause_falsified_def contract: clause_falsified_contract_def)
+  apply crush_base
+  apply (ucincl_discharge\<open>
+    rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star>
+               \<langle>\<forall>j<i. unat (Lit_atom (Clause_lits c ! j)) < unat k \<and>
+                      a ! unat (Lit_atom (Clause_lits c ! j)) \<noteq> Lit_pos (Clause_lits c ! j)\<rangle>\<close>
+      and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
+      and \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>r = clause_false_upto a c (unat k)\<rangle>\<close>
+      and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+    in wp_raw_for_loop_framedI'\<close>)
+  apply (crush_base simp add: unat_of_nat_eq less_Suc_eq)
+  apply (auto simp add: clause_false_upto_def in_set_conv_nth less_Suc_eq not_le unat_mono)
+  apply (metis nth_mem)
+  apply (metis nth_mem)
+  apply (metis nth_mem le_less less_asym unat_mono)
+  done
+
+definition some_clause_falsified_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+  \<open>some_clause_falsified_contract p a k \<equiv>
+     let pre = can_alloc_reference \<star>
+        \<langle>(\<forall>c \<in> set (Problem_clauses p). \<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < length a) \<and>
+         length (Problem_clauses p) < 2^64 \<and> (\<forall>c \<in> set (Problem_clauses p). length (Clause_lits c) < 2^64)\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star>
+        \<langle>r = (\<exists>c \<in> set (Problem_clauses p). clause_false_upto a c (unat k))\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma some_clause_falsified_spec:
+  shows \<open>\<Gamma>; some_clause_falsified p a k \<Turnstile>\<^sub>F some_clause_falsified_contract p a k\<close>
+  apply (crush_boot f: some_clause_falsified_def contract: some_clause_falsified_contract_def)
+  apply crush_base
+  apply (ucincl_discharge\<open>
+    rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star>
+               \<langle>\<forall>j<i. \<not> clause_false_upto a (Problem_clauses p ! j) (unat k)\<rangle>\<close>
+      and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
+      and \<tau>=\<open>\<lambda>r. can_alloc_reference \<star>
+               \<langle>r = (\<exists>c \<in> set (Problem_clauses p). clause_false_upto a c (unat k))\<rangle>\<close>
+      and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+    in wp_raw_for_loop_framedI'\<close>)
+  apply (crush_base specs add: clause_falsified_spec contracts add: clause_falsified_contract_def
+      simp add: unat_of_nat_eq less_Suc_eq)
+  apply (meson nth_mem)
+  apply (meson nth_mem)
+  apply (metis in_set_conv_nth)
+  done
+
 subsection \<open>Union-find\<close>
 
 definition merge_contract :: \<open>('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
@@ -666,13 +720,16 @@ lemma search_rec_step_spec:
   assumes \<open>\<And>a i. \<Gamma>; R p a i \<Turnstile>\<^sub>F search_contract k p a i\<close>
   shows \<open>\<Gamma>; search_rec_step R p a i \<Turnstile>\<^sub>F search_contract (Suc k) p a i\<close>
   apply (crush_boot f: search_rec_step_def contract: search_contract_def)
-  apply (crush_base specs add: assms prop_holds_spec theory_check_spec
+  apply (crush_base specs add: assms prop_holds_spec theory_check_spec some_clause_falsified_spec
       contracts add: search_contract_def prop_holds_contract_def theory_check_contract_def
+        some_clause_falsified_contract_def
       simp add: unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq word64_eq_of_nat_iff)
   apply (auto simp add: unat_word_Suc63 unat_of_nat_eq Option.is_none_def split: option.splits
       intro: search_step_none)
   apply (auto dest: search_leaf_none search_leaf_theory_none search_leaf_some)
   apply (metis ext_ok_step le_neq_implies_less)
+  apply (metis ext_ok_clause_false)
+  apply (blast dest: wf_lit)
   apply (metis ext_ok_all)
   apply (blast dest: wf_lit)
   done
