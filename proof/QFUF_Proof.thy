@@ -1,5 +1,5 @@
 theory QFUF_Proof
-  imports QFUF_Incremental
+  imports QFUF_Watch
 begin
 
 context QFUF_ctx
@@ -162,7 +162,7 @@ text \<open>The \<open>k\<close>-th unfolding of \<^const>\<open>cdcl\<close> at
   stamps only guide the analysis, so the contract does not mention them. The fallback to
   \<^const>\<open>search\<close> needs fewer atoms than fuel.\<close>
 definition cdcl_contract :: \<open>nat \<Rightarrow> Problem \<Rightarrow> Clause list \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow>
-      64 word list \<Rightarrow> ('s, Model option \<times> Clause list \<times> 64 word \<times> tnil, 'abort) function_contract\<close> where
+      64 word list \<Rightarrow> ('s, Model option \<times> Clause list \<times> 64 word \<times> 'w, 'abort) function_contract\<close> where
   \<open>cdcl_contract k p l t f d rep \<equiv>
      let pre = can_alloc_reference \<star>
         \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms p) \<and>
@@ -174,21 +174,6 @@ definition cdcl_contract :: \<open>nat \<Rightarrow> Problem \<Rightarrow> Claus
          | Some m \<Rightarrow> problem_true (model_interp m) p \<and> model_vals_ok p m) \<and>
          clauses_ok p (fst (snd r))\<rangle> in
      make_function_contract pre post\<close>
-
-text \<open>A jump to the level of the decision: the last learned clause is unit or false there. The
-  index \<open>len(l) - 1\<close> is in bounds even if the length of \<open>l\<close> does not fit a word.\<close>
-lemma last_idx_lt:
-  assumes h: \<open>0 < unat (word_of_nat n :: 64 word)\<close>
-  shows \<open>unat (word_of_nat n - 1 :: 64 word) < n\<close>
-proof -
-  have \<open>(word_of_nat n :: 64 word) \<noteq> 0\<close> using h by auto
-  then have \<open>unat (word_of_nat n - 1 :: 64 word) = unat (word_of_nat n :: 64 word) - 1\<close> by (rule unat_minus_one)
-  then show ?thesis using h unat_of_nat_le[of n] by linarith
-qed
-
-lemma last_idx_one:
-  \<open>0 < unat (w :: 64 word) \<Longrightarrow> 1 \<le> w\<close>
-  by (simp add: word_le_nat_alt)
 
 lemma step_last_find:
   assumes \<open>clauses_ok p l\<close> \<open>0 < unat (word_of_nat (length l) :: 64 word)\<close>
@@ -272,30 +257,59 @@ lemma step_fallback_fuel:
   \<open>length t = length (Problem_atoms p) \<Longrightarrow> length (Problem_atoms p) < urust_fuel \<Longrightarrow> unset_count t f < urust_fuel\<close>
   using unset_count_le[of t f] by simp
 
+text \<open>Unit propagation (\<^verbatim>\<open>watch_pass\<close>): the recursive call on the extended assignment.\<close>
+
+lemma step_pass_none:
+  \<open>ext_ok p t f t0 f0 \<Longrightarrow> \<not> pext p t0 f0 \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
+  using ext_ok_none by blast
+
+lemma step_pass_fuel:
+  \<open>ext_ok p t f t0 f0 \<Longrightarrow> length t = n \<Longrightarrow> length f = n \<Longrightarrow> t0 \<noteq> t \<Longrightarrow>
+   unset_count t f < Suc k \<Longrightarrow> unset_count t0 f0 < k\<close>
+  \<open>ext_ok p t f t0 f0 \<Longrightarrow> length t = n \<Longrightarrow> length f = n \<Longrightarrow> f0 \<noteq> f \<Longrightarrow>
+   unset_count t f < Suc k \<Longrightarrow> unset_count t0 f0 < k\<close>
+  using ext_ok_fuel by fastforce+
+
+lemma step_pass_rep:
+  \<open>ext_ok p t f t0 f0 \<Longrightarrow> length t = length (Problem_atoms p) \<Longrightarrow> rep_for p t rs \<Longrightarrow> rep_for p t0 rs\<close>
+  by (rule ext_ok_rep_for)
+
+lemma step_pass_len:
+  \<open>ext_ok p t f t0 f0 \<Longrightarrow> length t = n \<Longrightarrow> length t0 = n\<close>
+  \<open>ext_ok p t f t0 f0 \<Longrightarrow> length f = n \<Longrightarrow> length f0 = n\<close>
+  using ext_ok_len by simp_all
+
 lemma cdcl_rec_step_spec:
-  assumes \<open>\<And>l t f lv rs ts rep xs ys ls d s. \<Gamma>; R p l t f lv rs ts rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract k p l t f d rep\<close>
-  shows \<open>\<Gamma>; cdcl_rec_step R p l t f lv rs ts rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract (Suc k) p l t f d rep\<close>
+  assumes \<open>\<And>l t f q lv rs ts wt rep xs ys ls d s. \<Gamma>; R p ix l t f q lv rs ts wt rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract k p l t f d rep\<close>
+  shows \<open>\<Gamma>; cdcl_rec_step R p ix l t f q lv rs ts wt rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract (Suc k) p l t f d rep\<close>
   apply (crush_boot f: cdcl_rec_step_def contract: cdcl_contract_def)
-  apply (crush_base specs add: assms sat_add_ok_spec next_unit_spec unit_index_spec indexed_clause_spec on_conflict_spec
-        note_spec note_new_spec note_true_spec cc_step_spec explain_log_spec conflict_clause_spec differs_spec
-        first_unset_spec prop_holds_spec theory_check_spec clause_unit_spec search_spec
-      contracts add: cdcl_contract_def sat_add_ok_contract_def next_unit_contract_def unit_index_contract_def
-        indexed_clause_contract_def on_conflict_contract_def note_contract_def cc_step_contract_def
-        explain_log_contract_def conflict_clause_contract_def differs_contract_def first_unset_contract_def
-        prop_holds_contract_def theory_check_contract_def clause_unit_contract_def search_contract_def
+  apply (crush_base specs add: assms sat_add_ok_spec watch_pass_spec indexed_clause_spec on_conflict_spec
+        watch_new_spec bump_last_spec note_spec note_new_spec note_true_spec cc_step_spec explain_log_spec
+        conflict_clause_spec differs_spec new_atoms_spec pick_spec prop_holds_spec theory_check_spec one_spec
+        clause_unit_spec search_spec
+      contracts add: cdcl_contract_def sat_add_ok_contract_def watch_pass_contract_def indexed_clause_contract_def
+        on_conflict_contract_def refs3_contract_def ref1_contract_def note_contract_def cc_step_contract_def
+        explain_log_contract_def conflict_clause_contract_def differs_contract_def trivial_contract_def
+        pick_contract_def prop_holds_contract_def theory_check_contract_def clause_unit_contract_def
+        search_contract_def
       simp add: unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq word64_eq_of_nat_iff)
   apply (auto simp add: word_less_nat_alt unat_of_nat_lt63 Option.is_none_def split: option.splits
       dest: find_result_le)
-  apply ((rule step_unit_none step_unit_fuel step_branch_none step_branch_fuel step_leaf step_leaf_some
-        step_implied step_implied_fuel step_conflict step_falsified wf_lit step_last_none step_last_fuel
-        step_last_pre last_idx_lt last_idx_one step_conflict_fits step_fallback_fuel rep_for_update rep_for_implied;
-        assumption)+)?
-  apply (rule step_empty_conflict; assumption)
+  apply (all \<open>(solves \<open>rule step_branch_none step_branch_fuel step_leaf step_leaf_some
+        step_implied step_implied_fuel step_conflict wf_lit step_last_none step_last_fuel
+        step_last_pre last_idx_lt last_idx_one step_conflict_fits step_fallback_fuel rep_for_update rep_for_implied
+        step_pass_none step_pass_fuel step_pass_rep step_pass_len;
+        assumption\<close>)?\<close>)
+  apply (all \<open>(solves \<open>rotate_tac -1, erule notE, rule step_branch_none step_branch_fuel step_leaf step_leaf_some
+        step_implied step_implied_fuel step_conflict wf_lit step_last_none step_last_fuel
+        step_last_pre last_idx_lt last_idx_one step_conflict_fits step_fallback_fuel rep_for_update rep_for_implied
+        step_pass_none step_pass_fuel step_pass_rep step_pass_len;
+        assumption\<close>)?\<close>)
   done
 
 lemma cdcl_rec_spec:
-  shows \<open>\<Gamma>; (cdcl_rec_step ^^ k) R p l t f lv rs ts rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract k p l t f d rep\<close>
-proof (induction k arbitrary: l t f lv rs ts rep xs ys ls d s)
+  shows \<open>\<Gamma>; (cdcl_rec_step ^^ k) R p ix l t f q lv rs ts wt rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract k p l t f d rep\<close>
+proof (induction k arbitrary: l t f q lv rs ts wt rep xs ys ls d s)
   case 0
   show ?case
     apply (ucincl_discharge\<open>intro satisfies_function_contractI\<close>)
@@ -309,7 +323,7 @@ next
 qed
 
 lemma cdcl_spec:
-  shows \<open>\<Gamma>; cdcl p l t f lv rs ts rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract urust_fuel p l t f d rep\<close>
+  shows \<open>\<Gamma>; cdcl p ix l t f q lv rs ts wt rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract urust_fuel p l t f d rep\<close>
   unfolding cdcl_def by (rule cdcl_rec_spec)
 
 subsection \<open>The top-level contract\<close>
@@ -326,8 +340,10 @@ lemma solve_spec:
   assumes fuel: \<open>length (Problem_atoms p) < urust_fuel\<close>
   shows \<open>\<Gamma>; solve p \<Turnstile>\<^sub>F solve_contract p\<close>
   apply (crush_boot f: solve_def contract: solve_contract_def)
-  apply (crush_base specs add: root_log_spec cdcl_spec contracts add: root_log_contract_def cdcl_contract_def
-      split!: option.splits
+  apply (crush_base specs add: root_log_spec cdcl_spec sym_index_spec watch_new_spec sat_add_ok_spec
+      contracts add: root_log_contract_def cdcl_contract_def trivial_contract_def refs3_contract_def
+        sat_add_ok_contract_def
+      inline: cap_def split!: option.splits
       simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq pext_start unset_count_replicate Answer_Sat_mk_def
         clauses_ok_def rep_for_empty)
   done
@@ -350,8 +366,10 @@ lemma solve_vals_spec:
   assumes fuel: \<open>length (Problem_atoms p) < urust_fuel\<close>
   shows \<open>\<Gamma>; solve p \<Turnstile>\<^sub>F solve_contract_vals p\<close>
   apply (crush_boot f: solve_def contract: solve_contract_vals_def)
-  apply (crush_base specs add: root_log_spec cdcl_spec contracts add: root_log_contract_def cdcl_contract_def
-      split!: option.splits
+  apply (crush_base specs add: root_log_spec cdcl_spec sym_index_spec watch_new_spec sat_add_ok_spec
+      contracts add: root_log_contract_def cdcl_contract_def trivial_contract_def refs3_contract_def
+        sat_add_ok_contract_def
+      inline: cap_def split!: option.splits
       simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq pext_start unset_count_replicate Answer_Sat_mk_def
         clauses_ok_def rep_for_empty)
   apply (auto simp add: model_vals_ok_def)?

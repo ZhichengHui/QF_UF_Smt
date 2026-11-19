@@ -214,9 +214,10 @@ definition log_col_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 word
      make_function_contract pre post\<close>
 
 lemma log_col_spec:
-  shows \<open>\<Gamma>; log_col p rep xs ys ls i \<Turnstile>\<^sub>F log_col_contract p rep g rs xs gx xv ys gy yv ls gl lv i E\<close>
+  shows \<open>\<Gamma>; log_col p perm st rep xs ys ls i \<Turnstile>\<^sub>F log_col_contract p rep g rs xs gx xv ys gy yv ls gl lv i E\<close>
   apply (crush_boot f: log_col_def contract: log_col_contract_def)
-  apply (crush_base simp add: cc_inv_def sizes_ok_def)
+  apply (crush_base specs add: get_or_spec sat_add_ok_spec contracts add: get_or_contract_def sat_add_ok_contract_def
+      simp add: cc_inv_def sizes_ok_def)
   subgoal for changed_ref
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c) \<star>
@@ -226,8 +227,10 @@ lemma log_col_spec:
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_raw_for_loop_framedI'\<close>)
-    apply (crush_base specs add: congruent_spec merge_spec contracts add: congruent_contract_def merge_contract_def
+    apply (crush_base specs add: get_or_spec congruent_spec merge_spec
+        contracts add: get_or_contract_def congruent_contract_def merge_contract_def
         inline: vec_push_def simp add: unat_of_nat_eq less_Suc_eq cc_inv_length)
+    apply (all \<open>(drule unat_lt_len[OF iffD1[OF word_less_nat_alt]])?\<close>)
     apply (auto simp add: cc_inv_length intro: cc_inv_merge args_len_lt dest: wf_args_lt_length)
     apply (auto simp add: cc_inv_def sizes_ok_def intro: args_len_lt)
     apply ((meson wf_args order.strict_trans)+)?
@@ -247,7 +250,7 @@ definition log_moved_contract :: \<open>Problem \<Rightarrow> bool list \<Righta
      make_function_contract pre post\<close>
 
 lemma log_moved_spec:
-  shows \<open>\<Gamma>; log_moved p rows rep xs ys ls \<Turnstile>\<^sub>F log_moved_contract p rows rep g rs xs gx xv ys gy yv ls gl lv E\<close>
+  shows \<open>\<Gamma>; log_moved p perm st rows rep xs ys ls \<Turnstile>\<^sub>F log_moved_contract p rows rep g rs xs gx xv ys gy yv ls gl lv E\<close>
   apply (crush_boot f: log_moved_def contract: log_moved_contract_def)
   apply (crush_base simp add: cc_inv_def sizes_ok_def)
   subgoal for changed_ref
@@ -301,7 +304,7 @@ definition round_moved_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 
      make_function_contract pre post\<close>
 
 lemma round_moved_spec:
-  shows \<open>\<Gamma>; round_moved p old rep xs ys ls \<Turnstile>\<^sub>F round_moved_contract p old rep g rs xs ys ls E\<close>
+  shows \<open>\<Gamma>; round_moved p perm st old rep xs ys ls \<Turnstile>\<^sub>F round_moved_contract p old rep g rs xs ys ls E\<close>
   apply (crush_boot f: round_moved_def contract: round_moved_contract_def)
   apply (crush_base specs add: moved_rows_spec copy_into_spec[where n=\<open>length (Problem_terms p)\<close>] log_moved_spec
       contracts add: moved_rows_contract_def copy_into_contract_def log_moved_contract_def
@@ -323,7 +326,7 @@ definition close_moved_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 
      make_function_contract pre post\<close>
 
 lemma close_moved_spec:
-  shows \<open>\<Gamma>; close_moved p old rep xs ys ls \<Turnstile>\<^sub>F close_moved_contract p old rep g rs xs ys ls E\<close>
+  shows \<open>\<Gamma>; close_moved p perm st old rep xs ys ls \<Turnstile>\<^sub>F close_moved_contract p old rep g rs xs ys ls E\<close>
   apply (crush_boot f: close_moved_def contract: close_moved_contract_def)
   apply (crush_base simp add: cc_inv_def sizes_ok_def)
   apply (ucincl_discharge\<open>
@@ -355,7 +358,7 @@ definition cc_step_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarr
      make_function_contract pre post\<close>
 
 lemma cc_step_spec:
-  shows \<open>\<Gamma>; cc_step p t f rs xs ys ls \<Turnstile>\<^sub>F cc_step_contract p t f rs\<close>
+  shows \<open>\<Gamma>; cc_step p perm st t f rs xs ys ls \<Turnstile>\<^sub>F cc_step_contract p t f rs\<close>
   apply (crush_boot f: cc_step_def contract: cc_step_contract_def)
   apply (crush_base specs add: log_atoms_inv_spec close_moved_spec false_joined_spec[where t=t] implied_spec
       contracts add: log_atoms_inv_contract_def close_moved_contract_def false_joined_contract_def

@@ -605,39 +605,6 @@ lemma on_conflict_spec:
   apply (auto intro: clauses_ok_append simp add: clause_fits_def)
   done
 
-definition unit_index_contract :: \<open>Problem \<Rightarrow> Clause list \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
-  \<open>unit_index_contract p l t f \<equiv>
-     make_function_contract
-       (can_alloc_reference \<star> \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and>
-          length t = length (Problem_atoms p) \<and> length f = length (Problem_atoms p)\<rangle>)
-       (\<lambda>_. can_alloc_reference)\<close>
-
-lemma unit_index_spec:
-  shows \<open>\<Gamma>; unit_index p l t f \<Turnstile>\<^sub>F unit_index_contract p l t f\<close>
-  apply (crush_boot f: unit_index_def contract: unit_index_contract_def)
-  apply crush_base
-  apply (ucincl_discharge\<open>
-    rule_tac INV=\<open>\<lambda>_ _. can_alloc_reference\<close>
-      and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
-      and \<tau>=\<open>\<lambda>_. can_alloc_reference\<close>
-      and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
-    in wp_raw_for_loop_framedI'\<close>)
-  apply (crush_base specs add: clause_unit_spec sat_add_ok_spec
-      contracts add: clause_unit_contract_def sat_add_ok_contract_def simp add: unat_of_nat_eq)
-  prefer 5
-  apply (ucincl_discharge\<open>
-    rule_tac INV=\<open>\<lambda>_ _. can_alloc_reference\<close>
-      and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
-      and \<tau>=\<open>\<lambda>_. can_alloc_reference\<close>
-      and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
-    in wp_raw_for_loop_framedI'\<close>)
-  apply (crush_base specs add: clause_unit_spec sat_add_ok_spec
-      contracts add: clause_unit_contract_def sat_add_ok_contract_def simp add: unat_of_nat_eq)
-  apply (all \<open>insert clauses_ok_problem[of p]\<close>)
-  apply (auto simp add: sizes_ok_def clauses_ok_def clause_ok_def dest: unat_idx_lt(1) unat_lt_len)
-  apply (meson nth_mem unat_idx_lt(1))+
-  done
-
 end
 
 end
