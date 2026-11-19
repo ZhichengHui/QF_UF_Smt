@@ -139,7 +139,8 @@ begin
 
 abbreviation solve :: \<open>nat \<Rightarrow> Problem \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>solve fuel \<equiv>
-     QFUF_ctx.solve update_raw_fun dereference_raw_fun reference_raw_fun prism_1 prism_2 prism_3 prism_4 fuel\<close>
+     QFUF_ctx.solve update_raw_fun dereference_raw_fun reference_raw_fun prism_1 prism_2 prism_3 prism_4
+       prism_7 prism_9 prism_10 fuel\<close>
 
 abbreviation solve_contract :: \<open>Problem \<Rightarrow> ('s, Answer, 'abort) function_contract\<close> where
   \<open>solve_contract \<equiv> QFUF_ctx.solve_contract can_alloc_reference\<close>
