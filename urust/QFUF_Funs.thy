@@ -293,6 +293,33 @@ definition "false_pairs" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarro
     (* us, * vs)
   \<rbrakk>\<close>
 
+(* Rust: set_true *)
+definition "set_true" :: \<open>(('addr, 'gv, bool list) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>set_true \<equiv> \<lambda>v i. FunctionBody \<lbrakk>
+    if i < len(* v) {
+      * (v[i]) = true;
+    }
+  \<rbrakk>\<close>
+
+(* Rust: false_sides *)
+definition "false_sides" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, bool list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>false_sides \<equiv> \<lambda>p f rep. FunctionBody \<lbrakk>
+    let mut mk_v = { let init_1 = vec_from_elem(false, len(p.Problem_terms)); \<llangle>init_1 :: bool list\<rrangle> };
+    for b in 0_usize .. len(p.Problem_atoms) {
+      if f[b] {
+        set_true(mk_v, rep[p.Problem_atoms[b].Atom_lhs]);
+        set_true(mk_v, rep[p.Problem_atoms[b].Atom_rhs]);
+      }
+    };
+    * mk_v
+  \<rbrakk>\<close>
+
+(* Rust: flag_at *)
+definition "flag_at" :: \<open>(bool list) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>flag_at \<equiv> \<lambda>v i. FunctionBody \<lbrakk>
+    (i < len(v)) && (v[i])
+  \<rbrakk>\<close>
+
 (* Rust: has_pair *)
 definition "has_pair" :: \<open>((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>has_pair \<equiv> \<lambda>us vs x y. FunctionBody \<lbrakk>
@@ -310,11 +337,12 @@ definition "separated_unset" :: \<open>Problem \<Rightarrow> (bool list) \<Right
     let destr_1 = false_pairs(p, f, rep);
     let us = destr_1.0;
     let vs = destr_1.1;
+    let mk_v = false_sides(p, f, rep);
     let mut f1 = { let init_2 = f; \<llangle>init_2 :: bool list\<rrangle> };
     for j in 0_usize .. len(p.Problem_atoms) {
       let x = rep[p.Problem_atoms[j].Atom_lhs];
       let y = rep[p.Problem_atoms[j].Atom_rhs];
-      if (((!(t[j])) && (!(f[j]))) && (x != y)) && has_pair(us, vs, x, y) {
+      if (((((!(t[j])) && (!(f[j]))) && (x != y)) && flag_at(mk_v, x)) && flag_at(mk_v, y)) && has_pair(us, vs, x, y) {
         * (f1[j]) = true;
       }
     };
@@ -467,14 +495,6 @@ definition "bfs" :: \<open>(64 word) \<Rightarrow> ((64 word) list) \<Rightarrow
     (* pv, * pe)
   \<rbrakk>\<close>
 
-(* Rust: set_true *)
-definition "set_true" :: \<open>(('addr, 'gv, bool list) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>set_true \<equiv> \<lambda>v i. FunctionBody \<lbrakk>
-    if i < len(* v) {
-      * (v[i]) = true;
-    }
-  \<rbrakk>\<close>
-
 (* Rust: push_args *)
 definition "push_args" :: \<open>Problem \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>push_args \<equiv> \<lambda>p u v qa qb. FunctionBody \<lbrakk>
@@ -515,32 +535,38 @@ definition "walk" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Rightarrow>
     }
   \<rbrakk>\<close>
 
-(* Rust: path_explain *)
-definition "path_explain" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (64 word) \<Rightarrow> ('s, ((bool list) \<times> (bool list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>path_explain \<equiv> \<lambda>p t k. FunctionBody \<lbrakk>
+(* Rust: path_explain_log *)
+definition "path_explain_log" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ('s, ((bool list) \<times> (bool list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>path_explain_log \<equiv> \<lambda>p xs ys ls k. FunctionBody \<lbrakk>
     let n = len(p.Problem_terms);
-    let destr_1 = merge_log(p, t);
-    let xs = destr_1.0;
-    let ys = destr_1.1;
-    let ls = destr_1.2;
-    let mut e = { let init_2 = vec_from_elem(false, len(p.Problem_atoms)); \<llangle>init_2 :: bool list\<rrangle> };
-    let mut rows = { let init_3 = vec_from_elem(false, n); \<llangle>init_3 :: bool list\<rrangle> };
-    let mut used = { let init_4 = vec_from_elem(false, len(xs)); \<llangle>init_4 :: bool list\<rrangle> };
-    let mut qa = { let init_6 = { let res_5 = []; \<llangle>res_5 :: (64 word) list\<rrangle> }; \<llangle>init_6 :: (64 word) list\<rrangle> };
-    let mut qb = { let init_8 = { let res_7 = []; \<llangle>res_7 :: (64 word) list\<rrangle> }; \<llangle>init_8 :: (64 word) list\<rrangle> };
+    let mut e = { let init_1 = vec_from_elem(false, len(p.Problem_atoms)); \<llangle>init_1 :: bool list\<rrangle> };
+    let mut rows = { let init_2 = vec_from_elem(false, n); \<llangle>init_2 :: bool list\<rrangle> };
+    let mut used = { let init_3 = vec_from_elem(false, len(xs)); \<llangle>init_3 :: bool list\<rrangle> };
+    let mut qa = { let init_5 = { let res_4 = []; \<llangle>res_4 :: (64 word) list\<rrangle> }; \<llangle>init_5 :: (64 word) list\<rrangle> };
+    let mut qb = { let init_7 = { let res_6 = []; \<llangle>res_6 :: (64 word) list\<rrangle> }; \<llangle>init_7 :: (64 word) list\<rrangle> };
     vec_push(qa, p.Problem_atoms[k].Atom_lhs);
     vec_push(qb, p.Problem_atoms[k].Atom_rhs);
     for i in 0_usize .. (n + n) + 1_usize {
       let a = get_or(* qa, i, n);
       let b = get_or(* qb, i, n);
       if ((a < n) && (b < n)) && (a != b) {
-        let destr_9 = bfs(n, xs, ys, a, b);
-        let pv = destr_9.0;
-        let pe = destr_9.1;
+        let destr_8 = bfs(n, xs, ys, a, b);
+        let pv = destr_8.0;
+        let pe = destr_8.1;
         \<epsilon>\<open>funcall13 walk \<lbrakk>p\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>pv\<rbrakk> \<lbrakk>pe\<rbrakk> \<lbrakk>a\<rbrakk> \<lbrakk>b\<rbrakk> \<lbrakk>e\<rbrakk> \<lbrakk>rows\<rbrakk> \<lbrakk>used\<rbrakk> \<lbrakk>qa\<rbrakk> \<lbrakk>qb\<rbrakk>\<close>;
       }
     };
     (* e, * rows)
+  \<rbrakk>\<close>
+
+(* Rust: path_explain *)
+definition "path_explain" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (64 word) \<Rightarrow> ('s, ((bool list) \<times> (bool list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>path_explain \<equiv> \<lambda>p t k. FunctionBody \<lbrakk>
+    let destr_1 = merge_log(p, t);
+    let xs = destr_1.0;
+    let ys = destr_1.1;
+    let ls = destr_1.2;
+    path_explain_log(p, xs, ys, ls, k)
   \<rbrakk>\<close>
 
 (* Rust: scan_row_in *)
@@ -695,6 +721,18 @@ definition "search_rec_step" :: \<open>((Problem \<Rightarrow> (Clause list) \<R
 definition "search" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>search \<equiv> ((search_rec_step ^^ urust_fuel) (\<lambda>p l t f. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>))\<close>
 
+(* Rust: root_log *)
+definition "root_log" :: \<open>Problem \<Rightarrow> ('s, (((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>root_log \<equiv> \<lambda>p. FunctionBody \<lbrakk>
+    let mut rep = { let init_1 = init_rep(len(p.Problem_terms)); \<llangle>init_1 :: (64 word) list\<rrangle> };
+    close(p, rep);
+    let destr_2 = merge_log(p, vec_from_elem(false, len(p.Problem_atoms)));
+    let xs = destr_2.0;
+    let ys = destr_2.1;
+    let ls = destr_2.2;
+    (* rep, xs, ys, ls)
+  \<rbrakk>\<close>
+
 (* Rust: cap *)
 definition "cap" :: \<open>('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>cap \<equiv> FunctionBody \<lbrakk>
@@ -807,23 +845,10 @@ definition "other_at" :: \<open>((64 word) list) \<Rightarrow> (bool list) \<Rig
     false
   \<rbrakk>\<close>
 
-(* Rust: true_before *)
-definition "true_before" :: \<open>(bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>true_before \<equiv> \<lambda>t ts s. FunctionBody \<lbrakk>
-    let mut e = { let init_1 = vec_from_elem(false, len(t)); \<llangle>init_1 :: bool list\<rrangle> };
-    for j in 0_usize .. len(t) {
-      if (t[j]) && (get_or(ts, j, s) < s) {
-        * (e[j]) = true;
-      }
-    };
-    * e
-  \<rbrakk>\<close>
-
 (* Rust: theory_reason *)
-definition "theory_reason" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ('s, Clause, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>theory_reason \<equiv> \<lambda>p t ts x. FunctionBody \<lbrakk>
-    let e0 = true_before(t, ts, get_or(ts, x, 0_usize));
-    let destr_1 = path_explain(p, e0, x);
+definition "theory_reason" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ('s, Clause, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>theory_reason \<equiv> \<lambda>p xs ys ls x. FunctionBody \<lbrakk>
+    let destr_1 = path_explain_log(p, xs, ys, ls, x);
     let e = destr_1.0;
     let rows = destr_1.1;
     if rows_join(p, e, rows, x) {
@@ -833,23 +858,23 @@ definition "theory_reason" :: \<open>Problem \<Rightarrow> (bool list) \<Rightar
   \<rbrakk>\<close>
 
 (* Rust: reason *)
-definition "reason" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ('s, Clause, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>reason \<equiv> \<lambda>p l t ts rs x. FunctionBody \<lbrakk>
+definition "reason" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ('s, Clause, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>reason \<equiv> \<lambda>p l xs ys ls rs x. FunctionBody \<lbrakk>
     let r = get_or(rs, x, 0_usize);
     if r == 1_usize {
-      return theory_reason(p, t, ts, x);
+      return theory_reason(p, xs, ys, ls, x);
     };
     indexed_clause(p, l, r, x)
   \<rbrakk>\<close>
 
 (* Rust: resolve_step *)
-definition "resolve_step" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, (bool \<times> (bool list) \<times> (bool list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>resolve_step \<equiv> \<lambda>p l t lv ts rs d cp cn. FunctionBody \<lbrakk>
+definition "resolve_step" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, (bool \<times> (bool list) \<times> (bool list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>resolve_step \<equiv> \<lambda>p l t lv ts rs xs ys ls d cp cn. FunctionBody \<lbrakk>
     let x = last_at(lv, ts, cp, cn, d);
     if ((((x >= len(cp)) || (x >= len(cn))) || (x >= len(t))) || (get_or(rs, x, 0_usize) == 0_usize)) || (!other_at(lv, cp, cn, d, x)) {
       return (false, cp, cn);
     };
-    let r = reason(p, l, t, ts, rs, x);
+    let r = reason(p, l, xs, ys, ls, rs, x);
     let mut cp1 = { let init_1 = cp; \<llangle>init_1 :: bool list\<rrangle> };
     let mut cn1 = { let init_2 = cn; \<llangle>init_2 :: bool list\<rrangle> };
     if t[x] {
@@ -892,8 +917,8 @@ definition "lits_clause" :: \<open>(bool list) \<Rightarrow> (bool list) \<Right
   \<rbrakk>\<close>
 
 (* Rust: analyze *)
-definition "analyze" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> Clause \<Rightarrow> ('s, (Clause \<times> bool \<times> (64 word) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>analyze \<equiv> \<lambda>p l t lv ts rs d c. FunctionBody \<lbrakk>
+definition "analyze" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> Clause \<Rightarrow> ('s, (Clause \<times> bool \<times> (64 word) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>analyze \<equiv> \<lambda>p l t lv ts rs xs ys ls d c. FunctionBody \<lbrakk>
     let destr_1 = add_lits(c, len(t), true, vec_from_elem(false, len(t)), vec_from_elem(false, len(t)));
     let cp0 = destr_1.0;
     let cn0 = destr_1.1;
@@ -902,7 +927,7 @@ definition "analyze" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarrow>
     let mut go = true;
     for v_step in 0_usize .. len(t) + 1_usize {
       if * go {
-        let destr_4 = \<epsilon>\<open>funcall9 resolve_step \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t\<rbrakk> \<lbrakk>lv\<rbrakk> \<lbrakk>ts\<rbrakk> \<lbrakk>rs\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>* cp\<rbrakk> \<lbrakk>* cn\<rbrakk>\<close>;
+        let destr_4 = \<epsilon>\<open>funcall12 resolve_step \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t\<rbrakk> \<lbrakk>lv\<rbrakk> \<lbrakk>ts\<rbrakk> \<lbrakk>rs\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>* cp\<rbrakk> \<lbrakk>* cn\<rbrakk>\<close>;
         let g = destr_4.0;
         let cp1 = destr_4.1;
         let cn1 = destr_4.2;
@@ -918,9 +943,9 @@ definition "analyze" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarrow>
   \<rbrakk>\<close>
 
 (* Rust: on_conflict *)
-definition "on_conflict" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> Clause \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> (64 word) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>on_conflict \<equiv> \<lambda>p l t lv ts rs d c. FunctionBody \<lbrakk>
-    let destr_1 = analyze(p, l, t, lv, ts, rs, d, c);
+definition "on_conflict" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> Clause \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> (64 word) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>on_conflict \<equiv> \<lambda>p l t lv ts rs xs ys ls d c. FunctionBody \<lbrakk>
+    let destr_1 = \<epsilon>\<open>funcall11 analyze \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t\<rbrakk> \<lbrakk>lv\<rbrakk> \<lbrakk>ts\<rbrakk> \<lbrakk>rs\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>c\<rbrakk>\<close>;
     let a = destr_1.0;
     let one = destr_1.1;
     let b = destr_1.2;
@@ -937,6 +962,114 @@ definition "note_fn" :: \<open>((64 word) list) \<Rightarrow> (64 word) \<Righta
     let mut w = { let init_1 = v; \<llangle>init_1 :: (64 word) list\<rrangle> };
     set_at(w, x, y);
     * w
+  \<rbrakk>\<close>
+
+(* Rust: arg_moved *)
+definition "arg_moved" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>arg_moved \<equiv> \<lambda>p old rep i. FunctionBody \<lbrakk>
+    for k in 0_usize .. len(p.Problem_terms[i].Term_args) {
+      if (old[p.Problem_terms[i].Term_args[k]]) != (rep[p.Problem_terms[i].Term_args[k]]) {
+        return true;
+      }
+    };
+    false
+  \<rbrakk>\<close>
+
+(* Rust: moved_rows *)
+definition "moved_rows" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, bool list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>moved_rows \<equiv> \<lambda>p old rep. FunctionBody \<lbrakk>
+    let mut rows = { let init_1 = vec_from_elem(false, len(p.Problem_terms)); \<llangle>init_1 :: bool list\<rrangle> };
+    for i in 0_usize .. len(p.Problem_terms) {
+      if arg_moved(p, old, rep, i) {
+        * (rows[i]) = true;
+      }
+    };
+    * rows
+  \<rbrakk>\<close>
+
+(* Rust: copy_into *)
+definition "copy_into" :: \<open>(('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>copy_into \<equiv> \<lambda>old rep. FunctionBody \<lbrakk>
+    for i in 0_usize .. len(* old) {
+      if i < len(rep) {
+        * (old[i]) = rep[i];
+      }
+    }
+  \<rbrakk>\<close>
+
+(* Rust: log_col *)
+definition "log_col" :: \<open>Problem \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>log_col \<equiv> \<lambda>p rep xs ys ls i. FunctionBody \<lbrakk>
+    let mut changed = false;
+    for j in 0_usize .. len(p.Problem_terms) {
+      if (((* rep)[i]) != ((* rep)[j])) && congruent(p, * rep, i, j) {
+        merge(rep, i, j);
+        vec_push(xs, i);
+        vec_push(ys, j);
+        vec_push(ls, len(p.Problem_atoms));
+        * changed = true;
+      }
+    };
+    * changed
+  \<rbrakk>\<close>
+
+(* Rust: log_moved *)
+definition "log_moved" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>log_moved \<equiv> \<lambda>p rows rep xs ys ls. FunctionBody \<lbrakk>
+    let mut changed = false;
+    for i in 0_usize .. len(p.Problem_terms) {
+      if (rows[i]) && log_col(p, rep, xs, ys, ls, i) {
+        * changed = true;
+      }
+    };
+    * changed
+  \<rbrakk>\<close>
+
+(* Rust: round_moved *)
+definition "round_moved" :: \<open>Problem \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>round_moved \<equiv> \<lambda>p old rep xs ys ls. FunctionBody \<lbrakk>
+    let rows = moved_rows(p, * old, * rep);
+    copy_into(old, * rep);
+    log_moved(p, rows, rep, xs, ys, ls)
+  \<rbrakk>\<close>
+
+(* Rust: close_moved *)
+definition "close_moved" :: \<open>Problem \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>close_moved \<equiv> \<lambda>p old rep xs ys ls. FunctionBody \<lbrakk>
+    for v_round in 0_usize .. len(p.Problem_terms) + 1_usize {
+      if !round_moved(p, old, rep, xs, ys, ls) {
+        return;
+      }
+    }
+  \<rbrakk>\<close>
+
+(* Rust: cc_step *)
+definition "cc_step" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, ((64 word) \<times> (bool list) \<times> (bool list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>cc_step \<equiv> \<lambda>p t f rep0 xs0 ys0 ls0. FunctionBody \<lbrakk>
+    let mut old = { let init_1 = rep0; \<llangle>init_1 :: (64 word) list\<rrangle> };
+    let mut rep = { let init_2 = rep0; \<llangle>init_2 :: (64 word) list\<rrangle> };
+    let mut xs = { let init_3 = xs0; \<llangle>init_3 :: (64 word) list\<rrangle> };
+    let mut ys = { let init_4 = ys0; \<llangle>init_4 :: (64 word) list\<rrangle> };
+    let mut ls = { let init_5 = ls0; \<llangle>init_5 :: (64 word) list\<rrangle> };
+    log_atoms(p, t, rep, xs, ys, ls);
+    close_moved(p, old, rep, xs, ys, ls);
+    let c = false_joined(p, f, rep);
+    let destr_6 = implied(p, t, f, rep);
+    let t1 = destr_6.0;
+    let f1 = destr_6.1;
+    (c, t1, f1, * rep, * xs, * ys, * ls)
+  \<rbrakk>\<close>
+
+(* Rust: explain_log *)
+definition "explain_log" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>explain_log \<equiv> \<lambda>p t xs ys ls k. FunctionBody \<lbrakk>
+    let destr_1 = path_explain_log(p, xs, ys, ls, k);
+    let e = destr_1.0;
+    let rows = destr_1.1;
+    if rows_join(p, e, rows, k) {
+      return e;
+    };
+    t
   \<rbrakk>\<close>
 
 (* Rust: note_new *)
@@ -965,8 +1098,8 @@ definition "note_true" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightar
 
 text \<open>Recursive group cdcl: defined by iterating cdcl_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>
 
-definition "cdcl_rec_step" :: \<open>((Problem \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> (64 word) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> ((Problem \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> (64 word) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
-  \<open>cdcl_rec_step \<equiv> \<lambda>rec_cdcl. (\<lambda>p l t f lv rs ts d s. FunctionBody \<lbrakk>
+definition "cdcl_rec_step" :: \<open>((Problem \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> (64 word) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> ((Problem \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> (64 word) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
+  \<open>cdcl_rec_step \<equiv> \<lambda>rec_cdcl. (\<lambda>p l t f lv rs ts rep xs ys ls d s. FunctionBody \<lbrakk>
     let s1 = sat_add(s, 1_usize);
     let u = next_unit(p, l, t, f);
     if ((u.Lit_atom) == len(t)) && (u.Lit_pos) {
@@ -974,7 +1107,7 @@ definition "cdcl_rec_step" :: \<open>((Problem \<Rightarrow> (Clause list) \<Rig
         return (None, l, d);
       };
       let c = indexed_clause(p, l, unit_index(p, l, t, f), 0_usize);
-      return on_conflict(p, l, t, lv, ts, rs, d, c);
+      return \<epsilon>\<open>funcall11 on_conflict \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t\<rbrakk> \<lbrakk>lv\<rbrakk> \<lbrakk>ts\<rbrakk> \<lbrakk>rs\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>c\<rbrakk>\<close>;
     };
     if (u.Lit_atom) < len(t) {
       let ci = unit_index(p, l, t, f);
@@ -985,21 +1118,25 @@ definition "cdcl_rec_step" :: \<open>((Problem \<Rightarrow> (Clause list) \<Rig
       } else {
         * (f1[u.Lit_atom]) = true;
       };
-      return \<epsilon>\<open>funcall9 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>* t1\<rbrakk> \<lbrakk>* f1\<rbrakk> \<lbrakk>note_fn(lv, u.Lit_atom, d)\<rbrakk> \<lbrakk>note_fn(rs, u.Lit_atom, ci)\<rbrakk> \<lbrakk>note_fn(ts, u.Lit_atom, s)\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s1\<rbrakk>\<close>;
+      return \<epsilon>\<open>funcall13 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>* t1\<rbrakk> \<lbrakk>* f1\<rbrakk> \<lbrakk>note_fn(lv, u.Lit_atom, d)\<rbrakk> \<lbrakk>note_fn(rs, u.Lit_atom, ci)\<rbrakk> \<lbrakk>note_fn(ts, u.Lit_atom, s)\<rbrakk> \<lbrakk>rep\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s1\<rbrakk>\<close>;
     };
-    let destr_3 = cc_propagate(p, t, f);
+    let destr_3 = cc_step(p, t, f, rep, xs, ys, ls);
     let c = destr_3.0;
     let t2 = destr_3.1;
     let f2 = destr_3.2;
+    let rep2 = destr_3.3;
+    let xs2 = destr_3.4;
+    let ys2 = destr_3.5;
+    let ls2 = destr_3.6;
     if c < len(t) {
-      let cl = conflict_clause(explain(p, t, c), c);
-      return on_conflict(p, l, t, lv, ts, rs, d, cl);
+      let cl = conflict_clause(explain_log(p, t, xs2, ys2, ls2, c), c);
+      return \<epsilon>\<open>funcall11 on_conflict \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t\<rbrakk> \<lbrakk>lv\<rbrakk> \<lbrakk>ts\<rbrakk> \<lbrakk>rs\<rbrakk> \<lbrakk>xs2\<rbrakk> \<lbrakk>ys2\<rbrakk> \<lbrakk>ls2\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>cl\<rbrakk>\<close>;
     };
     if differs(t, t2) || differs(f, f2) {
       let lv2 = note_new(t, f, t2, f2, lv, d);
       let rs2 = note_true(t, t2, rs, 1_usize);
       let ts2 = note_new(t, f, t2, f2, ts, s);
-      return \<epsilon>\<open>funcall9 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t2\<rbrakk> \<lbrakk>f2\<rbrakk> \<lbrakk>lv2\<rbrakk> \<lbrakk>rs2\<rbrakk> \<lbrakk>ts2\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s1\<rbrakk>\<close>;
+      return \<epsilon>\<open>funcall13 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t2\<rbrakk> \<lbrakk>f2\<rbrakk> \<lbrakk>lv2\<rbrakk> \<lbrakk>rs2\<rbrakk> \<lbrakk>ts2\<rbrakk> \<lbrakk>rep2\<rbrakk> \<lbrakk>xs2\<rbrakk> \<lbrakk>ys2\<rbrakk> \<lbrakk>ls2\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s1\<rbrakk>\<close>;
     };
     let k = first_unset(t, f);
     if k == len(t) {
@@ -1011,7 +1148,7 @@ definition "cdcl_rec_step" :: \<open>((Problem \<Rightarrow> (Clause list) \<Rig
     let d1 = sat_add(d, 1_usize);
     let mut t1 = { let init_4 = t; \<llangle>init_4 :: bool list\<rrangle> };
     * (t1[k]) = true;
-    let destr_5 = \<epsilon>\<open>funcall9 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>* t1\<rbrakk> \<lbrakk>f\<rbrakk> \<lbrakk>note_fn(lv, k, d1)\<rbrakk> \<lbrakk>rs\<rbrakk> \<lbrakk>note_fn(ts, k, s)\<rbrakk> \<lbrakk>d1\<rbrakk> \<lbrakk>s1\<rbrakk>\<close>;
+    let destr_5 = \<epsilon>\<open>funcall13 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>* t1\<rbrakk> \<lbrakk>f\<rbrakk> \<lbrakk>note_fn(lv, k, d1)\<rbrakk> \<lbrakk>rs\<rbrakk> \<lbrakk>note_fn(ts, k, s)\<rbrakk> \<lbrakk>rep\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>d1\<rbrakk> \<lbrakk>s1\<rbrakk>\<close>;
     let r = destr_5.0;
     let l1 = destr_5.1;
     let j = destr_5.2;
@@ -1021,7 +1158,7 @@ definition "cdcl_rec_step" :: \<open>((Problem \<Rightarrow> (Clause list) \<Rig
     if j >= d1 {
       let mut f1 = { let init_6 = f; \<llangle>init_6 :: bool list\<rrangle> };
       * (f1[k]) = true;
-      return \<epsilon>\<open>funcall9 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>l1\<rbrakk> \<lbrakk>t\<rbrakk> \<lbrakk>* f1\<rbrakk> \<lbrakk>note_fn(lv, k, d)\<rbrakk> \<lbrakk>rs\<rbrakk> \<lbrakk>note_fn(ts, k, s)\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s1\<rbrakk>\<close>;
+      return \<epsilon>\<open>funcall13 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>l1\<rbrakk> \<lbrakk>t\<rbrakk> \<lbrakk>* f1\<rbrakk> \<lbrakk>note_fn(lv, k, d)\<rbrakk> \<lbrakk>rs\<rbrakk> \<lbrakk>note_fn(ts, k, s)\<rbrakk> \<lbrakk>rep\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s1\<rbrakk>\<close>;
     };
     if j < d {
       return (None, l1, j);
@@ -1037,7 +1174,7 @@ definition "cdcl_rec_step" :: \<open>((Problem \<Rightarrow> (Clause list) \<Rig
         } else {
           * (f3[u1.Lit_atom]) = true;
         };
-        return \<epsilon>\<open>funcall9 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>l1\<rbrakk> \<lbrakk>* t3\<rbrakk> \<lbrakk>* f3\<rbrakk> \<lbrakk>note_fn(lv, u1.Lit_atom, d)\<rbrakk> \<lbrakk>note_fn(rs, u1.Lit_atom, ci)\<rbrakk> \<lbrakk>note_fn(ts, u1.Lit_atom, s)\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s1\<rbrakk>\<close>;
+        return \<epsilon>\<open>funcall13 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>l1\<rbrakk> \<lbrakk>* t3\<rbrakk> \<lbrakk>* f3\<rbrakk> \<lbrakk>note_fn(lv, u1.Lit_atom, d)\<rbrakk> \<lbrakk>note_fn(rs, u1.Lit_atom, ci)\<rbrakk> \<lbrakk>note_fn(ts, u1.Lit_atom, s)\<rbrakk> \<lbrakk>rep\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s1\<rbrakk>\<close>;
       };
       if u1.Lit_pos {
         return (None, l1, d);
@@ -1050,17 +1187,22 @@ definition "cdcl_rec_step" :: \<open>((Problem \<Rightarrow> (Clause list) \<Rig
   \<rbrakk>)\<close>
 
 (* Rust: cdcl *)
-definition "cdcl" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> (64 word) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>cdcl \<equiv> ((cdcl_rec_step ^^ urust_fuel) (\<lambda>p l t f lv rs ts d s. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>))\<close>
+definition "cdcl" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> (64 word) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>cdcl \<equiv> ((cdcl_rec_step ^^ urust_fuel) (\<lambda>p l t f lv rs ts rep xs ys ls d s. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>))\<close>
 
 (* Rust: solve *)
 definition "solve" :: \<open>Problem \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>solve \<equiv> \<lambda>p. FunctionBody \<lbrakk>
     let n = len(p.Problem_atoms);
-    let destr_2 = \<epsilon>\<open>funcall9 cdcl \<lbrakk>p\<rbrakk> \<lbrakk>{ let res_1 = []; \<llangle>res_1 :: Clause list\<rrangle> }\<rbrakk> \<lbrakk>vec_from_elem(false, n)\<rbrakk> \<lbrakk>vec_from_elem(false, n)\<rbrakk> \<lbrakk>vec_from_elem(0_usize, n)\<rbrakk> \<lbrakk>vec_from_elem(0_usize, n)\<rbrakk> \<lbrakk>vec_from_elem(0_usize, n)\<rbrakk> \<lbrakk>0_usize\<rbrakk> \<lbrakk>0_usize\<rbrakk>\<close>;
-    let r = destr_2.0;
-    let v_l = destr_2.1;
-    let v_j = destr_2.2;
+    let destr_1 = root_log(p);
+    let rep = destr_1.0;
+    let xs = destr_1.1;
+    let ys = destr_1.2;
+    let ls = destr_1.3;
+    let destr_3 = \<epsilon>\<open>funcall13 cdcl \<lbrakk>p\<rbrakk> \<lbrakk>{ let res_2 = []; \<llangle>res_2 :: Clause list\<rrangle> }\<rbrakk> \<lbrakk>vec_from_elem(false, n)\<rbrakk> \<lbrakk>vec_from_elem(false, n)\<rbrakk> \<lbrakk>vec_from_elem(0_usize, n)\<rbrakk> \<lbrakk>vec_from_elem(0_usize, n)\<rbrakk> \<lbrakk>vec_from_elem(0_usize, n)\<rbrakk> \<lbrakk>rep\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>0_usize\<rbrakk> \<lbrakk>0_usize\<rbrakk>\<close>;
+    let r = destr_3.0;
+    let v_l = destr_3.1;
+    let v_j = destr_3.2;
     match r {
       Some(m) \<Rightarrow> {
         Answer_Sat_mk(m)

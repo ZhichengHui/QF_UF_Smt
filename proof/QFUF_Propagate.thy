@@ -221,6 +221,43 @@ lemma has_pair_spec:
   apply (auto dest: unat_idx_lt(1) intro: order_less_le_trans)
   done
 
+text \<open>\<^const>\<open>false_sides\<close> and \<^const>\<open>flag_at\<close> only filter the atoms that
+  \<^const>\<open>separated_unset\<close> examines, so their results are not constrained.\<close>
+
+definition false_sides_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word list \<Rightarrow> ('s, bool list, 'abort) function_contract\<close> where
+  \<open>false_sides_contract p f rs \<equiv>
+     let pre = can_alloc_reference \<star>
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms p) \<and> length f = length (Problem_atoms p)\<rangle> in
+     let post = \<lambda>_. can_alloc_reference in
+     make_function_contract pre post\<close>
+
+lemma false_sides_spec:
+  shows \<open>\<Gamma>; false_sides p f rs \<Turnstile>\<^sub>F false_sides_contract p f rs\<close>
+  apply (crush_boot f: false_sides_def contract: false_sides_contract_def)
+  apply (crush_base simp add: sizes_ok_def unat_of_nat_lt63)
+  subgoal for mk_ref
+    apply (ucincl_discharge\<open>
+      rule_tac INV=\<open>\<lambda>_ _. can_alloc_reference \<star> (\<Squnion>g' v. mk_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms p)\<rangle>)\<close>
+        and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
+        and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+        and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_raw_for_loop_framedI'\<close>)
+    apply (crush_base specs add: set_true_spec[where n=\<open>length (Problem_terms p)\<close>]
+        contracts add: set_true_contract_def simp add: unat_of_nat_eq less_Suc_eq sizes_ok_def)
+    apply (metis wf_atom)+
+    done
+  done
+
+definition flag_at_contract :: \<open>bool list \<Rightarrow> 64 word \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+  \<open>flag_at_contract v i \<equiv> make_function_contract can_alloc_reference (\<lambda>_. can_alloc_reference)\<close>
+
+lemma flag_at_spec:
+  shows \<open>\<Gamma>; flag_at v i \<Turnstile>\<^sub>F flag_at_contract v i\<close>
+  apply (crush_boot f: flag_at_def contract: flag_at_contract_def)
+  apply (crush_base simp add: word_less_nat_alt)
+  apply (auto intro: unat_lt_len)
+  done
+
 definition separated_unset_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> 64 word list \<Rightarrow>
       ('s, bool list, 'abort) function_contract\<close> where
   \<open>separated_unset_contract p t f rs \<equiv>
@@ -235,8 +272,9 @@ definition separated_unset_contract :: \<open>Problem \<Rightarrow> bool list \<
 lemma separated_unset_spec:
   shows \<open>\<Gamma>; separated_unset p t f rs \<Turnstile>\<^sub>F separated_unset_contract p t f rs\<close>
   apply (crush_boot f: separated_unset_def contract: separated_unset_contract_def)
-  apply (crush_base specs add: false_pairs_spec contracts add: false_pairs_contract_def simp add: sizes_ok_def)
-  subgoal for us vs f1_ref
+  apply (crush_base specs add: false_pairs_spec false_sides_spec contracts add: false_pairs_contract_def
+      false_sides_contract_def simp add: sizes_ok_def)
+  subgoal for us vs mk f1_ref
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ _. can_alloc_reference \<star> (\<Squnion>g' xs. f1_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>xs \<star>
                  \<langle>length xs = length (Problem_atoms p) \<and> (\<forall>j < length (Problem_atoms p).
@@ -245,14 +283,14 @@ lemma separated_unset_spec:
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_raw_for_loop_framedI'\<close>)
-    apply (crush_base specs add: has_pair_spec contracts add: has_pair_contract_def
+    apply (crush_base specs add: has_pair_spec flag_at_spec contracts add: has_pair_contract_def flag_at_contract_def
         simp add: unat_of_nat_eq nth_list_update sizes_ok_def)
-    subgoal for i g' xs x ia j
+    subgoal for i g' xs x xa xb ia j
       by (cases \<open>i = j\<close>) (auto intro!: sep_byI[where us=us and vs=vs])
-    subgoal for i g' xs x ia j by (cases \<open>i = j\<close>) auto
-    subgoal for i g' xs x ia j
+    subgoal for i g' xs x xa xb ia j by (cases \<open>i = j\<close>) auto
+    subgoal for i g' xs x xa xb ia j
       by (cases \<open>i = j\<close>) (auto intro!: sep_byI[where us=us and vs=vs])
-    subgoal for i g' xs x ia j by (cases \<open>i = j\<close>) auto
+    subgoal for i g' xs x xa xb ia j by (cases \<open>i = j\<close>) auto
     apply (metis wf_atom)+
     done
   done
@@ -303,8 +341,8 @@ definition implied_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarr
      let pre = can_alloc_reference \<star>
         (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p (asserted p t (length (Problem_atoms p))) rs\<rangle>) \<star>
         \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms p) \<and> length f = length (Problem_atoms p)\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs) \<star>
-        \<langle>\<exists>rs. implied_ok p t f rs (fst r) (fst (snd r))\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star>
+        \<langle>cc_inv p (asserted p t (length (Problem_atoms p))) rs \<and> implied_ok p t f rs (fst r) (fst (snd r))\<rangle>) in
      make_function_contract pre post\<close>
 
 lemma implied_spec:

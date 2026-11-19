@@ -229,26 +229,6 @@ lemma note_true_spec:
     done
   done
 
-definition true_before_contract :: \<open>bool list \<Rightarrow> ('s, bool list, 'abort) function_contract\<close> where
-  \<open>true_before_contract t \<equiv>
-     make_function_contract (can_alloc_reference \<star> \<langle>length t < 2^64\<rangle>) (\<lambda>r. can_alloc_reference \<star> \<langle>length r = length t\<rangle>)\<close>
-
-lemma true_before_spec:
-  shows \<open>\<Gamma>; true_before t ts s \<Turnstile>\<^sub>F true_before_contract t\<close>
-  apply (crush_boot f: true_before_def contract: true_before_contract_def)
-  apply crush_base
-  subgoal for e_ref
-    apply (ucincl_discharge\<open>
-      rule_tac INV=\<open>\<lambda>_ _. can_alloc_reference \<star> (\<Squnion>g' xs. e_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>xs \<star> \<langle>length xs = length t\<rangle>)\<close>
-        and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
-        and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
-        and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
-      in wp_raw_for_loop_framedI'\<close>)
-    apply (crush_base specs add: get_or_spec contracts add: get_or_contract_def
-        simp add: unat_of_nat_eq word_less_nat_alt)
-    done
-  done
-
 subsection \<open>Reasons\<close>
 
 definition tautology_contract :: \<open>64 word \<Rightarrow> ('s, Clause, 'abort) function_contract\<close> where
@@ -329,23 +309,21 @@ definition reason_contract :: \<open>Problem \<Rightarrow> Clause list \<Rightar
        (\<lambda>r. can_alloc_reference \<star> \<langle>clause_fits p r\<rangle>)\<close>
 
 lemma theory_reason_spec:
-  shows \<open>\<Gamma>; theory_reason p t ts x \<Turnstile>\<^sub>F reason_contract p l t x\<close>
+  shows \<open>\<Gamma>; theory_reason p xs ys ls x \<Turnstile>\<^sub>F reason_contract p l t x\<close>
   apply (crush_boot f: theory_reason_def contract: reason_contract_def)
-  apply (crush_base specs add: get_or_spec true_before_spec path_explain_spec rows_join_spec conflict_clause_spec
-      tautology_spec
-      contracts add: get_or_contract_def true_before_contract_def path_explain_contract_def rows_join_contract_def
-        conflict_clause_contract_def tautology_contract_def)
+  apply (crush_base specs add: path_explain_log_spec rows_join_spec conflict_clause_spec tautology_spec
+      contracts add: path_explain_log_contract_def rows_join_contract_def conflict_clause_contract_def
+        tautology_contract_def)
   subgoal by (rule clause_fits_tautology)
-  subgoal for xa a aa xb xaa
-    unfolding clause_fits_def using conflict_lits_clause_ok[of p x a xaa] by (auto simp add: sizes_ok_def)
-  subgoal by (simp add: sizes_ok_def)
+  subgoal for a aa xa xb
+    unfolding clause_fits_def using conflict_lits_clause_ok[of p x a xb] by (auto simp add: sizes_ok_def)
   subgoal by (simp add: sizes_ok_def)
   done
 
 lemma reason_spec:
-  shows \<open>\<Gamma>; reason p l t ts rs x \<Turnstile>\<^sub>F reason_contract p l t x\<close>
+  shows \<open>\<Gamma>; reason p l xs ys ls rs x \<Turnstile>\<^sub>F reason_contract p l t x\<close>
   apply (crush_boot f: reason_def contract: reason_contract_def)
-  apply (crush_base specs add: get_or_spec theory_reason_spec[where l=l] indexed_clause_spec
+  apply (crush_base specs add: get_or_spec theory_reason_spec[where l=l and t=t] indexed_clause_spec
       contracts add: get_or_contract_def reason_contract_def indexed_clause_contract_def)
   done
 
@@ -537,9 +515,9 @@ definition resolve_step_contract :: \<open>Problem \<Rightarrow> Clause list \<R
      make_function_contract pre post\<close>
 
 lemma resolve_step_spec:
-  shows \<open>\<Gamma>; resolve_step p l t lv ts rs d cp cn \<Turnstile>\<^sub>F resolve_step_contract p l t cp cn\<close>
+  shows \<open>\<Gamma>; resolve_step p l t lv ts rs xs ys ls d cp cn \<Turnstile>\<^sub>F resolve_step_contract p l t cp cn\<close>
   apply (crush_boot f: resolve_step_def contract: resolve_step_contract_def)
-  apply (crush_base specs add: last_at_spec other_at_spec get_or_spec reason_spec add_lits_spec
+  apply (crush_base specs add: last_at_spec other_at_spec get_or_spec reason_spec[where t=t] add_lits_spec
       contracts add: scan_ok_contract_def get_or_contract_def reason_contract_def add_lits_contract_def
       simp add: word_le_nat_alt word_less_nat_alt)
   apply (all \<open>(solves \<open>rule resolve_step_ok; assumption\<close>)?\<close>)
@@ -590,7 +568,7 @@ definition analyze_contract :: \<open>Problem \<Rightarrow> Clause list \<Righta
      make_function_contract pre post\<close>
 
 lemma analyze_spec:
-  shows \<open>\<Gamma>; analyze p l t lv ts rs d c \<Turnstile>\<^sub>F analyze_contract p l t c\<close>
+  shows \<open>\<Gamma>; analyze p l t lv ts rs xs ys ls d c \<Turnstile>\<^sub>F analyze_contract p l t c\<close>
   apply (crush_boot f: analyze_def contract: analyze_contract_def)
   apply (crush_base specs add: add_lits_spec contracts add: add_lits_contract_def simp add: sizes_ok_def unat_of_nat_eq)
   subgoal for a aa cp_ref cn_ref go_ref
@@ -621,7 +599,7 @@ definition on_conflict_contract :: \<open>Problem \<Rightarrow> Clause list \<Ri
      make_function_contract pre post\<close>
 
 lemma on_conflict_spec:
-  shows \<open>\<Gamma>; on_conflict p l t lv ts rs d c \<Turnstile>\<^sub>F on_conflict_contract p l t c\<close>
+  shows \<open>\<Gamma>; on_conflict p l t lv ts rs xs ys ls d c \<Turnstile>\<^sub>F on_conflict_contract p l t c\<close>
   apply (crush_boot f: on_conflict_def contract: on_conflict_contract_def)
   apply (crush_base specs add: analyze_spec learn_spec contracts add: analyze_contract_def learn_contract_def)
   apply (auto intro: clauses_ok_append simp add: clause_fits_def)

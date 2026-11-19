@@ -1,5 +1,5 @@
 theory QFUF_Proof
-  imports QFUF_Analyze
+  imports QFUF_Incremental
 begin
 
 context QFUF_ctx
@@ -162,11 +162,12 @@ text \<open>The \<open>k\<close>-th unfolding of \<^const>\<open>cdcl\<close> at
   stamps only guide the analysis, so the contract does not mention them. The fallback to
   \<^const>\<open>search\<close> needs fewer atoms than fuel.\<close>
 definition cdcl_contract :: \<open>nat \<Rightarrow> Problem \<Rightarrow> Clause list \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow>
-      ('s, Model option \<times> Clause list \<times> 64 word \<times> tnil, 'abort) function_contract\<close> where
-  \<open>cdcl_contract k p l t f d \<equiv>
+      64 word list \<Rightarrow> ('s, Model option \<times> Clause list \<times> 64 word \<times> tnil, 'abort) function_contract\<close> where
+  \<open>cdcl_contract k p l t f d rep \<equiv>
      let pre = can_alloc_reference \<star>
         \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms p) \<and>
-         length f = length (Problem_atoms p) \<and> unset_count t f < k \<and> length (Problem_atoms p) < urust_fuel\<rangle> in
+         length f = length (Problem_atoms p) \<and> unset_count t f < k \<and> length (Problem_atoms p) < urust_fuel \<and>
+         rep_for p t rep\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
         \<langle>(case fst r of
            None \<Rightarrow> d \<le> fst (snd (snd r)) \<longrightarrow> \<not> pext p t f
@@ -272,28 +273,29 @@ lemma step_fallback_fuel:
   using unset_count_le[of t f] by simp
 
 lemma cdcl_rec_step_spec:
-  assumes \<open>\<And>l t f lv rs ts d s. \<Gamma>; R p l t f lv rs ts d s \<Turnstile>\<^sub>F cdcl_contract k p l t f d\<close>
-  shows \<open>\<Gamma>; cdcl_rec_step R p l t f lv rs ts d s \<Turnstile>\<^sub>F cdcl_contract (Suc k) p l t f d\<close>
+  assumes \<open>\<And>l t f lv rs ts rep xs ys ls d s. \<Gamma>; R p l t f lv rs ts rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract k p l t f d rep\<close>
+  shows \<open>\<Gamma>; cdcl_rec_step R p l t f lv rs ts rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract (Suc k) p l t f d rep\<close>
   apply (crush_boot f: cdcl_rec_step_def contract: cdcl_contract_def)
   apply (crush_base specs add: assms sat_add_ok_spec next_unit_spec unit_index_spec indexed_clause_spec on_conflict_spec
-        note_spec note_new_spec note_true_spec cc_propagate_spec explain_spec conflict_clause_spec differs_spec
+        note_spec note_new_spec note_true_spec cc_step_spec explain_log_spec conflict_clause_spec differs_spec
         first_unset_spec prop_holds_spec theory_check_spec clause_unit_spec search_spec
       contracts add: cdcl_contract_def sat_add_ok_contract_def next_unit_contract_def unit_index_contract_def
-        indexed_clause_contract_def on_conflict_contract_def note_contract_def cc_propagate_contract_def
-        explain_contract_def conflict_clause_contract_def differs_contract_def first_unset_contract_def
+        indexed_clause_contract_def on_conflict_contract_def note_contract_def cc_step_contract_def
+        explain_log_contract_def conflict_clause_contract_def differs_contract_def first_unset_contract_def
         prop_holds_contract_def theory_check_contract_def clause_unit_contract_def search_contract_def
       simp add: unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq word64_eq_of_nat_iff)
   apply (auto simp add: word_less_nat_alt unat_of_nat_lt63 Option.is_none_def split: option.splits
       dest: find_result_le)
   apply ((rule step_unit_none step_unit_fuel step_branch_none step_branch_fuel step_leaf step_leaf_some
         step_implied step_implied_fuel step_conflict step_falsified wf_lit step_last_none step_last_fuel
-        step_last_pre last_idx_lt last_idx_one step_conflict_fits step_fallback_fuel; assumption)+)?
+        step_last_pre last_idx_lt last_idx_one step_conflict_fits step_fallback_fuel rep_for_update rep_for_implied;
+        assumption)+)?
   apply (rule step_empty_conflict; assumption)
   done
 
 lemma cdcl_rec_spec:
-  shows \<open>\<Gamma>; (cdcl_rec_step ^^ k) R p l t f lv rs ts d s \<Turnstile>\<^sub>F cdcl_contract k p l t f d\<close>
-proof (induction k arbitrary: l t f lv rs ts d s)
+  shows \<open>\<Gamma>; (cdcl_rec_step ^^ k) R p l t f lv rs ts rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract k p l t f d rep\<close>
+proof (induction k arbitrary: l t f lv rs ts rep xs ys ls d s)
   case 0
   show ?case
     apply (ucincl_discharge\<open>intro satisfies_function_contractI\<close>)
@@ -307,7 +309,7 @@ next
 qed
 
 lemma cdcl_spec:
-  shows \<open>\<Gamma>; cdcl p l t f lv rs ts d s \<Turnstile>\<^sub>F cdcl_contract urust_fuel p l t f d\<close>
+  shows \<open>\<Gamma>; cdcl p l t f lv rs ts rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract urust_fuel p l t f d rep\<close>
   unfolding cdcl_def by (rule cdcl_rec_spec)
 
 subsection \<open>The top-level contract\<close>
@@ -324,9 +326,10 @@ lemma solve_spec:
   assumes fuel: \<open>length (Problem_atoms p) < urust_fuel\<close>
   shows \<open>\<Gamma>; solve p \<Turnstile>\<^sub>F solve_contract p\<close>
   apply (crush_boot f: solve_def contract: solve_contract_def)
-  apply (crush_base specs add: cdcl_spec contracts add: cdcl_contract_def split!: option.splits
+  apply (crush_base specs add: root_log_spec cdcl_spec contracts add: root_log_contract_def cdcl_contract_def
+      split!: option.splits
       simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq pext_start unset_count_replicate Answer_Sat_mk_def
-        clauses_ok_def)
+        clauses_ok_def rep_for_empty)
   done
 
 text \<open>The contract of \<^verbatim>\<open>solve\<close> with, for a model, the bound on its values and arguments.\<close>
@@ -347,9 +350,10 @@ lemma solve_vals_spec:
   assumes fuel: \<open>length (Problem_atoms p) < urust_fuel\<close>
   shows \<open>\<Gamma>; solve p \<Turnstile>\<^sub>F solve_contract_vals p\<close>
   apply (crush_boot f: solve_def contract: solve_contract_vals_def)
-  apply (crush_base specs add: cdcl_spec contracts add: cdcl_contract_def split!: option.splits
+  apply (crush_base specs add: root_log_spec cdcl_spec contracts add: root_log_contract_def cdcl_contract_def
+      split!: option.splits
       simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq pext_start unset_count_replicate Answer_Sat_mk_def
-        clauses_ok_def)
+        clauses_ok_def rep_for_empty)
   apply (auto simp add: model_vals_ok_def)?
   done
 

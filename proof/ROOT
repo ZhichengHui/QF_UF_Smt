@@ -11,6 +11,7 @@ session "QFUF_Proof" = "QFUF_CoreSpec" +
     QFUF_Explain
     QFUF_Propagate
     QFUF_Analyze
+    QFUF_Incremental
     QFUF_Proof
 
 session "QFUF_Smt" in "smt" = "QFUF_CoreSpec" +
