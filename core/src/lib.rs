@@ -1109,8 +1109,9 @@ pub fn check_sat(p: &SmtProblem) -> SmtAnswer {
     if input_size(p) > max_size() {
         return SmtAnswer::Unknown;
     }
-    match solve(&tr_problem(p)) {
-        Answer::Sat(m) => SmtAnswer::Sat(tr_model(p, &m)),
+    let ren = elim_map(p);
+    match solve(&rename_consts(tr_problem(p), &ren)) {
+        Answer::Sat(m) => SmtAnswer::Sat(tr_model(p, &unrename_model(&m, &ren))),
         Answer::Unsat => SmtAnswer::Unsat,
     }
 }
@@ -1471,4 +1472,250 @@ fn cc_propagate(p: &Problem, t: &[bool], f: &[bool]) -> (usize, Vec<bool>, Vec<b
     let c = false_joined(p, f, &mut rep);
     let (t1, f1) = implied(p, t, f, &mut rep);
     (c, t1, f1)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Elimination of constants before the search (a restricted form of z3's `solve-eqs`).
+//
+// A constant `c` (a declared symbol without arguments, of an uninterpreted sort) can be replaced
+// by another constant `g` of its sort when every occurrence of `c` lies in an `and` at a positive
+// position (reached from an assertion through `and` and `or` only) that has the argument
+// `(= c g)` or `(= g c)`. Such an `and` is true only if `c` and `g` are equal, and then replacing
+// `c` by `g` in it does not change its value; where it is false, the replacement can only make it
+// true, and a positive position passes that on to the assertion. So the replacement keeps every
+// model of the problem, and a model of the result gives `c` the value of `g`.
+//
+// `elim_map` decides the replacements one constant after another, each on the problem with the
+// earlier replacements made: `ren[f]` is the constant that replaces the constant `f` (`f` itself
+// if none does). `check_sat` renames the constants of the translated problem by `ren`, and gives
+// each replaced constant the value of its replacement in the model.
+
+/// Whether `t` is a declared symbol applied to nothing, and that symbol.
+fn const_of(t: &SmtTerm) -> (bool, usize) {
+    match t {
+        SmtTerm::Fun(f, args) => (args.len() == 0, *f),
+        _ => (false, 0),
+    }
+}
+
+/// If `t` is `(= a b)` for constants `a` and `b` of which one is `c` after renaming by `ren`: the
+/// other one after renaming; `c` otherwise.
+fn eq_partner(t: &SmtTerm, ren: &[usize], c: usize) -> usize {
+    match t {
+        SmtTerm::App(o, args) => match o {
+            SmtOp::Eq => {
+                if args.len() != 2 {
+                    return c;
+                }
+                let (ka, a0) = const_of(&args[0]);
+                let (kb, b0) = const_of(&args[1]);
+                let a = get_or(ren, a0, a0);
+                let b = get_or(ren, b0, b0);
+                if ka && kb && a == c {
+                    b
+                } else if ka && kb && b == c {
+                    a
+                } else {
+                    c
+                }
+            }
+            _ => c,
+        },
+        _ => c,
+    }
+}
+
+/// Is `g` a partner of `c` (`eq_partner`) in one of the terms `ts`?
+fn has_partner(ts: &Vec<SmtTerm>, ren: &[usize], c: usize, g: usize) -> bool {
+    let mut i: usize = 0;
+    while i < ts.len() {
+        if eq_partner(&ts[i], ren, c) == g {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+/// Does the constant `c` occur in `t` after renaming by `ren`?
+fn occurs(t: &SmtTerm, ren: &[usize], c: usize) -> bool {
+    match t {
+        SmtTerm::Fun(f, args) => (args.len() == 0 && get_or(ren, *f, *f) == c) || occurs_args(args, ren, c),
+        SmtTerm::Def(_, args) => occurs_args(args, ren, c),
+        SmtTerm::App(_, args) => occurs_args(args, ren, c),
+        _ => false,
+    }
+}
+
+/// Does the constant `c` occur in one of the terms `ts` after renaming by `ren`?
+fn occurs_args(ts: &Vec<SmtTerm>, ren: &[usize], c: usize) -> bool {
+    let mut i: usize = 0;
+    while i < ts.len() {
+        if occurs(&ts[i], ren, c) {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+/// Whether, after renaming by `ren`, every occurrence of the constant `c` in `t`, a term at a
+/// positive position, lies in an `and` at a positive position that has an argument `(= c g)` or
+/// `(= g c)`, `g` different from `c`.
+fn guarded(t: &SmtTerm, ren: &[usize], c: usize, g: usize) -> bool {
+    match t {
+        SmtTerm::App(o, args) => match o {
+            SmtOp::And => has_partner(args, ren, c, g) || guarded_args(args, ren, c, g),
+            SmtOp::Or => guarded_args(args, ren, c, g),
+            _ => !occurs(t, ren, c),
+        },
+        _ => !occurs(t, ren, c),
+    }
+}
+
+/// `guarded` for every term of `ts`.
+fn guarded_args(ts: &Vec<SmtTerm>, ren: &[usize], c: usize, g: usize) -> bool {
+    let mut i: usize = 0;
+    while i < ts.len() {
+        if !guarded(&ts[i], ren, c, g) {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
+/// Records in `part`, for every argument `(= a b)` (`a`, `b` constants of different symbols) of an
+/// `and` at a positive position of `t`, `b` as the partner of `a` and `a` as that of `b`.
+fn mark_cands(t: &SmtTerm, part: &mut Vec<usize>) {
+    match t {
+        SmtTerm::App(o, args) => match o {
+            SmtOp::And => {
+                let mut i: usize = 0;
+                while i < args.len() {
+                    mark_eq(&args[i], part);
+                    mark_cands(&args[i], part);
+                    i += 1;
+                }
+            }
+            SmtOp::Or => {
+                let mut i: usize = 0;
+                while i < args.len() {
+                    mark_cands(&args[i], part);
+                    i += 1;
+                }
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+}
+
+/// If `t` is `(= a b)` for constants `a` and `b` of different symbols, records `b` as the partner of
+/// `a` and `a` as that of `b` in `part`.
+fn mark_eq(t: &SmtTerm, part: &mut Vec<usize>) {
+    match t {
+        SmtTerm::App(o, args) => match o {
+            SmtOp::Eq => {
+                if args.len() == 2 {
+                    let (ka, a) = const_of(&args[0]);
+                    let (kb, b) = const_of(&args[1]);
+                    if ka && kb && a != b {
+                        set_at(part, a, b);
+                        set_at(part, b, a);
+                    }
+                }
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+}
+
+/// Are `a` and `b` the same uninterpreted sort?
+fn same_usort(a: &SmtSort, b: &SmtSort) -> bool {
+    match a {
+        SmtSort::Uninterpreted(x) => match b {
+            SmtSort::Uninterpreted(y) => *x == *y,
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+/// Whether, after renaming by `ren`, the constant `c` can be replaced by `g`: both are constants of
+/// one uninterpreted sort, `g` is not renamed, `c` occurs in no definition, and every assertion is
+/// `guarded`.
+fn eliminable(p: &SmtProblem, ren: &[usize], c: usize, g: usize) -> bool {
+    if c == g || c >= p.funs.len() || g >= p.funs.len() || get_or(ren, g, g) != g {
+        return false;
+    }
+    if p.funs[c].args.len() != 0 || p.funs[g].args.len() != 0 || !same_usort(&p.funs[c].ret, &p.funs[g].ret) {
+        return false;
+    }
+    let mut d: usize = 0;
+    while d < p.defs.len() {
+        if occurs(&p.defs[d].body, ren, c) {
+            return false;
+        }
+        d += 1;
+    }
+    let mut j: usize = 0;
+    while j < p.asserts.len() {
+        if !guarded(&p.asserts[j], ren, c, g) {
+            return false;
+        }
+        j += 1;
+    }
+    true
+}
+
+/// The renaming of the constants of `p`: `ren[f]` replaces the declared symbol `f`. The candidates
+/// are the constants with a partner recorded by `mark_cands`; for each, in order, the partner after
+/// the renaming so far is tried with `eliminable`.
+fn elim_map(p: &SmtProblem) -> Vec<usize> {
+    let n = p.funs.len();
+    let mut part = init_rep(n);
+    let mut j: usize = 0;
+    while j < p.asserts.len() {
+        mark_cands(&p.asserts[j], &mut part);
+        j += 1;
+    }
+    let mut ren = init_rep(n);
+    for c in 0..n {
+        if part[c] != c && ren[c] == c {
+            let g = get_or(&ren, part[c], part[c]);
+            if eliminable(p, &ren, c, g) {
+                merge(&mut ren, c, g);
+            }
+        }
+    }
+    ren
+}
+
+/// `p` with every constant term of a symbol `f < ren.len()` renamed to `ren[f]`.
+fn rename_consts(p: Problem, ren: &[usize]) -> Problem {
+    let mut terms = p.terms;
+    for i in 0..terms.len() {
+        if terms[i].args.len() == 0 && terms[i].fun < ren.len() {
+            let f = ren[terms[i].fun];
+            terms[i] = Term { fun: f, args: Vec::new() };
+        }
+    }
+    Problem { terms: terms, atoms: p.atoms, clauses: p.clauses }
+}
+
+/// The model `m` of the renamed problem with, in front, an entry for every renamed constant `f`:
+/// the value of `ren[f]` in `m`.
+fn unrename_model(m: &Model, ren: &[usize]) -> Model {
+    let mut entries = Vec::new();
+    for f in 0..ren.len() {
+        if ren[f] != f {
+            entries.push(Entry { fun: f, args: Vec::new(), val: const_value(m, ren[f]) });
+        }
+    }
+    for i in 0..m.entries.len() {
+        entries.push(m.entries[i].clone());
+    }
+    Model { entries: entries }
 }
