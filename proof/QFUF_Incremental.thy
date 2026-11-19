@@ -357,8 +357,8 @@ definition cc_step_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarr
 lemma cc_step_spec:
   shows \<open>\<Gamma>; cc_step p t f rs xs ys ls \<Turnstile>\<^sub>F cc_step_contract p t f rs\<close>
   apply (crush_boot f: cc_step_def contract: cc_step_contract_def)
-  apply (crush_base specs add: log_atoms_inv_spec close_moved_spec false_joined_keep_spec[where t=t] implied_spec
-      contracts add: log_atoms_inv_contract_def close_moved_contract_def false_joined_keep_contract_def
+  apply (crush_base specs add: log_atoms_inv_spec close_moved_spec false_joined_spec[where t=t] implied_spec
+      contracts add: log_atoms_inv_contract_def close_moved_contract_def false_joined_contract_def
         implied_contract_def
       simp add: rep_for_length)
   apply (all \<open>(solves \<open>blast intro: rep_for_cc_inv\<close>)?\<close>)
