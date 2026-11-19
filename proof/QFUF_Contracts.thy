@@ -957,15 +957,16 @@ lemma first_joined_spec:
   apply (metis wf_atom)+
   done
 
-text \<open>As for \<^const>\<open>finish\<close>, the state of \<open>rep\<close> is existentially quantified inside the
-  contract.\<close>
+text \<open>The contract keeps the invariant of \<open>rep\<close>: theory propagation (\<^const>\<open>cc_propagate\<close>)
+  reads \<open>rep\<close> again afterwards.\<close>
 definition false_joined_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow>
       ('s, 64 word, 'abort) function_contract\<close> where
   \<open>false_joined_contract p t f rep \<equiv>
      let pre = can_alloc_reference \<star>
         (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p (asserted p t (length (Problem_atoms p))) rs\<rangle>) \<star>
         \<langle>wf_problem p \<and> length t = length (Problem_atoms p) \<and> length f = length (Problem_atoms p)\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs) \<star>
+     let post = \<lambda>r. can_alloc_reference \<star>
+        (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p (asserted p t (length (Problem_atoms p))) rs\<rangle>) \<star>
         \<langle>conflict_result p t f r\<rangle> in
      make_function_contract pre post\<close>
 

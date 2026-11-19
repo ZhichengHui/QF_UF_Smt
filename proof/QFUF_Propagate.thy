@@ -247,12 +247,7 @@ lemma separated_unset_spec:
       in wp_raw_for_loop_framedI'\<close>)
     apply (crush_base specs add: has_pair_spec contracts add: has_pair_contract_def
         simp add: unat_of_nat_eq nth_list_update sizes_ok_def)
-    subgoal for i g' xs x ia j
-      by (cases \<open>i = j\<close>) (auto intro!: sep_byI[where us=us and vs=vs])
-    subgoal for i g' xs x ia j by (cases \<open>i = j\<close>) auto
-    subgoal for i g' xs x ia j
-      by (cases \<open>i = j\<close>) (auto intro!: sep_byI[where us=us and vs=vs])
-    subgoal for i g' xs x ia j by (cases \<open>i = j\<close>) auto
+    apply (auto split: if_split_asm intro!: sep_byI[where us=us and vs=vs])
     apply (metis wf_atom)+
     done
   done
@@ -275,26 +270,6 @@ lemma differs_spec:
     in wp_raw_for_loop_framedI'\<close>)
   apply (crush_base simp add: unat_of_nat_eq less_Suc_eq)
   apply (auto intro: nth_equalityI)
-  done
-
-text \<open>The contract of \<^const>\<open>false_joined\<close> that also keeps the invariant of \<open>rep\<close>.\<close>
-definition false_joined_keep_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow>
-      ('s, 64 word, 'abort) function_contract\<close> where
-  \<open>false_joined_keep_contract p t f rep \<equiv>
-     let pre = can_alloc_reference \<star>
-        (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p (asserted p t (length (Problem_atoms p))) rs\<rangle>) \<star>
-        \<langle>wf_problem p \<and> length t = length (Problem_atoms p) \<and> length f = length (Problem_atoms p)\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star>
-        (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p (asserted p t (length (Problem_atoms p))) rs\<rangle>) \<star>
-        \<langle>conflict_result p t f r\<rangle> in
-     make_function_contract pre post\<close>
-
-lemma false_joined_keep_spec:
-  shows \<open>\<Gamma>; false_joined p f rep \<Turnstile>\<^sub>F false_joined_keep_contract p t f rep\<close>
-  apply (crush_boot f: false_joined_def contract: false_joined_keep_contract_def)
-  apply (crush_base specs add: first_joined_spec contracts add: first_joined_contract_def)
-  apply (auto simp add: conflict_result_def cc_inv_def sizes_ok_def intro: cc_inv_joined)
-  apply (simp add: rep_ok_def)
   done
 
 definition implied_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow>
@@ -328,10 +303,10 @@ definition cc_propagate_contract :: \<open>Problem \<Rightarrow> bool list \<Rig
 lemma cc_propagate_spec:
   shows \<open>\<Gamma>; cc_propagate p t f \<Turnstile>\<^sub>F cc_propagate_contract p t f\<close>
   apply (crush_boot f: cc_propagate_def contract: cc_propagate_contract_def)
-  apply (crush_base specs add: init_rep_spec assert_eqs_spec close_spec false_joined_keep_spec[where t=t]
+  apply (crush_base specs add: init_rep_spec assert_eqs_spec close_spec false_joined_spec[where t=t]
         implied_spec
       contracts add: init_rep_contract_def assert_eqs_contract_def close_contract_def
-        false_joined_keep_contract_def implied_contract_def
+        false_joined_contract_def implied_contract_def
       simp add: unat_of_nat_lt63 unat_of_nat_eq)
   apply blast
   apply (auto simp add: sizes_ok_def unat_of_nat_lt63 intro: cc_inv_init64 cc_inv_init cc_inv_length)
