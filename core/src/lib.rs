@@ -354,7 +354,13 @@ fn search(p: &Problem, l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>) -> (Option<Mo
 pub fn solve(p: &Problem) -> Answer {
     let n = p.atoms.len();
     let (rep, xs, ys, ls) = root_log(p);
-    let (r, _l, _j) = cdcl(p, Vec::new(), vec![false; n], vec![false; n], vec![0; n], vec![0; n], vec![0; n], &rep, &xs, &ys, &ls, 0, 0);
+    let mut head = vec![cap(); sat_add(n, n)];
+    let mut nxt = Vec::new();
+    let mut wl = Vec::new();
+    watch_new(p, &Vec::new(), &vec![0; n], &mut head, &mut nxt, &mut wl);
+    let (perm, start) = sym_index(p);
+    let (r, _l, _j, _h, _n, _w) = cdcl(p, &perm, &start, Vec::new(), vec![false; n], vec![false; n], &vec![false; n], &vec![false; n],
+                                       vec![0; n], vec![0; n], vec![0; n], head, nxt, wl, &rep, &xs, &ys, &ls, 0, 0);
     match r {
         Some(m) => Answer::Sat(m),
         None => Answer::Unsat,
@@ -1557,13 +1563,49 @@ fn moved_rows(p: &Problem, old: &[usize], rep: &[usize]) -> Vec<bool> {
     rows
 }
 
-/// Merges the class of term `i` with that of every term `j` that is congruent to it but in
-/// another class, and logs each merge as the edge `(i, j)` with label `p.atoms.len()`; returns
-/// whether it merged anything.
-fn log_col(p: &Problem, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>, i: usize) -> bool {
+/// The terms grouped by function symbol: `perm` lists the terms of symbol 0, then those of
+/// symbol 1, and so on, and the terms of symbol `g` are `perm[start[g]..start[g + 1]]`. Only terms
+/// of the same symbol can be congruent, so `log_col` looks only at those; the index is not needed
+/// for soundness, which rests on `congruent` alone.
+fn sym_index(p: &Problem) -> (Vec<usize>, Vec<usize>) {
+    let n = p.terms.len();
+    let mut m = 0;
+    for i in 0..n {
+        if p.terms[i].fun >= m {
+            m = sat_add(p.terms[i].fun, 1);
+        }
+    }
+    let mut start = vec![0; sat_add(m, 1)];
+    for i in 0..n {
+        let g = sat_add(p.terms[i].fun, 1);
+        let x = sat_add(get_or(&start, g, 0), 1);
+        set_at(&mut start, g, x);
+    }
+    for g in 0..m {
+        let x = sat_add(get_or(&start, g, 0), get_or(&start, sat_add(g, 1), 0));
+        set_at(&mut start, sat_add(g, 1), x);
+    }
+    let mut pos = start.clone();
+    let mut perm = vec![0; n];
+    for i in 0..n {
+        let g = p.terms[i].fun;
+        let k = get_or(&pos, g, n);
+        set_at(&mut perm, k, i);
+        set_at(&mut pos, g, sat_add(k, 1));
+    }
+    (perm, start)
+}
+
+/// Merges the class of term `i` with that of every term `j` of its symbol (`sym_index` `perm`,
+/// `start`) that is congruent to it but in another class, and logs each merge as the edge
+/// `(i, j)` with label `p.atoms.len()`; returns whether it merged anything.
+fn log_col(p: &Problem, perm: &[usize], start: &[usize], rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>,
+           ls: &mut Vec<usize>, i: usize) -> bool {
+    let g = p.terms[i].fun;
     let mut changed = false;
-    for j in 0..p.terms.len() {
-        if rep[i] != rep[j] && congruent(p, rep, i, j) {
+    for k in get_or(start, g, 0)..get_or(start, sat_add(g, 1), 0) {
+        let j = get_or(perm, k, i);
+        if j < p.terms.len() && rep[i] != rep[j] && congruent(p, rep, i, j) {
             merge(rep, i, j);
             xs.push(i);
             ys.push(j);
@@ -1575,10 +1617,11 @@ fn log_col(p: &Problem, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<
 }
 
 /// `log_col` on every term `i` with `rows[i]`; returns whether it merged anything.
-fn log_moved(p: &Problem, rows: &[bool], rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) -> bool {
+fn log_moved(p: &Problem, perm: &[usize], start: &[usize], rows: &[bool], rep: &mut Vec<usize>, xs: &mut Vec<usize>,
+             ys: &mut Vec<usize>, ls: &mut Vec<usize>) -> bool {
     let mut changed = false;
     for i in 0..p.terms.len() {
-        if rows[i] && log_col(p, rep, xs, ys, ls, i) {
+        if rows[i] && log_col(p, perm, start, rep, xs, ys, ls, i) {
             changed = true;
         }
     }
@@ -1597,17 +1640,17 @@ fn copy_into(old: &mut Vec<usize>, rep: &[usize]) {
 /// One round of the incremental closure: `log_moved` on the terms with an argument whose
 /// representative changed since `old`, after copying `rep` into `old`; returns whether it merged
 /// anything.
-fn round_moved(p: &Problem, old: &mut Vec<usize>, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) -> bool {
+fn round_moved(p: &Problem, perm: &[usize], start: &[usize], old: &mut Vec<usize>, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) -> bool {
     let rows = moved_rows(p, old, rep);
     copy_into(old, rep);
-    log_moved(p, &rows, rep, xs, ys, ls)
+    log_moved(p, perm, start, &rows, rep, xs, ys, ls)
 }
 
 /// Rounds of `round_moved` until one merges nothing (at most `n + 1` rounds). If `old` was
 /// closed, so is the result.
-fn close_moved(p: &Problem, old: &mut Vec<usize>, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) {
+fn close_moved(p: &Problem, perm: &[usize], start: &[usize], old: &mut Vec<usize>, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) {
     for _round in 0..p.terms.len() + 1 {
-        if !round_moved(p, old, rep, xs, ys, ls) {
+        if !round_moved(p, perm, start, old, rep, xs, ys, ls) {
             return;
         }
     }
@@ -1615,7 +1658,7 @@ fn close_moved(p: &Problem, old: &mut Vec<usize>, rep: &mut Vec<usize>, xs: &mut
 
 /// `cc_propagate` on the partition `rep0` with log `xs0`, `ys0`, `ls0`, extended by the atoms set
 /// true in `t` and closed by `close_moved`; also returns the extended partition and log.
-fn cc_step(p: &Problem, t: &[bool], f: &[bool], rep0: &[usize], xs0: &[usize], ys0: &[usize], ls0: &[usize])
+fn cc_step(p: &Problem, perm: &[usize], start: &[usize], t: &[bool], f: &[bool], rep0: &[usize], xs0: &[usize], ys0: &[usize], ls0: &[usize])
            -> (usize, Vec<bool>, Vec<bool>, Vec<usize>, Vec<usize>, Vec<usize>, Vec<usize>) {
     let mut old = rep0.to_vec();
     let mut rep = rep0.to_vec();
@@ -1623,7 +1666,7 @@ fn cc_step(p: &Problem, t: &[bool], f: &[bool], rep0: &[usize], xs0: &[usize], y
     let mut ys = ys0.to_vec();
     let mut ls = ls0.to_vec();
     log_atoms(p, t, &mut rep, &mut xs, &mut ys, &mut ls);
-    close_moved(p, &mut old, &mut rep, &mut xs, &mut ys, &mut ls);
+    close_moved(p, perm, start, &mut old, &mut rep, &mut xs, &mut ys, &mut ls);
     let c = false_joined(p, f, &mut rep);
     let (t1, f1) = implied(p, t, f, &mut rep);
     (c, t1, f1, rep, xs, ys, ls)
@@ -1860,86 +1903,316 @@ fn on_conflict(p: &Problem, l: Vec<Clause>, t: &[bool], lv: &[usize], ts: &[usiz
     (None, l1, d)
 }
 
-/// The reason index (`2 + i`) of the first clause of the problem's clauses followed by `l` that
-/// is falsified or unit under `t`, `f`: the clause on which `next_unit` stops; 0 if there is none.
-fn unit_index(p: &Problem, l: &[Clause], t: &[bool], f: &[bool]) -> usize {
-    for i in 0..p.clauses.len() {
-        let u = clause_unit(t, f, &p.clauses[i]);
-        if u.atom < t.len() || u.pos {
-            return sat_add(2, i);
+// ---------------------------------------------------------------------------------------------
+// Watched literals (`cdcl`).
+//
+// Clause `c` of the problem's clauses followed by the learned ones has two watch slots, `2c` and
+// `2c + 1`; `wl[w]` is the position in the clause of the literal that slot `w` watches. The slots
+// that watch the literal with code `lit_code` form a list: `head[code]` is its first slot,
+// `nxt[w]` the slot after `w`, and `cap()` ends it. When a literal becomes false, `watch_visit`
+// moves each slot that watches it to a literal of its clause that is not false, if there is one;
+// the clauses where there is none, unless the other watched literal is true, are unit or false,
+// and `units_at` checks them with `clause_unit`. The lists only choose the clauses to check:
+// every atom is set, and every conflict found, by `clause_unit` on the clause itself, so no
+// property of the lists is needed for soundness, only for finding every unit clause.
+
+/// The code of literal `l`: `2 * atom + 1` if it is positive, `2 * atom` otherwise.
+fn lit_code(l: &Lit) -> usize {
+    if l.pos {
+        sat_add(sat_add(l.atom, l.atom), 1)
+    } else {
+        sat_add(l.atom, l.atom)
+    }
+}
+
+/// Is the literal `l` false under `t`, `f`? (False for an atom out of bounds.)
+fn lit_false_at(t: &[bool], f: &[bool], l: &Lit) -> bool {
+    if l.pos {
+        l.atom < f.len() && f[l.atom]
+    } else {
+        l.atom < t.len() && t[l.atom]
+    }
+}
+
+/// Is the literal `l` true under `t`, `f`? (False for an atom out of bounds.)
+fn lit_true_at(t: &[bool], f: &[bool], l: &Lit) -> bool {
+    if l.pos {
+        l.atom < t.len() && t[l.atom]
+    } else {
+        l.atom < f.len() && f[l.atom]
+    }
+}
+
+/// Where the slot of clause `c` that watches position `a` goes, the other slot watching position
+/// `b`: `(0, cap(), true)` if the literal at `b` is true; otherwise `(k, lit_code, false)` for the
+/// first position `k` other than `a` and `b` whose literal is not false, and `(0, cap(), false)`
+/// if there is none.
+fn watch_move(c: &Clause, t: &[bool], f: &[bool], a: usize, b: usize) -> (usize, usize, bool) {
+    if b < c.lits.len() && lit_true_at(t, f, &c.lits[b]) {
+        return (0, cap(), true);
+    }
+    for k in 0..c.lits.len() {
+        if k != a && k != b && !lit_false_at(t, f, &c.lits[k]) {
+            return (k, lit_code(&c.lits[k]), false);
         }
     }
-    for i in 0..l.len() {
-        let u = clause_unit(t, f, &l[i]);
-        if u.atom < t.len() || u.pos {
-            return sat_add(sat_add(2, p.clauses.len()), i);
+    (0, cap(), false)
+}
+
+/// `watch_move` on clause `c` of the problem's clauses followed by `l`; `(0, cap(), true)` if
+/// there is none.
+fn watch_move_at(p: &Problem, l: &[Clause], c: usize, t: &[bool], f: &[bool], a: usize, b: usize) -> (usize, usize, bool) {
+    if c < p.clauses.len() {
+        return watch_move(&p.clauses[c], t, f, a, b);
+    }
+    if c - p.clauses.len() < l.len() {
+        return watch_move(&l[c - p.clauses.len()], t, f, a, b);
+    }
+    (0, cap(), true)
+}
+
+/// Visits the slots that watch the literal with code `lc`, false under `t`, `f`: moves each one it
+/// can to another literal (`watch_move_at`), and returns the clauses of the others, unless their
+/// other watched literal is true.
+fn watch_visit(p: &Problem, l: &[Clause], lc: usize, t: &[bool], f: &[bool], head: &mut Vec<usize>, nxt: &mut Vec<usize>,
+               wl: &mut Vec<usize>) -> Vec<usize> {
+    let mut cands = Vec::new();
+    let mut prev = cap();
+    let mut w = get_or(head, lc, cap());
+    let n = nxt.len();
+    for _k in 0..n {
+        if w >= n {
+            break;
+        }
+        let w1 = get_or(nxt, w, cap());
+        let o = if w % 2 == 0 { w + 1 } else { w - 1 };
+        let (k, code, sat) = watch_move_at(p, l, w / 2, t, f, get_or(wl, w, 0), get_or(wl, o, 0));
+        if sat {
+            prev = w;
+        } else if code < head.len() && code != lc {
+            set_at(wl, w, k);
+            if prev < n {
+                set_at(nxt, prev, w1);
+            } else {
+                set_at(head, lc, w1);
+            }
+            set_at(nxt, w, get_or(head, code, cap()));
+            set_at(head, code, w);
+        } else {
+            cands.push(w / 2);
+            prev = w;
+        }
+        w = w1;
+    }
+    cands
+}
+
+/// `clause_unit` on clause `c` of the problem's clauses followed by `l`; no unit if there is none.
+fn clause_unit_at(p: &Problem, l: &[Clause], c: usize, t: &[bool], f: &[bool]) -> Lit {
+    if c < p.clauses.len() {
+        return clause_unit(t, f, &p.clauses[c]);
+    }
+    if c - p.clauses.len() < l.len() {
+        return clause_unit(t, f, &l[c - p.clauses.len()]);
+    }
+    Lit { atom: t.len(), pos: false }
+}
+
+/// Checks the clauses `cs` (indices into the problem's clauses followed by `l`) in turn under the
+/// assignment `t`, `f` as extended so far: sets the literal of a unit clause `c`, records level
+/// `d`, reason `2 + c` and time stamp `s + q.len()` for its atom and appends the atom to `q`.
+/// Returns the reason index of the first falsified clause, 0 if there is none; after one, it sets
+/// nothing more.
+fn units_at(p: &Problem, l: &[Clause], cs: &[usize], t: &mut Vec<bool>, f: &mut Vec<bool>, lv: &mut Vec<usize>,
+            rs: &mut Vec<usize>, ts: &mut Vec<usize>, q: &mut Vec<usize>, d: usize, s: usize) -> usize {
+    let mut c = 0;
+    for i in 0..cs.len() {
+        if c == 0 {
+            let u = clause_unit_at(p, l, cs[i], t, f);
+            if u.atom < t.len() {
+                if u.pos {
+                    set_true(t, u.atom);
+                } else {
+                    set_true(f, u.atom);
+                }
+                set_at(lv, u.atom, d);
+                set_at(rs, u.atom, sat_add(2, cs[i]));
+                set_at(ts, u.atom, sat_add(s, q.len()));
+                q.push(u.atom);
+            } else if u.pos {
+                c = sat_add(2, cs[i]);
+            }
         }
     }
-    0
+    c
+}
+
+/// The atoms set in `t`, `f` but in neither `qt` nor `qf`.
+fn new_atoms(t: &[bool], f: &[bool], qt: &[bool], qf: &[bool]) -> Vec<usize> {
+    let mut q = Vec::new();
+    for j in 0..t.len() {
+        if (t[j] && !(j < qt.len() && qt[j])) || (j < f.len() && f[j] && !(j < qf.len() && qf[j])) {
+            q.push(j);
+        }
+    }
+    q
+}
+
+/// `0, 1, ..., n - 1`.
+fn all_ids(n: usize) -> Vec<usize> {
+    let mut v = Vec::new();
+    for i in 0..n {
+        v.push(i);
+    }
+    v
+}
+
+/// Unit propagation from the atoms set in `t`, `f` but not in `qt`, `qf` (at the root, `s = 0`,
+/// first every clause): for each such atom, and each atom it sets in turn, `watch_visit` on the
+/// literal the atom makes false and `units_at` on the clauses it returns. Returns the reason
+/// index of a falsified clause (0 if there is none) and the extended assignment and records.
+fn watch_pass(p: &Problem, l: &[Clause], t: &[bool], f: &[bool], qt: &[bool], qf: &[bool], lv: &[usize], rs: &[usize],
+              ts: &[usize], head: &mut Vec<usize>, nxt: &mut Vec<usize>, wl: &mut Vec<usize>, d: usize, s: usize)
+              -> (usize, Vec<bool>, Vec<bool>, Vec<usize>, Vec<usize>, Vec<usize>) {
+    let mut t1 = t.to_vec();
+    let mut f1 = f.to_vec();
+    let mut lv1 = lv.to_vec();
+    let mut rs1 = rs.to_vec();
+    let mut ts1 = ts.to_vec();
+    let mut q = new_atoms(t, f, qt, qf);
+    let mut c = 0;
+    if s == 0 {
+        let cs = all_ids(sat_add(p.clauses.len(), l.len()));
+        c = units_at(p, l, &cs, &mut t1, &mut f1, &mut lv1, &mut rs1, &mut ts1, &mut q, d, s);
+    }
+    for i in 0..t.len() {
+        if c > 0 || i >= q.len() {
+            break;
+        }
+        let a = q[i];
+        let lc = if a < t1.len() && t1[a] { sat_add(a, a) } else { sat_add(sat_add(a, a), 1) };
+        let cs = watch_visit(p, l, lc, &t1, &f1, head, nxt, wl);
+        c = units_at(p, l, &cs, &mut t1, &mut f1, &mut lv1, &mut rs1, &mut ts1, &mut q, d, s);
+    }
+    (c, t1, f1, lv1, rs1, ts1)
+}
+
+/// The position other than `skip` of the literal of `c` whose atom has the highest level in `lv`
+/// (the first of them); the number of literals if there is none.
+fn top_level(c: &Clause, lv: &[usize], skip: usize) -> usize {
+    let mut x = c.lits.len();
+    for k in 0..c.lits.len() {
+        if k != skip && (x == c.lits.len() || get_or(lv, c.lits[k].atom, 0) > get_or(lv, c.lits[x].atom, 0)) {
+            x = k;
+        }
+    }
+    x
+}
+
+/// Puts slot `w` first in the list of the literal with code `code`.
+fn link(head: &mut Vec<usize>, nxt: &mut Vec<usize>, code: usize, w: usize) {
+    set_at(nxt, w, get_or(head, code, cap()));
+    set_at(head, code, w);
+}
+
+/// Adds the two slots of clause `c`, watching the literals of the two highest levels in `lv`
+/// (`top_level`): after a backjump, the literal the clause propagates and one at the level of
+/// the jump.
+fn watch_clause(c: &Clause, lv: &[usize], head: &mut Vec<usize>, nxt: &mut Vec<usize>, wl: &mut Vec<usize>) {
+    let a = top_level(c, lv, c.lits.len());
+    let b0 = top_level(c, lv, a);
+    let b = if b0 < c.lits.len() { b0 } else { a };
+    let w = nxt.len();
+    wl.push(a);
+    wl.push(b);
+    nxt.push(cap());
+    nxt.push(cap());
+    if a < c.lits.len() {
+        link(head, nxt, lit_code(&c.lits[a]), w);
+    }
+    if b < c.lits.len() {
+        link(head, nxt, lit_code(&c.lits[b]), sat_add(w, 1));
+    }
+}
+
+/// Watches the clauses of the problem's clauses followed by `l` that have no slots yet (those
+/// from `nxt.len() / 2` on), by `watch_clause`.
+fn watch_new(p: &Problem, l: &[Clause], lv: &[usize], head: &mut Vec<usize>, nxt: &mut Vec<usize>, wl: &mut Vec<usize>) {
+    for c in nxt.len() / 2..sat_add(p.clauses.len(), l.len()) {
+        if c < p.clauses.len() {
+            watch_clause(&p.clauses[c], lv, head, nxt, wl);
+        } else if c - p.clauses.len() < l.len() {
+            watch_clause(&l[c - p.clauses.len()], lv, head, nxt, wl);
+        }
+    }
 }
 
 /// The search with conflict analysis and backjumping: `search` on the partial assignment `t`, `f`
 /// at decision level `d`, with the records `lv`, `rs`, `ts` of the set atoms (see above) and the
-/// next time stamp `s`. A conflict (a falsified clause, or a closure conflict) is analysed
-/// (`on_conflict`). Returns the result, the learned clauses and a level `j`. Without a model: if
-/// `j >= d`, no completion of `t`, `f` is a model (the branch is refuted); if `j < d`, the search
-/// returns to level `j`, where the last learned clause propagates. The decision on atom `k` at
-/// level `d` handles the result of its branch: a jump to level `d` propagates the last learned
-/// clause; a refuted branch `k` true continues with `k` false.
-fn cdcl(p: &Problem, l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>, lv: Vec<usize>, rs: Vec<usize>, ts: Vec<usize>,
-        rep: &[usize], xs: &[usize], ys: &[usize], ls: &[usize], d: usize, s: usize) -> (Option<Model>, Vec<Clause>, usize) {
+/// next time stamp `s`. Unit propagation (`watch_pass`) starts from the atoms set in `t`, `f` but
+/// not in `qt`, `qf` (those it has not propagated from yet), with the watch lists `head`, `nxt`,
+/// `wl` (see above). A conflict (a falsified clause, or a closure conflict) is analysed
+/// (`on_conflict`). Returns the result, the learned clauses, a level `j` and the watch lists.
+/// Without a model: if `j >= d`, no completion of `t`, `f` is a model (the branch is refuted); if
+/// `j < d`, the search returns to level `j`, where the last learned clause propagates. The decision
+/// on atom `k` at level `d` handles the result of its branch: a jump to level `d` propagates the
+/// last learned clause; a refuted branch `k` true continues with `k` false.
+fn cdcl(p: &Problem, perm: &[usize], start: &[usize], l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>, qt: &[bool], qf: &[bool], lv: Vec<usize>, rs: Vec<usize>,
+        ts: Vec<usize>, head: Vec<usize>, nxt: Vec<usize>, wl: Vec<usize>, rep: &[usize], xs: &[usize], ys: &[usize],
+        ls: &[usize], d: usize, s: usize) -> (Option<Model>, Vec<Clause>, usize, Vec<usize>, Vec<usize>, Vec<usize>) {
     let s1 = sat_add(s, 1);
-    let u = next_unit(p, &l, &t, &f);
-    if u.atom == t.len() && u.pos {
+    let mut h = head;
+    let mut n = nxt;
+    let mut w = wl;
+    let (c0, t0, f0, lv0, rs0, ts0) = watch_pass(p, &l, &t, &f, qt, qf, &lv, &rs, &ts, &mut h, &mut n, &mut w, d, s);
+    if c0 > 0 {
         if t.len() == 0 {
-            return (None, l, d);
+            return (None, l, d, h, n, w);
         }
-        let c = indexed_clause(p, &l, unit_index(p, &l, &t, &f), 0);
-        return on_conflict(p, l, &t, &lv, &ts, &rs, xs, ys, ls, d, &c);
+        let c = indexed_clause(p, &l, c0, 0);
+        let (r, l1, j) = on_conflict(p, l, &t0, &lv0, &ts0, &rs0, xs, ys, ls, d, &c);
+        watch_new(p, &l1, &lv0, &mut h, &mut n, &mut w);
+        return (r, l1, j, h, n, w);
     }
-    if u.atom < t.len() {
-        let ci = unit_index(p, &l, &t, &f);
-        let mut t1 = t.clone();
-        let mut f1 = f.clone();
-        if u.pos {
-            t1[u.atom] = true;
-        } else {
-            f1[u.atom] = true;
-        }
-        return cdcl(p, l, t1, f1, note(&lv, u.atom, d), note(&rs, u.atom, ci), note(&ts, u.atom, s), rep, xs, ys, ls, d, s1);
+    if differs(&t, &t0) || differs(&f, &f0) {
+        let s0 = sat_add(s, sat_add(t.len(), 1));
+        return cdcl(p, perm, start, l, t0.clone(), f0.clone(), &t0, &f0, lv0, rs0, ts0, h, n, w, rep, xs, ys, ls, d, s0);
     }
-    let (c, t2, f2, rep2, xs2, ys2, ls2) = cc_step(p, &t, &f, rep, xs, ys, ls);
+    let (c, t2, f2, rep2, xs2, ys2, ls2) = cc_step(p, perm, start, &t, &f, rep, xs, ys, ls);
     if c < t.len() {
         let cl = conflict_clause(&explain_log(p, &t, &xs2, &ys2, &ls2, c), c);
-        return on_conflict(p, l, &t, &lv, &ts, &rs, &xs2, &ys2, &ls2, d, &cl);
+        let (r, l1, j) = on_conflict(p, l, &t, &lv, &ts, &rs, &xs2, &ys2, &ls2, d, &cl);
+        watch_new(p, &l1, &lv, &mut h, &mut n, &mut w);
+        return (r, l1, j, h, n, w);
     }
     if differs(&t, &t2) || differs(&f, &f2) {
         let lv2 = note_new(&t, &f, &t2, &f2, &lv, d);
         let rs2 = note_true(&t, &t2, &rs, 1);
         let ts2 = note_new(&t, &f, &t2, &f2, &ts, s);
-        return cdcl(p, l, t2, f2, lv2, rs2, ts2, &rep2, &xs2, &ys2, &ls2, d, s1);
+        return cdcl(p, perm, start, l, t2, f2, &t, &f, lv2, rs2, ts2, h, n, w, &rep2, &xs2, &ys2, &ls2, d, s1);
     }
     let k = first_unset(&t, &f);
     if k == t.len() {
         if prop_holds(p, &t) {
-            return (theory_check(p, &t), l, d);
+            return (theory_check(p, &t), l, d, h, n, w);
         }
-        return (None, l, d);
+        return (None, l, d, h, n, w);
     }
     let d1 = sat_add(d, 1);
     let mut t1 = t.clone();
     t1[k] = true;
-    let (r, l1, j) = cdcl(p, l, t1, f.clone(), note(&lv, k, d1), rs.clone(), note(&ts, k, s), rep, xs, ys, ls, d1, s1);
+    let (r, l1, j, h1, n1, w1) = cdcl(p, perm, start, l, t1, f.clone(), &t, &f, note(&lv, k, d1), rs.clone(), note(&ts, k, s), h, n, w,
+                                      rep, xs, ys, ls, d1, s1);
     if r.is_some() {
-        return (r, l1, j);
+        return (r, l1, j, h1, n1, w1);
     }
     if j >= d1 {
         let mut f1 = f.clone();
         f1[k] = true;
-        return cdcl(p, l1, t.clone(), f1, note(&lv, k, d), rs.clone(), note(&ts, k, s), rep, xs, ys, ls, d, s1);
+        return cdcl(p, perm, start, l1, t.clone(), f1, &t, &f, note(&lv, k, d), rs.clone(), note(&ts, k, s), h1, n1, w1, rep, xs, ys, ls, d, s1);
     }
     if j < d {
-        return (None, l1, j);
+        return (None, l1, j, h1, n1, w1);
     }
     if l1.len() > 0 {
         let u1 = clause_unit(&t, &f, &l1[l1.len() - 1]);
@@ -1952,14 +2225,15 @@ fn cdcl(p: &Problem, l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>, lv: Vec<usize>,
             } else {
                 f3[u1.atom] = true;
             }
-            return cdcl(p, l1, t3, f3, note(&lv, u1.atom, d), note(&rs, u1.atom, ci), note(&ts, u1.atom, s), rep, xs, ys, ls, d, s1);
+            return cdcl(p, perm, start, l1, t3, f3, &t, &f, note(&lv, u1.atom, d), note(&rs, u1.atom, ci), note(&ts, u1.atom, s), h1, n1, w1,
+                        rep, xs, ys, ls, d, s1);
         }
         if u1.pos {
-            return (None, l1, d);
+            return (None, l1, d, h1, n1, w1);
         }
     }
     let (r2, l2) = search(p, l1, t.clone(), f.clone());
-    (r2, l2, d)
+    (r2, l2, d, h1, n1, w1)
 }
 
 // ---------------------------------------------------------------------------------------------
