@@ -359,7 +359,7 @@ pub fn solve(p: &Problem) -> Answer {
     let mut wl = Vec::new();
     watch_new(p, &Vec::new(), &vec![0; n], &mut head, &mut nxt, &mut wl);
     let (r, _l, _j, _w) = cdcl(p, &sym_index(p), Vec::new(), vec![false; n], vec![false; n], &Vec::new(), vec![0; n], vec![0; n],
-                               vec![0; n], (head, nxt, wl), &rep, &xs, &ys, &ls, 0, 0);
+                               vec![0; n], (head, nxt, wl, vec![0; n]), &rep, &xs, &ys, &ls, 0, 0);
     match r {
         Some(m) => Answer::Sat(m),
         None => Answer::Unsat,
@@ -2057,6 +2057,33 @@ fn new_atoms(t: &[bool], f: &[bool], qt: &[bool], qf: &[bool]) -> Vec<usize> {
     q
 }
 
+/// Sets `act[a]` to `m` for every atom `a` of the clause `c`: the decision order (`pick`) prefers
+/// the atoms of the latest learned clauses.
+fn bump(c: &Clause, act: &mut Vec<usize>, m: usize) {
+    for i in 0..c.lits.len() {
+        set_at(act, c.lits[i].atom, m);
+    }
+}
+
+/// `bump` on the last clause of `l` with `m = l.len()`.
+fn bump_last(l: &[Clause], act: &mut Vec<usize>) {
+    if l.len() > 0 {
+        bump(&l[l.len() - 1], act, l.len());
+    }
+}
+
+/// The unset atom under `t`, `f` with the highest `act` (the first of them); `t.len()` if there
+/// is none.
+fn pick(t: &[bool], f: &[bool], act: &[usize]) -> usize {
+    let mut k = t.len();
+    for j in 0..t.len() {
+        if !t[j] && !(j < f.len() && f[j]) && (k == t.len() || get_or(act, j, 0) > get_or(act, k, 0)) {
+            k = j;
+        }
+    }
+    k
+}
+
 /// The list `[x]`.
 fn one(x: usize) -> Vec<usize> {
     let mut v = Vec::new();
@@ -2164,52 +2191,55 @@ fn watch_new(p: &Problem, l: &[Clause], lv: &[usize], head: &mut Vec<usize>, nxt
 /// propagates. The decision on atom `k` at level `d` handles the result of its branch: a jump to
 /// level `d` propagates the last learned clause; a refuted branch `k` true continues with `k` false.
 fn cdcl(p: &Problem, ix: &(Vec<usize>, Vec<usize>), l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>, q: &[usize], lv: Vec<usize>,
-        rs: Vec<usize>, ts: Vec<usize>, wt: (Vec<usize>, Vec<usize>, Vec<usize>), rep: &[usize], xs: &[usize], ys: &[usize],
-        ls: &[usize], d: usize, s: usize) -> (Option<Model>, Vec<Clause>, usize, (Vec<usize>, Vec<usize>, Vec<usize>)) {
+        rs: Vec<usize>, ts: Vec<usize>, wt: (Vec<usize>, Vec<usize>, Vec<usize>, Vec<usize>), rep: &[usize], xs: &[usize], ys: &[usize],
+        ls: &[usize], d: usize, s: usize) -> (Option<Model>, Vec<Clause>, usize, (Vec<usize>, Vec<usize>, Vec<usize>, Vec<usize>)) {
     let s1 = sat_add(s, 1);
-    let (head, nxt, wl) = wt;
+    let (head, nxt, wl, act) = wt;
     let mut h = head;
     let mut n = nxt;
     let mut w = wl;
+    let mut a = act;
     let (c0, t0, f0, lv0, rs0, ts0) = watch_pass(p, &l, &t, &f, q, &lv, &rs, &ts, &mut h, &mut n, &mut w, d, s);
     if c0 > 0 {
         if t.len() == 0 {
-            return (None, l, d, (h, n, w));
+            return (None, l, d, (h, n, w, a));
         }
         let c = indexed_clause(p, &l, c0, 0);
         let (r, l1, j) = on_conflict(p, l, &t0, &lv0, &ts0, &rs0, xs, ys, ls, d, &c);
         watch_new(p, &l1, &lv0, &mut h, &mut n, &mut w);
-        return (r, l1, j, (h, n, w));
+        bump_last(&l1, &mut a);
+        return (r, l1, j, (h, n, w, a));
     }
     if differs(&t, &t0) || differs(&f, &f0) {
         let s0 = sat_add(s, sat_add(t.len(), 1));
-        return cdcl(p, ix, l, t0, f0, &Vec::new(), lv0, rs0, ts0, (h, n, w), rep, xs, ys, ls, d, s0);
+        return cdcl(p, ix, l, t0, f0, &Vec::new(), lv0, rs0, ts0, (h, n, w, a), rep, xs, ys, ls, d, s0);
     }
     let (c, t2, f2, rep2, xs2, ys2, ls2) = cc_step(p, &ix.0, &ix.1, &t, &f, rep, xs, ys, ls);
     if c < t.len() {
         let cl = conflict_clause(&explain_log(p, &t, &xs2, &ys2, &ls2, c), c);
         let (r, l1, j) = on_conflict(p, l, &t, &lv, &ts, &rs, &xs2, &ys2, &ls2, d, &cl);
         watch_new(p, &l1, &lv, &mut h, &mut n, &mut w);
-        return (r, l1, j, (h, n, w));
+        bump_last(&l1, &mut a);
+        return (r, l1, j, (h, n, w, a));
     }
     if differs(&t, &t2) || differs(&f, &f2) {
         let lv2 = note_new(&t, &f, &t2, &f2, &lv, d);
         let rs2 = note_true(&t, &t2, &rs, 1);
         let ts2 = note_new(&t, &f, &t2, &f2, &ts, s);
         let q2 = new_atoms(&t2, &f2, &t, &f);
-        return cdcl(p, ix, l, t2, f2, &q2, lv2, rs2, ts2, (h, n, w), &rep2, &xs2, &ys2, &ls2, d, s1);
+        return cdcl(p, ix, l, t2, f2, &q2, lv2, rs2, ts2, (h, n, w, a), &rep2, &xs2, &ys2, &ls2, d, s1);
     }
-    let k = first_unset(&t, &f);
+    let k = pick(&t, &f, &a);
     if k == t.len() {
         if prop_holds(p, &t) {
-            return (theory_check(p, &t), l, d, (h, n, w));
+            return (theory_check(p, &t), l, d, (h, n, w, a));
         }
-        return (None, l, d, (h, n, w));
+        return (None, l, d, (h, n, w, a));
     }
     let d1 = sat_add(d, 1);
     let mut t1 = t.clone();
     t1[k] = true;
-    let (r, l1, j, wt1) = cdcl(p, ix, l, t1, f.clone(), &one(k), note(&lv, k, d1), rs.clone(), note(&ts, k, s), (h, n, w),
+    let (r, l1, j, wt1) = cdcl(p, ix, l, t1, f.clone(), &one(k), note(&lv, k, d1), rs.clone(), note(&ts, k, s), (h, n, w, a),
                                rep, xs, ys, ls, d1, s1);
     if r.is_some() {
         return (r, l1, j, wt1);

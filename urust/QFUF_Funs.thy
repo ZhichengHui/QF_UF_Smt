@@ -1203,6 +1203,22 @@ definition "on_conflict" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightar
     (None, l1, d)
   \<rbrakk>\<close>
 
+(* Rust: bump *)
+definition "bump" :: \<open>Clause \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>bump \<equiv> \<lambda>c act m. FunctionBody \<lbrakk>
+    for i in 0_usize .. len(c.Clause_lits) {
+      set_at(act, c.Clause_lits[i].Lit_atom, m);
+    }
+  \<rbrakk>\<close>
+
+(* Rust: bump_last *)
+definition "bump_last" :: \<open>(Clause list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>bump_last \<equiv> \<lambda>l act. FunctionBody \<lbrakk>
+    if len(l) > 0_usize {
+      bump(l[len(l) - 1_usize], act, len(l));
+    }
+  \<rbrakk>\<close>
+
 (* Rust: arg_moved *)
 definition "arg_moved" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>arg_moved \<equiv> \<lambda>p old rep i. FunctionBody \<lbrakk>
@@ -1349,6 +1365,18 @@ definition "new_atoms" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightar
     * q
   \<rbrakk>\<close>
 
+(* Rust: pick *)
+definition "pick" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>pick \<equiv> \<lambda>t f act. FunctionBody \<lbrakk>
+    let mut k = len(t);
+    for j in 0_usize .. len(t) {
+      if ((!(t[j])) && (!((j < len(f)) && (f[j])))) && (((* k) == len(t)) || (get_or(act, j, 0_usize) > get_or(act, * k, 0_usize))) {
+        * k = j;
+      }
+    };
+    * k
+  \<rbrakk>\<close>
+
 (* Rust: one *)
 definition "one" :: \<open>(64 word) \<Rightarrow> ('s, (64 word) list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>one \<equiv> \<lambda>x. FunctionBody \<lbrakk>
@@ -1367,83 +1395,87 @@ definition "note_fn" :: \<open>((64 word) list) \<Rightarrow> (64 word) \<Righta
 
 text \<open>Recursive group cdcl: defined by iterating cdcl_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>
 
-definition "cdcl_rec_step" :: \<open>((Problem \<Rightarrow> (((64 word) list) \<times> ((64 word) list) \<times> tnil) \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> tnil) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> (64 word) \<times> (((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> tnil) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> ((Problem \<Rightarrow> (((64 word) list) \<times> ((64 word) list) \<times> tnil) \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> tnil) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> (64 word) \<times> (((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> tnil) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
+definition "cdcl_rec_step" :: \<open>((Problem \<Rightarrow> (((64 word) list) \<times> ((64 word) list) \<times> tnil) \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> tnil) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> (64 word) \<times> (((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> tnil) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> ((Problem \<Rightarrow> (((64 word) list) \<times> ((64 word) list) \<times> tnil) \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> tnil) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> (64 word) \<times> (((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> tnil) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
   \<open>cdcl_rec_step \<equiv> \<lambda>rec_cdcl. (\<lambda>p ix l t f q lv rs ts wt rep xs ys ls d s. FunctionBody \<lbrakk>
     let s1 = sat_add(s, 1_usize);
     let destr_1 = wt;
     let head = destr_1.0;
     let nxt = destr_1.1;
     let wl = destr_1.2;
+    let act = destr_1.3;
     let mut h = { let init_2 = head; \<llangle>init_2 :: (64 word) list\<rrangle> };
     let mut n = { let init_3 = nxt; \<llangle>init_3 :: (64 word) list\<rrangle> };
     let mut w = { let init_4 = wl; \<llangle>init_4 :: (64 word) list\<rrangle> };
-    let destr_5 = \<epsilon>\<open>funcall13 watch_pass \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t\<rbrakk> \<lbrakk>f\<rbrakk> \<lbrakk>q\<rbrakk> \<lbrakk>lv\<rbrakk> \<lbrakk>rs\<rbrakk> \<lbrakk>ts\<rbrakk> \<lbrakk>h\<rbrakk> \<lbrakk>n\<rbrakk> \<lbrakk>w\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s\<rbrakk>\<close>;
-    let c0 = destr_5.0;
-    let t0 = destr_5.1;
-    let f0 = destr_5.2;
-    let lv0 = destr_5.3;
-    let rs0 = destr_5.4;
-    let ts0 = destr_5.5;
+    let mut a = { let init_5 = act; \<llangle>init_5 :: (64 word) list\<rrangle> };
+    let destr_6 = \<epsilon>\<open>funcall13 watch_pass \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t\<rbrakk> \<lbrakk>f\<rbrakk> \<lbrakk>q\<rbrakk> \<lbrakk>lv\<rbrakk> \<lbrakk>rs\<rbrakk> \<lbrakk>ts\<rbrakk> \<lbrakk>h\<rbrakk> \<lbrakk>n\<rbrakk> \<lbrakk>w\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s\<rbrakk>\<close>;
+    let c0 = destr_6.0;
+    let t0 = destr_6.1;
+    let f0 = destr_6.2;
+    let lv0 = destr_6.3;
+    let rs0 = destr_6.4;
+    let ts0 = destr_6.5;
     if c0 > 0_usize {
       if len(t) == 0_usize {
-        return (None, l, d, (* h, * n, * w));
+        return (None, l, d, (* h, * n, * w, * a));
       };
       let c = indexed_clause(p, l, c0, 0_usize);
-      let destr_6 = \<epsilon>\<open>funcall11 on_conflict \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t0\<rbrakk> \<lbrakk>lv0\<rbrakk> \<lbrakk>ts0\<rbrakk> \<lbrakk>rs0\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>c\<rbrakk>\<close>;
-      let r = destr_6.0;
-      let l1 = destr_6.1;
-      let j = destr_6.2;
+      let destr_7 = \<epsilon>\<open>funcall11 on_conflict \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t0\<rbrakk> \<lbrakk>lv0\<rbrakk> \<lbrakk>ts0\<rbrakk> \<lbrakk>rs0\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>c\<rbrakk>\<close>;
+      let r = destr_7.0;
+      let l1 = destr_7.1;
+      let j = destr_7.2;
       watch_new(p, l1, lv0, h, n, w);
-      return (r, l1, j, (* h, * n, * w));
+      bump_last(l1, a);
+      return (r, l1, j, (* h, * n, * w, * a));
     };
     if differs(t, t0) || differs(f, f0) {
       let s0 = sat_add(s, sat_add(len(t), 1_usize));
-      return \<epsilon>\<open>funcall16 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>ix\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t0\<rbrakk> \<lbrakk>f0\<rbrakk> \<lbrakk>{ let res_7 = []; \<llangle>res_7 :: (64 word) list\<rrangle> }\<rbrakk> \<lbrakk>lv0\<rbrakk> \<lbrakk>rs0\<rbrakk> \<lbrakk>ts0\<rbrakk> \<lbrakk>(* h, * n, * w)\<rbrakk> \<lbrakk>rep\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s0\<rbrakk>\<close>;
+      return \<epsilon>\<open>funcall16 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>ix\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t0\<rbrakk> \<lbrakk>f0\<rbrakk> \<lbrakk>{ let res_8 = []; \<llangle>res_8 :: (64 word) list\<rrangle> }\<rbrakk> \<lbrakk>lv0\<rbrakk> \<lbrakk>rs0\<rbrakk> \<lbrakk>ts0\<rbrakk> \<lbrakk>(* h, * n, * w, * a)\<rbrakk> \<lbrakk>rep\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s0\<rbrakk>\<close>;
     };
-    let destr_8 = \<epsilon>\<open>funcall9 cc_step \<lbrakk>p\<rbrakk> \<lbrakk>ix.0\<rbrakk> \<lbrakk>ix.1\<rbrakk> \<lbrakk>t\<rbrakk> \<lbrakk>f\<rbrakk> \<lbrakk>rep\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk>\<close>;
-    let c = destr_8.0;
-    let t2 = destr_8.1;
-    let f2 = destr_8.2;
-    let rep2 = destr_8.3;
-    let xs2 = destr_8.4;
-    let ys2 = destr_8.5;
-    let ls2 = destr_8.6;
+    let destr_9 = \<epsilon>\<open>funcall9 cc_step \<lbrakk>p\<rbrakk> \<lbrakk>ix.0\<rbrakk> \<lbrakk>ix.1\<rbrakk> \<lbrakk>t\<rbrakk> \<lbrakk>f\<rbrakk> \<lbrakk>rep\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk>\<close>;
+    let c = destr_9.0;
+    let t2 = destr_9.1;
+    let f2 = destr_9.2;
+    let rep2 = destr_9.3;
+    let xs2 = destr_9.4;
+    let ys2 = destr_9.5;
+    let ls2 = destr_9.6;
     if c < len(t) {
       let cl = conflict_clause(explain_log(p, t, xs2, ys2, ls2, c), c);
-      let destr_9 = \<epsilon>\<open>funcall11 on_conflict \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t\<rbrakk> \<lbrakk>lv\<rbrakk> \<lbrakk>ts\<rbrakk> \<lbrakk>rs\<rbrakk> \<lbrakk>xs2\<rbrakk> \<lbrakk>ys2\<rbrakk> \<lbrakk>ls2\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>cl\<rbrakk>\<close>;
-      let r = destr_9.0;
-      let l1 = destr_9.1;
-      let j = destr_9.2;
+      let destr_10 = \<epsilon>\<open>funcall11 on_conflict \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t\<rbrakk> \<lbrakk>lv\<rbrakk> \<lbrakk>ts\<rbrakk> \<lbrakk>rs\<rbrakk> \<lbrakk>xs2\<rbrakk> \<lbrakk>ys2\<rbrakk> \<lbrakk>ls2\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>cl\<rbrakk>\<close>;
+      let r = destr_10.0;
+      let l1 = destr_10.1;
+      let j = destr_10.2;
       watch_new(p, l1, lv, h, n, w);
-      return (r, l1, j, (* h, * n, * w));
+      bump_last(l1, a);
+      return (r, l1, j, (* h, * n, * w, * a));
     };
     if differs(t, t2) || differs(f, f2) {
       let lv2 = note_new(t, f, t2, f2, lv, d);
       let rs2 = note_true(t, t2, rs, 1_usize);
       let ts2 = note_new(t, f, t2, f2, ts, s);
       let q2 = new_atoms(t2, f2, t, f);
-      return \<epsilon>\<open>funcall16 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>ix\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t2\<rbrakk> \<lbrakk>f2\<rbrakk> \<lbrakk>q2\<rbrakk> \<lbrakk>lv2\<rbrakk> \<lbrakk>rs2\<rbrakk> \<lbrakk>ts2\<rbrakk> \<lbrakk>(* h, * n, * w)\<rbrakk> \<lbrakk>rep2\<rbrakk> \<lbrakk>xs2\<rbrakk> \<lbrakk>ys2\<rbrakk> \<lbrakk>ls2\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s1\<rbrakk>\<close>;
+      return \<epsilon>\<open>funcall16 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>ix\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>t2\<rbrakk> \<lbrakk>f2\<rbrakk> \<lbrakk>q2\<rbrakk> \<lbrakk>lv2\<rbrakk> \<lbrakk>rs2\<rbrakk> \<lbrakk>ts2\<rbrakk> \<lbrakk>(* h, * n, * w, * a)\<rbrakk> \<lbrakk>rep2\<rbrakk> \<lbrakk>xs2\<rbrakk> \<lbrakk>ys2\<rbrakk> \<lbrakk>ls2\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s1\<rbrakk>\<close>;
     };
-    let k = first_unset(t, f);
+    let k = pick(t, f, * a);
     if k == len(t) {
       if prop_holds(p, t) {
-        return (theory_check(p, t), l, d, (* h, * n, * w));
+        return (theory_check(p, t), l, d, (* h, * n, * w, * a));
       };
-      return (None, l, d, (* h, * n, * w));
+      return (None, l, d, (* h, * n, * w, * a));
     };
     let d1 = sat_add(d, 1_usize);
-    let mut t1 = { let init_10 = t; \<llangle>init_10 :: bool list\<rrangle> };
+    let mut t1 = { let init_11 = t; \<llangle>init_11 :: bool list\<rrangle> };
     * (t1[k]) = true;
-    let destr_11 = \<epsilon>\<open>funcall16 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>ix\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>* t1\<rbrakk> \<lbrakk>f\<rbrakk> \<lbrakk>one(k)\<rbrakk> \<lbrakk>note_fn(lv, k, d1)\<rbrakk> \<lbrakk>rs\<rbrakk> \<lbrakk>note_fn(ts, k, s)\<rbrakk> \<lbrakk>(* h, * n, * w)\<rbrakk> \<lbrakk>rep\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>d1\<rbrakk> \<lbrakk>s1\<rbrakk>\<close>;
-    let r = destr_11.0;
-    let l1 = destr_11.1;
-    let j = destr_11.2;
-    let wt1 = destr_11.3;
+    let destr_12 = \<epsilon>\<open>funcall16 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>ix\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>* t1\<rbrakk> \<lbrakk>f\<rbrakk> \<lbrakk>one(k)\<rbrakk> \<lbrakk>note_fn(lv, k, d1)\<rbrakk> \<lbrakk>rs\<rbrakk> \<lbrakk>note_fn(ts, k, s)\<rbrakk> \<lbrakk>(* h, * n, * w, * a)\<rbrakk> \<lbrakk>rep\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>d1\<rbrakk> \<lbrakk>s1\<rbrakk>\<close>;
+    let r = destr_12.0;
+    let l1 = destr_12.1;
+    let j = destr_12.2;
+    let wt1 = destr_12.3;
     if urust_func_option_is_some(r) {
       return (r, l1, j, wt1);
     };
     if j >= d1 {
-      let mut f1 = { let init_12 = f; \<llangle>init_12 :: bool list\<rrangle> };
+      let mut f1 = { let init_13 = f; \<llangle>init_13 :: bool list\<rrangle> };
       * (f1[k]) = true;
       return \<epsilon>\<open>funcall16 rec_cdcl \<lbrakk>p\<rbrakk> \<lbrakk>ix\<rbrakk> \<lbrakk>l1\<rbrakk> \<lbrakk>t\<rbrakk> \<lbrakk>* f1\<rbrakk> \<lbrakk>one(k)\<rbrakk> \<lbrakk>note_fn(lv, k, d)\<rbrakk> \<lbrakk>rs\<rbrakk> \<lbrakk>note_fn(ts, k, s)\<rbrakk> \<lbrakk>wt1\<rbrakk> \<lbrakk>rep\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s1\<rbrakk>\<close>;
     };
@@ -1454,8 +1486,8 @@ definition "cdcl_rec_step" :: \<open>((Problem \<Rightarrow> (((64 word) list) \
       let u1 = clause_unit(t, f, l1[len(l1) - 1_usize]);
       if (u1.Lit_atom) < len(t) {
         let ci = sat_add(sat_add(1_usize, len(p.Problem_clauses)), len(l1));
-        let mut t3 = { let init_13 = t; \<llangle>init_13 :: bool list\<rrangle> };
-        let mut f3 = { let init_14 = f; \<llangle>init_14 :: bool list\<rrangle> };
+        let mut t3 = { let init_14 = t; \<llangle>init_14 :: bool list\<rrangle> };
+        let mut f3 = { let init_15 = f; \<llangle>init_15 :: bool list\<rrangle> };
         if u1.Lit_pos {
           * (t3[u1.Lit_atom]) = true;
         } else {
@@ -1467,14 +1499,14 @@ definition "cdcl_rec_step" :: \<open>((Problem \<Rightarrow> (((64 word) list) \
         return (None, l1, d, wt1);
       }
     };
-    let destr_15 = search(p, l1, t, f);
-    let r2 = destr_15.0;
-    let l2 = destr_15.1;
+    let destr_16 = search(p, l1, t, f);
+    let r2 = destr_16.0;
+    let l2 = destr_16.1;
     (r2, l2, d, wt1)
   \<rbrakk>)\<close>
 
 (* Rust: cdcl *)
-definition "cdcl" :: \<open>Problem \<Rightarrow> (((64 word) list) \<times> ((64 word) list) \<times> tnil) \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> tnil) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> (64 word) \<times> (((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> tnil) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+definition "cdcl" :: \<open>Problem \<Rightarrow> (((64 word) list) \<times> ((64 word) list) \<times> tnil) \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> tnil) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> (64 word) \<times> (((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> tnil) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>cdcl \<equiv> ((cdcl_rec_step ^^ urust_fuel) (\<lambda>p ix l t f q lv rs ts wt rep xs ys ls d s. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>))\<close>
 
 (* Rust: solve *)
@@ -1490,7 +1522,7 @@ definition "solve" :: \<open>Problem \<Rightarrow> ('s, Answer, 'abort, 'i promp
     let mut nxt = { let init_4 = { let res_3 = []; \<llangle>res_3 :: (64 word) list\<rrangle> }; \<llangle>init_4 :: (64 word) list\<rrangle> };
     let mut wl = { let init_6 = { let res_5 = []; \<llangle>res_5 :: (64 word) list\<rrangle> }; \<llangle>init_6 :: (64 word) list\<rrangle> };
     watch_new(p, { let res_7 = []; \<llangle>res_7 :: Clause list\<rrangle> }, vec_from_elem(0_usize, n), head, nxt, wl);
-    let destr_10 = \<epsilon>\<open>funcall16 cdcl \<lbrakk>p\<rbrakk> \<lbrakk>sym_index(p)\<rbrakk> \<lbrakk>{ let res_8 = []; \<llangle>res_8 :: Clause list\<rrangle> }\<rbrakk> \<lbrakk>vec_from_elem(false, n)\<rbrakk> \<lbrakk>vec_from_elem(false, n)\<rbrakk> \<lbrakk>{ let res_9 = []; \<llangle>res_9 :: (64 word) list\<rrangle> }\<rbrakk> \<lbrakk>vec_from_elem(0_usize, n)\<rbrakk> \<lbrakk>vec_from_elem(0_usize, n)\<rbrakk> \<lbrakk>vec_from_elem(0_usize, n)\<rbrakk> \<lbrakk>(* head, * nxt, * wl)\<rbrakk> \<lbrakk>rep\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>0_usize\<rbrakk> \<lbrakk>0_usize\<rbrakk>\<close>;
+    let destr_10 = \<epsilon>\<open>funcall16 cdcl \<lbrakk>p\<rbrakk> \<lbrakk>sym_index(p)\<rbrakk> \<lbrakk>{ let res_8 = []; \<llangle>res_8 :: Clause list\<rrangle> }\<rbrakk> \<lbrakk>vec_from_elem(false, n)\<rbrakk> \<lbrakk>vec_from_elem(false, n)\<rbrakk> \<lbrakk>{ let res_9 = []; \<llangle>res_9 :: (64 word) list\<rrangle> }\<rbrakk> \<lbrakk>vec_from_elem(0_usize, n)\<rbrakk> \<lbrakk>vec_from_elem(0_usize, n)\<rbrakk> \<lbrakk>vec_from_elem(0_usize, n)\<rbrakk> \<lbrakk>(* head, * nxt, * wl, vec_from_elem(0_usize, n))\<rbrakk> \<lbrakk>rep\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>0_usize\<rbrakk> \<lbrakk>0_usize\<rbrakk>\<close>;
     let r = destr_10.0;
     let v_l = destr_10.1;
     let v_j = destr_10.2;
