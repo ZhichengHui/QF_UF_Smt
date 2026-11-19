@@ -189,11 +189,28 @@ fn scan(p: &Problem, rep: &mut Vec<usize>) -> bool {
     changed
 }
 
-/// Merges congruent terms until no two terms of different classes are congruent. Every round that
-/// merges reduces the number of classes, so the `n + 1`-th round at the latest merges nothing.
+/// Like `scan`, but skips the rows of constants (terms without arguments). A constant is congruent
+/// only to the constants of its symbol, whatever the classes, so once `scan` has merged those, their
+/// rows merge nothing more.
+fn scan_apps(p: &Problem, rep: &mut Vec<usize>) -> bool {
+    let mut changed = false;
+    for i in 0..p.terms.len() {
+        if p.terms[i].args.len() > 0 {
+            if scan_row(p, rep, i) {
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
+/// Merges congruent terms until no two terms of different classes are congruent: one round of
+/// `scan`, which also merges the constants of each symbol, then rounds of `scan_apps`. Every round
+/// that merges reduces the number of classes, so the `n + 1`-th round at the latest merges nothing.
 fn close(p: &Problem, rep: &mut Vec<usize>) {
+    scan(p, rep);
     for _round in 0..p.terms.len() + 1 {
-        if !scan(p, rep) {
+        if !scan_apps(p, rep) {
             return;
         }
     }
