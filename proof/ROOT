@@ -27,4 +27,5 @@ session "QFUF_Top" in "top" = "QFUF_Proof" +
     QFUF_SmtBound
     QFUF_SmtRefine
     QFUF_ElimSem
+    QFUF_ElimRefine
     QFUF_Top
