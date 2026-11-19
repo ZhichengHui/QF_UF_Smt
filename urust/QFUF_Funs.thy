@@ -856,6 +856,15 @@ definition "all_ids" :: \<open>(64 word) \<Rightarrow> ('s, (64 word) list, 'abo
     * v
   \<rbrakk>\<close>
 
+(* Rust: root_ids *)
+definition "root_ids" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> ('s, (64 word) list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>root_ids \<equiv> \<lambda>p l s. FunctionBody \<lbrakk>
+    if s == 0_usize {
+      return all_ids(sat_add(len(p.Problem_clauses), len(l)));
+    };
+    { let res_1 = []; \<llangle>res_1 :: (64 word) list\<rrangle> }
+  \<rbrakk>\<close>
+
 (* Rust: clause_unit_at *)
 definition "clause_unit_at" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, Lit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>clause_unit_at \<equiv> \<lambda>p l c t f. FunctionBody \<lbrakk>
@@ -893,6 +902,16 @@ definition "units_at" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarrow
       }
     };
     * c
+  \<rbrakk>\<close>
+
+(* Rust: false_code *)
+definition "false_code" :: \<open>(bool list) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>false_code \<equiv> \<lambda>t a. FunctionBody \<lbrakk>
+    if (a < len(t)) && (t[a]) {
+      sat_add(a, a)
+    } else {
+      sat_add(sat_add(a, a), 1_usize)
+    }
   \<rbrakk>\<close>
 
 (* Rust: lit_true_at *)
@@ -993,22 +1012,13 @@ definition "watch_pass" :: \<open>Problem \<Rightarrow> (Clause list) \<Rightarr
     let mut rs1 = { let init_4 = rs; \<llangle>init_4 :: (64 word) list\<rrangle> };
     let mut ts1 = { let init_5 = ts; \<llangle>init_5 :: (64 word) list\<rrangle> };
     let mut q = { let init_6 = q0; \<llangle>init_6 :: (64 word) list\<rrangle> };
-    let mut c = 0_usize;
-    if s == 0_usize {
-      let cs = all_ids(sat_add(len(p.Problem_clauses), len(l)));
-      * c = \<epsilon>\<open>funcall11 units_at \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>cs\<rbrakk> \<lbrakk>t1\<rbrakk> \<lbrakk>f1\<rbrakk> \<lbrakk>lv1\<rbrakk> \<lbrakk>rs1\<rbrakk> \<lbrakk>ts1\<rbrakk> \<lbrakk>q\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s\<rbrakk>\<close>;
-    };
+    let cs0 = root_ids(p, l, s);
+    let mut c = \<epsilon>\<open>funcall11 units_at \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>cs0\<rbrakk> \<lbrakk>t1\<rbrakk> \<lbrakk>f1\<rbrakk> \<lbrakk>lv1\<rbrakk> \<lbrakk>rs1\<rbrakk> \<lbrakk>ts1\<rbrakk> \<lbrakk>q\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s\<rbrakk>\<close>;
     for i in 0_usize .. len(t) {
       if ((* c) > 0_usize) || (i >= len(* q)) {
         break;
       };
-      let a = (* q)[i];
-      let lc = if (a < len(* t1)) && ((* t1)[a]) {
-        sat_add(a, a)
-      } else {
-        sat_add(sat_add(a, a), 1_usize)
-      };
-      let cs = watch_visit(p, l, lc, * t1, * f1, head, nxt, wl);
+      let cs = watch_visit(p, l, false_code(* t1, (* q)[i]), * t1, * f1, head, nxt, wl);
       * c = \<epsilon>\<open>funcall11 units_at \<lbrakk>p\<rbrakk> \<lbrakk>l\<rbrakk> \<lbrakk>cs\<rbrakk> \<lbrakk>t1\<rbrakk> \<lbrakk>f1\<rbrakk> \<lbrakk>lv1\<rbrakk> \<lbrakk>rs1\<rbrakk> \<lbrakk>ts1\<rbrakk> \<lbrakk>q\<rbrakk> \<lbrakk>d\<rbrakk> \<lbrakk>s\<rbrakk>\<close>;
     };
     (* c, * t1, * f1, * lv1, * rs1, * ts1)

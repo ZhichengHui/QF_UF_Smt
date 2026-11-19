@@ -2113,21 +2113,33 @@ fn watch_pass(p: &Problem, l: &[Clause], t: &[bool], f: &[bool], q0: &[usize], l
     let mut rs1 = rs.to_vec();
     let mut ts1 = ts.to_vec();
     let mut q = q0.to_vec();
-    let mut c = 0;
-    if s == 0 {
-        let cs = all_ids(sat_add(p.clauses.len(), l.len()));
-        c = units_at(p, l, &cs, &mut t1, &mut f1, &mut lv1, &mut rs1, &mut ts1, &mut q, d, s);
-    }
+    let cs0 = root_ids(p, l, s);
+    let mut c = units_at(p, l, &cs0, &mut t1, &mut f1, &mut lv1, &mut rs1, &mut ts1, &mut q, d, s);
     for i in 0..t.len() {
         if c > 0 || i >= q.len() {
             break;
         }
-        let a = q[i];
-        let lc = if a < t1.len() && t1[a] { sat_add(a, a) } else { sat_add(sat_add(a, a), 1) };
-        let cs = watch_visit(p, l, lc, &t1, &f1, head, nxt, wl);
+        let cs = watch_visit(p, l, false_code(&t1, q[i]), &t1, &f1, head, nxt, wl);
         c = units_at(p, l, &cs, &mut t1, &mut f1, &mut lv1, &mut rs1, &mut ts1, &mut q, d, s);
     }
     (c, t1, f1, lv1, rs1, ts1)
+}
+
+/// Every clause (`all_ids`) at the root (`s = 0`), none elsewhere.
+fn root_ids(p: &Problem, l: &[Clause], s: usize) -> Vec<usize> {
+    if s == 0 {
+        return all_ids(sat_add(p.clauses.len(), l.len()));
+    }
+    Vec::new()
+}
+
+/// The code of the literal of atom `a` that `t` makes false: negative if `t[a]`, else positive.
+fn false_code(t: &[bool], a: usize) -> usize {
+    if a < t.len() && t[a] {
+        sat_add(a, a)
+    } else {
+        sat_add(sat_add(a, a), 1)
+    }
 }
 
 /// The position other than `skip` of the literal of `c` whose atom has the highest level in `lv`
