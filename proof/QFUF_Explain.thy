@@ -339,7 +339,7 @@ lemma bfs_round_spec:
   shows \<open>\<Gamma>; bfs_round n xs ys pv pe \<Turnstile>\<^sub>F bfs_round_contract n xs ys pv pe\<close>
   apply (crush_boot f: bfs_round_def contract: bfs_round_contract_def)
   apply crush_base
-  subgoal for changed_ref
+  subgoal for g1 v1 g2 v2 changed_ref
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c) \<star> (\<Squnion>g' v'. pv \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. pe \<mapsto>\<langle>\<top>\<rangle> g'\<down>v')\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
@@ -352,7 +352,7 @@ lemma bfs_round_spec:
     done
   done
 
-definition bfs_rounds_contract :: \<open>64 word \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow> 64 word \<Rightarrow> W W
+definition bfs_rounds_contract :: \<open>64 word \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow> 64 word \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow>
       ('s, unit, 'abort) function_contract\<close> where
   \<open>bfs_rounds_contract n xs ys b pv pe \<equiv>
      let pre = can_alloc_reference \<star> (\<Squnion>g' v'. pv \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. pe \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') in
@@ -407,7 +407,7 @@ lemma push_args_spec:
   done
 
 definition walk_contract :: \<open>Problem \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow>
-      64 word \<Rightarrow> 64 word \<Rightarrow> ('addr, 'gv, bool list) Global_Store.ref \<Rightarrow> nat \<Rightarrow> ('addr, 'gv, bool list) Global_Store.ref \<Rightarrow> nat \<Rightarrow> B ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
+      64 word \<Rightarrow> 64 word \<Rightarrow> ('addr, 'gv, bool list) Global_Store.ref \<Rightarrow> nat \<Rightarrow> ('addr, 'gv, bool list) Global_Store.ref \<Rightarrow> nat \<Rightarrow> ('addr, 'gv, bool list) Global_Store.ref \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
   \<open>walk_contract p xs ys ls pv pe a b e ne rows nr used qa qb \<equiv>
      let pre = can_alloc_reference \<star> (\<Squnion>g' v'. e \<mapsto>\<langle>\<top>\<rangle> g'\<down>v' \<star> \<langle>length v' = ne\<rangle>) \<star> (\<Squnion>g' v'. rows \<mapsto>\<langle>\<top>\<rangle> g'\<down>v' \<star> \<langle>length v' = nr\<rangle>) \<star>
         (\<Squnion>g' v'. used \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. qa \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. qb \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> \<langle>sizes_ok p\<rangle> in
@@ -419,7 +419,7 @@ lemma walk_spec:
   shows \<open>\<Gamma>; walk p xs ys ls pv pe a b e rows used qa qb \<Turnstile>\<^sub>F walk_contract p xs ys ls pv pe a b e ne rows nr used qa qb\<close>
   apply (crush_boot f: walk_def contract: walk_contract_def)
   apply (crush_base simp add: sizes_ok_def)
-  subgoal for x_ref
+  subgoal for g1 v1 g2 v2 g3 v3 g4 v4 g5 v5 x_ref
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gx x. x_ref \<mapsto>\<langle>\<top>\<rangle> gx\<down>x) \<star> (\<Squnion>g' v'. e \<mapsto>\<langle>\<top>\<rangle> g'\<down>v' \<star> \<langle>length v' = ne\<rangle>) \<star> (\<Squnion>g' v'. rows \<mapsto>\<langle>\<top>\<rangle> g'\<down>v' \<star> \<langle>length v' = nr\<rangle>) \<star>
         (\<Squnion>g' v'. used \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. qa \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. qb \<mapsto>\<langle>\<top>\<rangle> g'\<down>v')\<close>
@@ -433,6 +433,15 @@ lemma walk_spec:
     apply (auto simp add: sizes_ok_def intro: unat_lt_len)
     done
   done
+
+lemma unat_double_lt:
+  assumes \<open>n < 9223372036854775808\<close>
+  shows \<open>unat (2 * (word_of_nat n :: 64 word)) < 18446744073709551615\<close>
+proof -
+  have \<open>unat (2 * (word_of_nat n :: 64 word)) = 2 * n\<close>
+    using assms by (simp add: unat_word_ariths unat_of_nat_eq)
+  then show ?thesis using assms by simp
+qed
 
 definition path_explain_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow>
       ('s, bool list \<times> bool list \<times> tnil, 'abort) function_contract\<close> where
@@ -461,8 +470,8 @@ lemma path_explain_spec:
         walk_spec[where ne=\<open>length (Problem_atoms p)\<close> and nr=\<open>length (Problem_terms p)\<close>]
         contracts add: get_or_contract_def bfs_contract_def walk_contract_def
         simp add: sizes_ok_def unat_of_nat_lt63)
-    apply (auto simp add: sizes_ok_def unat_of_nat_lt63)
     done
+  apply (simp add: unat_double_lt)
   done
 
 definition explain_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> ('s, bool list, 'abort) function_contract\<close> where
