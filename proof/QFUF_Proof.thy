@@ -257,6 +257,28 @@ lemma step_fallback_fuel:
   \<open>length t = length (Problem_atoms p) \<Longrightarrow> length (Problem_atoms p) < urust_fuel \<Longrightarrow> unset_count t f < urust_fuel\<close>
   using unset_count_le[of t f] by simp
 
+text \<open>Unit propagation (\<^verbatim>\<open>watch_pass\<close>): the recursive call on the extended assignment.\<close>
+
+lemma step_pass_none:
+  \<open>ext_ok p t f t0 f0 \<Longrightarrow> \<not> pext p t0 f0 \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
+  using ext_ok_none by blast
+
+lemma step_pass_fuel:
+  \<open>ext_ok p t f t0 f0 \<Longrightarrow> length t = n \<Longrightarrow> length f = n \<Longrightarrow> t0 \<noteq> t \<Longrightarrow>
+   unset_count t f < Suc k \<Longrightarrow> unset_count t0 f0 < k\<close>
+  \<open>ext_ok p t f t0 f0 \<Longrightarrow> length t = n \<Longrightarrow> length f = n \<Longrightarrow> f0 \<noteq> f \<Longrightarrow>
+   unset_count t f < Suc k \<Longrightarrow> unset_count t0 f0 < k\<close>
+  using ext_ok_fuel by fastforce+
+
+lemma step_pass_rep:
+  \<open>ext_ok p t f t0 f0 \<Longrightarrow> length t = length (Problem_atoms p) \<Longrightarrow> rep_for p t rs \<Longrightarrow> rep_for p t0 rs\<close>
+  by (rule ext_ok_rep_for)
+
+lemma step_pass_len:
+  \<open>ext_ok p t f t0 f0 \<Longrightarrow> length t = n \<Longrightarrow> length t0 = n\<close>
+  \<open>ext_ok p t f t0 f0 \<Longrightarrow> length f = n \<Longrightarrow> length f0 = n\<close>
+  using ext_ok_len by simp_all
+
 lemma cdcl_rec_step_spec:
   assumes \<open>\<And>l t f q lv rs ts wt rep xs ys ls d s. \<Gamma>; R p ix l t f q lv rs ts wt rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract k p l t f d rep\<close>
   shows \<open>\<Gamma>; cdcl_rec_step R p ix l t f q lv rs ts wt rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract (Suc k) p l t f d rep\<close>
@@ -271,7 +293,19 @@ lemma cdcl_rec_step_spec:
         pick_contract_def prop_holds_contract_def theory_check_contract_def clause_unit_contract_def
         search_contract_def
       simp add: unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq word64_eq_of_nat_iff)
-  sorry
+  apply (auto simp add: word_less_nat_alt unat_of_nat_lt63 Option.is_none_def split: option.splits
+      dest: find_result_le)
+  apply (all \<open>(solves \<open>rule step_branch_none step_branch_fuel step_leaf step_leaf_some
+        step_implied step_implied_fuel step_conflict wf_lit step_last_none step_last_fuel
+        step_last_pre last_idx_lt last_idx_one step_conflict_fits step_fallback_fuel rep_for_update rep_for_implied
+        step_pass_none step_pass_fuel step_pass_rep step_pass_len;
+        assumption\<close>)?\<close>)
+  apply (all \<open>(solves \<open>rotate_tac -1, erule notE, rule step_branch_none step_branch_fuel step_leaf step_leaf_some
+        step_implied step_implied_fuel step_conflict wf_lit step_last_none step_last_fuel
+        step_last_pre last_idx_lt last_idx_one step_conflict_fits step_fallback_fuel rep_for_update rep_for_implied
+        step_pass_none step_pass_fuel step_pass_rep step_pass_len;
+        assumption\<close>)?\<close>)
+  done
 
 lemma cdcl_rec_spec:
   shows \<open>\<Gamma>; (cdcl_rec_step ^^ k) R p ix l t f q lv rs ts wt rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract k p l t f d rep\<close>
@@ -306,9 +340,10 @@ lemma solve_spec:
   assumes fuel: \<open>length (Problem_atoms p) < urust_fuel\<close>
   shows \<open>\<Gamma>; solve p \<Turnstile>\<^sub>F solve_contract p\<close>
   apply (crush_boot f: solve_def contract: solve_contract_def)
-  apply (crush_base specs add: root_log_spec cdcl_spec sym_index_spec watch_new_spec
+  apply (crush_base specs add: root_log_spec cdcl_spec sym_index_spec watch_new_spec sat_add_ok_spec
       contracts add: root_log_contract_def cdcl_contract_def trivial_contract_def refs3_contract_def
-      split!: option.splits
+        sat_add_ok_contract_def
+      inline: cap_def split!: option.splits
       simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq pext_start unset_count_replicate Answer_Sat_mk_def
         clauses_ok_def rep_for_empty)
   done
@@ -331,9 +366,10 @@ lemma solve_vals_spec:
   assumes fuel: \<open>length (Problem_atoms p) < urust_fuel\<close>
   shows \<open>\<Gamma>; solve p \<Turnstile>\<^sub>F solve_contract_vals p\<close>
   apply (crush_boot f: solve_def contract: solve_contract_vals_def)
-  apply (crush_base specs add: root_log_spec cdcl_spec sym_index_spec watch_new_spec
+  apply (crush_base specs add: root_log_spec cdcl_spec sym_index_spec watch_new_spec sat_add_ok_spec
       contracts add: root_log_contract_def cdcl_contract_def trivial_contract_def refs3_contract_def
-      split!: option.splits
+        sat_add_ok_contract_def
+      inline: cap_def split!: option.splits
       simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq pext_start unset_count_replicate Answer_Sat_mk_def
         clauses_ok_def rep_for_empty)
   apply (auto simp add: model_vals_ok_def)?
