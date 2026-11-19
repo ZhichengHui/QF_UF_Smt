@@ -1,5 +1,5 @@
 theory QFUF_Proof
-  imports QFUF_Explain
+  imports QFUF_Propagate
 begin
 
 context QFUF_ctx
@@ -66,47 +66,73 @@ lemma step_leaf:
    \<forall>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. atom_vals I p \<noteq> t \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
   using search_leaf_none search_leaf_theory_none by fastforce+
 
+text \<open>A closure conflict: the cut, and the learned clause.\<close>
+
 lemma step_learn:
-  assumes \<open>wf_problem p\<close> \<open>sizes_ok p\<close> \<open>clauses_ok p l\<close> \<open>unat c < length (Problem_atoms p)\<close>
-      and \<open>length e = length (Problem_atoms p)\<close>
+  assumes \<open>set (Clause_lits cl) = conflict_lits e c (length (Problem_atoms p))\<close>
+      and \<open>wf_problem p\<close> \<open>length (Problem_atoms p) < 9223372036854775808\<close> \<open>clauses_ok p l\<close>
+      and \<open>unat c < length (Problem_atoms p)\<close> \<open>length e = length (Problem_atoms p)\<close>
       and \<open>(unat (Atom_lhs (Problem_atoms p ! unat c)), unat (Atom_rhs (Problem_atoms p ! unat c)))
              \<in> cc p (asserted p e (length (Problem_atoms p)))\<close>
-      and \<open>set (Clause_lits cl) = conflict_lits e c (length e)\<close> \<open>length (Clause_lits cl) \<le> length e + 1\<close>
+      and \<open>length (Clause_lits cl) \<le> Suc (length (Problem_atoms p))\<close>
   shows \<open>clauses_ok p (l @ [cl])\<close>
-proof (rule clauses_ok_append[OF assms(3)])
+proof (rule clauses_ok_append[OF assms(4)])
   show \<open>clause_ok p cl\<close>
-    using assms by (intro conflict_lits_clause_ok[where e=e and k=c]) (auto simp add: sizes_ok_def)
+    using assms by (intro conflict_lits_clause_ok[where e=e and k=c]) auto
   show \<open>length (Clause_lits cl) < 2^64\<close>
-    using assms(2,5,8) by (simp add: sizes_ok_def)
+    using assms(3,8) by simp
 qed
+
+lemma step_conflict:
+  \<open>conflict_result p t f a \<Longrightarrow> wf_problem p \<Longrightarrow> length t = length (Problem_atoms p) \<Longrightarrow>
+   unat a < length (Problem_atoms p) \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
+  \<open>conflict_result p t f a \<Longrightarrow> unat a < length (Problem_atoms p) \<Longrightarrow>
+   (unat (Atom_lhs (Problem_atoms p ! unat a)), unat (Atom_rhs (Problem_atoms p ! unat a)))
+     \<in> cc p (asserted p t (length (Problem_atoms p)))\<close>
+  using conflict_result_none unfolding conflict_result_def by blast+
+
+lemma step_falsified:
+  \<open>find_result p t f x \<Longrightarrow> length t = n \<Longrightarrow> unat (Lit_atom x) = n \<Longrightarrow> Lit_pos x \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
+  unfolding find_result_def by simp
+
+text \<open>Theory propagation: the recursive call on the extended assignment \<open>t2\<close>, \<open>f2\<close>.\<close>
+
+lemma step_implied:
+  \<open>implied_ok p t f rs t2 f2 \<Longrightarrow> wf_problem p \<Longrightarrow> length t = length (Problem_atoms p) \<Longrightarrow>
+   \<not> pext p t2 f2 \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
+  \<open>implied_ok p t f rs t2 f2 \<Longrightarrow> length t = n \<Longrightarrow> length t2 = n\<close>
+  \<open>implied_ok p t f rs t2 f2 \<Longrightarrow> length f = n \<Longrightarrow> length f2 = n\<close>
+  using pext_implied unfolding implied_ok_def by blast+
+
+lemma step_implied_fuel:
+  \<open>implied_ok p t f rs t2 f2 \<Longrightarrow> length t = n \<Longrightarrow> length f = n \<Longrightarrow> t2 \<noteq> t \<Longrightarrow>
+   unset_count t f < Suc k \<Longrightarrow> unset_count t2 f2 < k\<close>
+  \<open>implied_ok p t f rs t2 f2 \<Longrightarrow> length t = n \<Longrightarrow> length f = n \<Longrightarrow> f2 \<noteq> f \<Longrightarrow>
+   unset_count t f < Suc k \<Longrightarrow> unset_count t2 f2 < k\<close>
+  using implied_fuel by fastforce+
+
+lemma step_branch_none:
+  \<open>\<not> pext p (t[j := True]) f \<Longrightarrow> \<not> pext p t (f[j := True]) \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
+  using search_branch_none by blast
+
+lemma step_leaf_some:
+  \<open>wf_problem p \<Longrightarrow> prop_true p (atom_vals I p) \<Longrightarrow> problem_true I p\<close>
+  using search_leaf_some by blast
 
 lemma search_rec_step_spec:
   assumes \<open>\<And>l t f. \<Gamma>; R p l t f \<Turnstile>\<^sub>F search_contract k p l t f\<close>
   shows \<open>\<Gamma>; search_rec_step R p l t f \<Turnstile>\<^sub>F search_contract (Suc k) p l t f\<close>
   apply (crush_boot f: search_rec_step_def contract: search_contract_def)
-  apply (crush_base specs add: assms prop_holds_spec theory_check_spec next_unit_spec cc_conflict_spec
-        explain_spec conflict_clause_spec learn_spec first_unset_spec
+  apply (crush_base specs add: assms prop_holds_spec theory_check_spec next_unit_spec cc_propagate_spec
+        differs_spec explain_spec conflict_clause_spec learn_spec first_unset_spec
       contracts add: search_contract_def prop_holds_contract_def theory_check_contract_def
-        next_unit_contract_def cc_conflict_contract_def explain_contract_def conflict_clause_contract_def
-        learn_contract_def first_unset_contract_def
+        next_unit_contract_def cc_propagate_contract_def differs_contract_def explain_contract_def
+        conflict_clause_contract_def learn_contract_def first_unset_contract_def
       simp add: unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq word64_eq_of_nat_iff)
   apply (auto simp add: word_less_nat_alt unat_of_nat_lt63 Option.is_none_def split: option.splits
       dest: find_result_le)
-  subgoal by (rule step_unit_none(2)) assumption+
-  subgoal by (rule step_unit_fuel(2)) assumption+
-  subgoal by (rule step_unit_none(1)) assumption+
-  subgoal by (rule step_unit_fuel(1)) assumption+
-  subgoal by (meson search_branch_none)
-  subgoal by (rule step_branch_fuel(2)) assumption+
-  subgoal by (rule step_branch_fuel(1)) assumption+
-  subgoal by (rule step_leaf(1)) assumption+
-  subgoal by (rule step_leaf(2)) assumption+
-  subgoal by (rule search_leaf_some[where a=t]) simp_all
-  subgoal by (blast dest: wf_lit)
-  subgoal for x c e cl by (rule step_learn[where e=e]) (simp_all add: sizes_ok_def)
-  subgoal by (blast dest: conflict_result_none)
-  subgoal by (simp add: conflict_result_def)
-  subgoal by (simp add: find_result_def)
+  apply ((rule step_unit_none step_unit_fuel step_branch_none step_branch_fuel step_leaf step_leaf_some
+        step_implied step_implied_fuel step_learn step_conflict step_falsified wf_lit; assumption)+)
   done
 
 lemma search_rec_spec:

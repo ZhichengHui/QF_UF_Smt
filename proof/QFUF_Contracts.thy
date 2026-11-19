@@ -663,7 +663,7 @@ proof -
     using assms wf_atom[OF wf assms(2)] n unfolding cc_inv_def rep_ok_def rep_sound_def by simp
 qed
 
-text \<open>The result of \<^const>\<open>cc_conflict\<close>: an atom index, and for an atom below the
+text \<open>The result of \<^const>\<open>false_joined\<close>: an atom index, and for an atom below the
   number of atoms, an atom set false whose sides the closure of the atoms set true joins.\<close>
 definition conflict_result :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> bool\<close> where
   \<open>conflict_result p t f r \<equiv> unat r \<le> length (Problem_atoms p) \<and>
@@ -975,22 +975,6 @@ lemma false_joined_spec:
   apply (crush_base specs add: first_joined_spec contracts add: first_joined_contract_def)
   apply (auto simp add: conflict_result_def cc_inv_def sizes_ok_def intro: cc_inv_joined)
   apply (simp add: rep_ok_def)
-  done
-
-definition cc_conflict_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
-  \<open>cc_conflict_contract p t f \<equiv>
-     let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms p) \<and> length f = length (Problem_atoms p)\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> \<langle>conflict_result p t f r\<rangle> in
-     make_function_contract pre post\<close>
-
-lemma cc_conflict_spec:
-  shows \<open>\<Gamma>; cc_conflict p t f \<Turnstile>\<^sub>F cc_conflict_contract p t f\<close>
-  apply (crush_boot f: cc_conflict_def contract: cc_conflict_contract_def)
-  apply (crush_base specs add: init_rep_spec assert_eqs_spec close_spec false_joined_spec[where t=t]
-      contracts add: init_rep_contract_def assert_eqs_contract_def close_contract_def false_joined_contract_def
-      simp add: unat_of_nat_lt63 unat_of_nat_eq)
-  apply (auto simp add: sizes_ok_def unat_of_nat_lt63 intro: cc_inv_init64 cc_inv_init cc_inv_length)
   done
 
 subsection \<open>Unit propagation\<close>
