@@ -67,6 +67,23 @@ lemma cc_inv_length:
   \<open>cc_inv p E rs \<Longrightarrow> length rs = length (Problem_terms p)\<close>
   by (simp add: cc_inv_def rep_ok_def)
 
+text \<open>The step of a row of the closure that merges nothing at \<open>k\<close> because \<open>k\<close> is not congruent to
+  \<open>i\<close> under \<open>rs'\<close>; congruence under \<open>rs\<close> carries over to \<open>rs'\<close>, which keeps the classes of \<open>rs\<close>.\<close>
+lemma row_joined_step_wf:
+  assumes \<open>wf_problem p\<close> \<open>rep_ok p E rs\<close> \<open>refines rs rs'\<close>
+      and \<open>i < length (Problem_terms p)\<close> \<open>k < length (Problem_terms p)\<close>
+      and \<open>row_joined p rs rs' i k\<close> \<open>\<not> congruent_p p rs' i k\<close>
+  shows \<open>row_joined p rs rs' i (Suc k)\<close>
+proof -
+  have \<open>\<not> congruent_p p rs i k\<close>
+    using assms congruent_p_refines[OF assms(3)] unfolding rep_ok_def by (metis wf_args_lt_length)
+  then show ?thesis using assms(6) row_joined_not_congruent by blast
+qed
+
+lemma closed_rowsI:
+  \<open>\<forall>i < length rs. row_joined p rs rs i i \<Longrightarrow> closed p rs\<close>
+  unfolding row_joined_def by (rule closed_lowerI) blast
+
 lemma card_merge_lt:
   assumes \<open>cc_inv p E r\<close> \<open>i < length (Problem_terms p)\<close> \<open>j < length (Problem_terms p)\<close>
       and \<open>r ! i \<noteq> r ! j\<close> \<open>card (set r) \<le> C\<close>
@@ -85,6 +102,20 @@ lemma unat_len_plus_one:
 lemma length_map_prefix [simp]:
   \<open>length (List.map f (take i xs) @ drop i xs) = length xs\<close>
   by simp
+
+text \<open>The row of a constant, which \<open>scan_apps\<close> skips.\<close>
+lemma apps_below_Suc_const:
+  assumes \<open>apps_below p rs k\<close> \<open>\<not> 0 < (word_of_nat (length (Term_args (Problem_terms p ! k))) :: 64 word)\<close>
+      and \<open>\<forall>t \<in> set (Problem_terms p). length (Term_args t) < 9223372036854775808\<close>
+      and \<open>k < length (Problem_terms p)\<close>
+  shows \<open>apps_below p rs (Suc k)\<close>
+proof -
+  have \<open>(word_of_nat (length (Term_args (Problem_terms p ! k))) :: 64 word) = word_of_nat 0\<close>
+    using assms(2) by (simp add: word_gt_0)
+  then have \<open>Term_args (Problem_terms p ! k) = []\<close>
+    using args_len_lt[OF assms(3,4)] word64_of_nat_eq_lengthD by fastforce
+  then show ?thesis using assms(1) apps_below_Suc by blast
+qed
 
 context QFUF_ctx
 begin
@@ -332,9 +363,8 @@ definition scan_row_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 wor
      let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star>
         \<langle>cc_inv p E rs \<and> unat i < length (Problem_terms p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
-        \<langle>cc_inv p E rs' \<and>
-         (if r then card (set rs') < card (set rs)
-          else rs' = rs \<and> (\<forall>j < unat i. congruent_p p rs (unat i) j \<longrightarrow> rs ! unat i = rs ! j))\<rangle>) in
+        \<langle>cc_inv p E rs' \<and> refines rs rs' \<and> row_joined p rs rs' (unat i) (unat i) \<and>
+         (if r then card (set rs') < card (set rs) else rs' = rs)\<rangle>) in
      make_function_contract pre post\<close>
 
 lemma scan_row_spec:
@@ -344,9 +374,8 @@ lemma scan_row_spec:
   subgoal for changed_ref
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c g' rs'. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
-                 \<langle>cc_inv p E rs' \<and>
-                  (if c then card (set rs') < card (set rs)
-                   else rs' = rs \<and> (\<forall>j < k. congruent_p p rs (unat i) j \<longrightarrow> rs ! unat i = rs ! j))\<rangle>)\<close>
+                 \<langle>cc_inv p E rs' \<and> refines rs rs' \<and> row_joined p rs rs' (unat i) k \<and>
+                  (if c then card (set rs') < card (set rs) else rs' = rs)\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -354,6 +383,7 @@ lemma scan_row_spec:
     apply (crush_base specs add: congruent_spec merge_spec contracts add: congruent_contract_def merge_contract_def
         simp add: unat_of_nat_eq less_Suc_eq cc_inv_length)
     apply (auto simp add: cc_inv_length split: if_splits intro: cc_inv_merge card_merge_lt args_len_lt
+        refines_refl refines_merge row_joined_0 row_joined_merge row_joined_eq row_joined_step_wf
         dest: wf_args_lt_length)
     apply (auto simp add: cc_inv_def sizes_ok_def intro: args_len_lt)
     apply (meson wf_args order.strict_trans)+
@@ -365,7 +395,8 @@ definition scan_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 word li
   \<open>scan_contract p rep g rs E \<equiv>
      let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p E rs\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
-        \<langle>cc_inv p E rs' \<and> (if r then card (set rs') < card (set rs) else rs' = rs \<and> closed p rs)\<rangle>) in
+        \<langle>cc_inv p E rs' \<and> consts_joined p rs' \<and>
+         (if r then card (set rs') < card (set rs) else rs' = rs \<and> closed p rs)\<rangle>) in
      make_function_contract pre post\<close>
 
 lemma scan_spec:
@@ -375,16 +406,46 @@ lemma scan_spec:
   subgoal for changed_ref
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c g' rs'. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
-                 \<langle>cc_inv p E rs' \<and>
-                  (if c then card (set rs') < card (set rs)
-                   else rs' = rs \<and> (\<forall>i < k. \<forall>j < i. congruent_p p rs i j \<longrightarrow> rs ! i = rs ! j))\<rangle>)\<close>
+                 \<langle>cc_inv p E rs' \<and> consts_below p rs' k \<and>
+                  (if c then card (set rs') < card (set rs) else rs' = rs \<and> (\<forall>i < k. row_joined p rs rs i i))\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_raw_for_loop_framedI'\<close>)
     apply (crush_base specs add: scan_row_spec contracts add: scan_row_contract_def
         simp add: unat_of_nat_eq less_Suc_eq cc_inv_length)
-    apply (auto simp add: cc_inv_length split: if_splits intro: closed_lowerI)
+    apply (auto simp add: cc_inv_length consts_joined_def split: if_splits
+        intro: closed_rowsI consts_below_0 consts_below_step)
+    apply (auto simp add: cc_inv_def sizes_ok_def)
+    done
+  done
+
+definition scan_apps_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
+      (nat \<times> nat) set \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+  \<open>scan_apps_contract p rep g rs E \<equiv>
+     let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p E rs \<and> consts_joined p rs\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
+        \<langle>cc_inv p E rs' \<and> consts_joined p rs' \<and>
+         (if r then card (set rs') < card (set rs) else rs' = rs \<and> closed p rs)\<rangle>) in
+     make_function_contract pre post\<close>
+
+lemma scan_apps_spec:
+  shows \<open>\<Gamma>; scan_apps p rep \<Turnstile>\<^sub>F scan_apps_contract p rep g rs E\<close>
+  apply (crush_boot f: scan_apps_def contract: scan_apps_contract_def)
+  apply (crush_base simp add: cc_inv_def sizes_ok_def)
+  subgoal for changed_ref
+    apply (ucincl_discharge\<open>
+      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c g' rs'. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
+                 \<langle>cc_inv p E rs' \<and> consts_joined p rs' \<and>
+                  (if c then card (set rs') < card (set rs) else rs' = rs \<and> apps_below p rs k)\<rangle>)\<close>
+        and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
+        and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+        and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_raw_for_loop_framedI'\<close>)
+    apply (crush_base specs add: scan_row_spec contracts add: scan_row_contract_def
+        simp add: unat_of_nat_eq less_Suc_eq cc_inv_length)
+    apply (auto simp add: cc_inv_length split: if_splits
+        intro: closed_appsI apps_below_0 apps_below_Suc apps_below_Suc_const consts_joined_refines)
     apply (auto simp add: cc_inv_def sizes_ok_def)
     done
   done
@@ -399,15 +460,15 @@ definition close_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 word l
 lemma close_spec:
   shows \<open>\<Gamma>; close p rep \<Turnstile>\<^sub>F close_contract p rep g rs E\<close>
   apply (crush_boot f: close_def contract: close_contract_def)
-  apply (crush_base simp add: cc_inv_def sizes_ok_def)
+  apply (crush_base specs add: scan_spec contracts add: scan_contract_def simp add: cc_inv_def sizes_ok_def)
   apply (ucincl_discharge\<open>
     rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
-               \<langle>cc_inv p E rs' \<and> card (set rs') + k \<le> length (Problem_terms p)\<rangle>)\<close>
+               \<langle>cc_inv p E rs' \<and> consts_joined p rs' \<and> card (set rs') + k \<le> length (Problem_terms p)\<rangle>)\<close>
       and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
       and \<tau>=\<open>\<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p E rs' \<and> closed p rs'\<rangle>)\<close>
       and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
     in wp_raw_for_loop_framedI'\<close>)
-  apply (crush_base specs add: scan_spec contracts add: scan_contract_def
+  apply (crush_base specs add: scan_apps_spec contracts add: scan_apps_contract_def
       simp add: unat_of_nat_eq less_Suc_eq cc_inv_length)
   apply (auto simp add: cc_inv_def sizes_ok_def rep_ok_def unat_len_plus_one split: if_splits
       intro: order.trans[OF card_length])

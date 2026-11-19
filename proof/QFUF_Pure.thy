@@ -135,6 +135,136 @@ lemma merge_list_joins:
   \<open>a < length rs \<Longrightarrow> b < length rs \<Longrightarrow> merge_list rs a b ! a = merge_list rs a b ! b\<close>
   by (simp add: nth_merge_list)
 
+text \<open>\<open>rs'\<close> keeps every class of \<open>rs\<close> together.\<close>
+definition refines :: \<open>64 word list \<Rightarrow> 64 word list \<Rightarrow> bool\<close> where
+  \<open>refines rs rs' \<equiv> length rs' = length rs \<and>
+     (\<forall>a < length rs. \<forall>b < length rs. rs ! a = rs ! b \<longrightarrow> rs' ! a = rs' ! b)\<close>
+
+lemma refines_refl:
+  \<open>refines rs rs\<close>
+  by (simp add: refines_def)
+
+lemma refines_merge:
+  \<open>refines rs rs' \<Longrightarrow> refines rs (merge_list rs' a b)\<close>
+  unfolding refines_def using merge_list_keeps by (metis length_merge_list)
+
+text \<open>Term \<open>i\<close> is in the class of every term \<open>j < k\<close> that is congruent to it under \<open>rs\<close>.\<close>
+definition row_joined :: \<open>Problem \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool\<close> where
+  \<open>row_joined p rs rs' i k \<equiv> \<forall>j < k. congruent_p p rs i j \<longrightarrow> rs' ! i = rs' ! j\<close>
+
+lemma row_joined_0:
+  \<open>row_joined p rs rs' i 0\<close>
+  by (simp add: row_joined_def)
+
+lemma row_joined_merge:
+  assumes \<open>row_joined p rs rs' i k\<close> \<open>i < length rs'\<close> \<open>k < length rs'\<close>
+  shows \<open>row_joined p rs (merge_list rs' i k) i (Suc k)\<close>
+  unfolding row_joined_def
+proof (intro allI impI)
+  fix j assume j: \<open>j < Suc k\<close> \<open>congruent_p p rs i j\<close>
+  show \<open>merge_list rs' i k ! i = merge_list rs' i k ! j\<close>
+  proof (cases \<open>j = k\<close>)
+    case True
+    then show ?thesis using assms(2,3) merge_list_joins by blast
+  next
+    case False
+    then have \<open>rs' ! i = rs' ! j\<close> \<open>j < length rs'\<close>
+      using assms j unfolding row_joined_def by auto
+    then show ?thesis using assms(2) merge_list_keeps by blast
+  qed
+qed
+
+lemma row_joined_eq:
+  \<open>row_joined p rs rs' i k \<Longrightarrow> rs' ! i = rs' ! k \<Longrightarrow> row_joined p rs rs' i (Suc k)\<close>
+  unfolding row_joined_def using less_Suc_eq by auto
+
+lemma row_joined_not_congruent:
+  \<open>row_joined p rs rs' i k \<Longrightarrow> \<not> congruent_p p rs i k \<Longrightarrow> row_joined p rs rs' i (Suc k)\<close>
+  unfolding row_joined_def using less_Suc_eq by auto
+
+text \<open>Congruence under \<open>rs\<close> carries over to a partition that keeps the classes of \<open>rs\<close>.\<close>
+lemma congruent_p_refines:
+  assumes \<open>refines rs rs'\<close> \<open>congruent_p p rs i j\<close>
+      and \<open>\<forall>x \<in> set (Term_args (Problem_terms p ! i)). unat x < length rs\<close>
+      and \<open>\<forall>x \<in> set (Term_args (Problem_terms p ! j)). unat x < length rs\<close>
+  shows \<open>congruent_p p rs' i j\<close>
+  using assms unfolding congruent_p_def refines_def by (metis nth_mem)
+
+text \<open>Whether a constant is congruent to a term does not depend on the classes.\<close>
+lemma congruent_p_const:
+  \<open>Term_args (Problem_terms p ! i) = [] \<Longrightarrow> congruent_p p rs i j = congruent_p p rs' i j\<close>
+  by (simp add: congruent_p_def)
+
+text \<open>Every constant below \<open>k\<close> is in the class of each congruent term before it.\<close>
+definition consts_below :: \<open>Problem \<Rightarrow> 64 word list \<Rightarrow> nat \<Rightarrow> bool\<close> where
+  \<open>consts_below p rs k \<equiv> \<forall>i < k. \<forall>j < i. Term_args (Problem_terms p ! i) = [] \<longrightarrow>
+     congruent_p p rs i j \<longrightarrow> rs ! i = rs ! j\<close>
+
+definition consts_joined :: \<open>Problem \<Rightarrow> 64 word list \<Rightarrow> bool\<close> where
+  \<open>consts_joined p rs \<equiv> consts_below p rs (length rs)\<close>
+
+lemma consts_below_0:
+  \<open>consts_below p rs 0\<close>
+  by (simp add: consts_below_def)
+
+text \<open>The step of a round over the rows: \<open>rs'\<close> is the partition after the row of \<open>k\<close>.\<close>
+lemma consts_below_step:
+  assumes \<open>consts_below p rs k\<close> \<open>refines rs rs'\<close> \<open>k < length rs\<close> \<open>row_joined p rs rs' k k\<close>
+  shows \<open>consts_below p rs' (Suc k)\<close>
+  unfolding consts_below_def
+proof (intro allI impI)
+  fix i j assume ij: \<open>i < Suc k\<close> \<open>j < i\<close> \<open>Term_args (Problem_terms p ! i) = []\<close>
+    \<open>congruent_p p rs' i j\<close>
+  then have c: \<open>congruent_p p rs i j\<close>
+    using congruent_p_const[of p i rs' j rs] by simp
+  show \<open>rs' ! i = rs' ! j\<close>
+  proof (cases \<open>i = k\<close>)
+    case True
+    then show ?thesis using assms(4) ij(2) c unfolding row_joined_def by simp
+  next
+    case False
+    then have \<open>rs ! i = rs ! j\<close> \<open>i < length rs\<close> \<open>j < length rs\<close>
+      using assms(1,3) ij c unfolding consts_below_def by auto
+    then show ?thesis using assms(2) unfolding refines_def by blast
+  qed
+qed
+
+lemma consts_joined_refines:
+  assumes \<open>consts_joined p rs\<close> \<open>refines rs rs'\<close>
+  shows \<open>consts_joined p rs'\<close>
+  unfolding consts_joined_def consts_below_def
+proof (intro allI impI)
+  fix i j assume ij: \<open>i < length rs'\<close> \<open>j < i\<close> \<open>Term_args (Problem_terms p ! i) = []\<close>
+    \<open>congruent_p p rs' i j\<close>
+  moreover have \<open>i < length rs\<close> \<open>j < length rs\<close>
+    using ij(1,2) assms(2) unfolding refines_def by simp_all
+  ultimately have \<open>rs ! i = rs ! j\<close>
+    using assms(1) congruent_p_const[of p i rs' j rs] unfolding consts_joined_def consts_below_def by simp
+  moreover note \<open>i < length rs\<close> \<open>j < length rs\<close>
+  ultimately show \<open>rs' ! i = rs' ! j\<close>
+    using assms(2) unfolding refines_def by blast
+qed
+
+text \<open>Every term below \<open>k\<close> that is not a constant is in the class of each congruent term before it.\<close>
+definition apps_below :: \<open>Problem \<Rightarrow> 64 word list \<Rightarrow> nat \<Rightarrow> bool\<close> where
+  \<open>apps_below p rs k \<equiv> \<forall>i < k. Term_args (Problem_terms p ! i) \<noteq> [] \<longrightarrow>
+     (\<forall>j < i. congruent_p p rs i j \<longrightarrow> rs ! i = rs ! j)\<close>
+
+lemma apps_below_0:
+  \<open>apps_below p rs 0\<close>
+  by (simp add: apps_below_def)
+
+lemma apps_below_Suc:
+  \<open>apps_below p rs k \<Longrightarrow> (Term_args (Problem_terms p ! k) \<noteq> [] \<Longrightarrow> row_joined p rs rs k k) \<Longrightarrow>
+   apps_below p rs (Suc k)\<close>
+  unfolding apps_below_def row_joined_def using less_Suc_eq by auto
+
+text \<open>With the constants joined, the rows of the other terms decide whether \<open>rs\<close> is closed.\<close>
+lemma closed_appsI:
+  assumes \<open>consts_joined p rs\<close> \<open>apps_below p rs (length rs)\<close>
+  shows \<open>closed p rs\<close>
+  using assms unfolding consts_joined_def consts_below_def apps_below_def by (intro closed_lowerI) metis
+
 lemma rep_has_merge:
   \<open>rep_has E rs \<Longrightarrow> \<forall>(i, j) \<in> E. i < length rs \<and> j < length rs \<Longrightarrow> rep_has E (merge_list rs a b)\<close>
   unfolding rep_has_def using merge_list_keeps by fast

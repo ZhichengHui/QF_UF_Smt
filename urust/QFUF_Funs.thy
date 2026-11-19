@@ -155,11 +155,26 @@ definition "scan" :: \<open>Problem \<Rightarrow> (('addr, 'gv, (64 word) list) 
     * changed
   \<rbrakk>\<close>
 
+(* Rust: scan_apps *)
+definition "scan_apps" :: \<open>Problem \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>scan_apps \<equiv> \<lambda>p rep. FunctionBody \<lbrakk>
+    let mut changed = false;
+    for i in 0_usize .. len(p.Problem_terms) {
+      if len(p.Problem_terms[i].Term_args) > 0_usize {
+        if scan_row(p, rep, i) {
+          * changed = true;
+        }
+      }
+    };
+    * changed
+  \<rbrakk>\<close>
+
 (* Rust: close *)
 definition "close" :: \<open>Problem \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>close \<equiv> \<lambda>p rep. FunctionBody \<lbrakk>
+    let _ = scan(p, rep);
     for v_round in 0_usize .. len(p.Problem_terms) + 1_usize {
-      if !scan(p, rep) {
+      if !scan_apps(p, rep) {
         return;
       }
     }
