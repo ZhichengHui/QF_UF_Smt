@@ -558,24 +558,6 @@ lemma theory_some:
   shows \<open>atom_vals (model_interp (model_of p rs)) p = a\<close>
   using assms model_of_atom_vals unfolding cc_inv_def diseqs_hold_def by blast
 
-text \<open>A conflict of the closure of the atoms set true with an atom set false.\<close>
-lemma false_joined_none:
-  assumes \<open>cc_inv p (asserted p t (length (Problem_atoms p))) rs\<close> \<open>length t = length (Problem_atoms p)\<close>
-      and \<open>\<not> (\<forall>j < length (Problem_atoms p). f ! j \<longrightarrow>
-              rs ! unat (Atom_lhs (Problem_atoms p ! j)) \<noteq> rs ! unat (Atom_rhs (Problem_atoms p ! j)))\<close>
-  shows \<open>\<not> pext p t f\<close>
-proof -
-  obtain j where j: \<open>j < length (Problem_atoms p)\<close> \<open>f ! j\<close>
-    \<open>rs ! unat (Atom_lhs (Problem_atoms p ! j)) = rs ! unat (Atom_rhs (Problem_atoms p ! j))\<close>
-    using assms(3) by blast
-  have wf: \<open>wf_problem p\<close> and n: \<open>length rs = length (Problem_terms p)\<close>
-    using assms(1) by (simp_all add: cc_inv_def rep_ok_def)
-  have \<open>(unat (Atom_lhs (Problem_atoms p ! j)), unat (Atom_rhs (Problem_atoms p ! j)))
-          \<in> cc p (asserted p t (length (Problem_atoms p)))\<close>
-    using assms(1) j wf_atom[OF wf, of j] n unfolding cc_inv_def rep_ok_def rep_sound_def by simp
-  then show ?thesis using pext_cc_conflict[OF wf assms(2) j(1,2)] by blast
-qed
-
 text \<open>The postcondition of \<^const>\<open>find_unit\<close>.\<close>
 definition find_result :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> Lit \<Rightarrow> bool\<close> where
   \<open>find_result p t f r \<equiv>

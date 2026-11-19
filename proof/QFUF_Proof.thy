@@ -90,7 +90,24 @@ lemma search_rec_step_spec:
         next_unit_contract_def cc_conflict_contract_def explain_contract_def conflict_clause_contract_def
         learn_contract_def first_unset_contract_def
       simp add: unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq word64_eq_of_nat_iff)
-  sorry
+  apply (auto simp add: word_less_nat_alt unat_of_nat_lt63 Option.is_none_def split: option.splits
+      dest: find_result_le)
+  subgoal by (rule step_unit_none(2)) assumption+
+  subgoal by (rule step_unit_fuel(2)) assumption+
+  subgoal by (rule step_unit_none(1)) assumption+
+  subgoal by (rule step_unit_fuel(1)) assumption+
+  subgoal by (meson search_branch_none)
+  subgoal by (rule step_branch_fuel(2)) assumption+
+  subgoal by (rule step_branch_fuel(1)) assumption+
+  subgoal by (rule step_leaf(1)) assumption+
+  subgoal by (rule step_leaf(2)) assumption+
+  subgoal by (rule search_leaf_some[where a=t]) simp_all
+  subgoal by (blast dest: wf_lit)
+  subgoal for x c e cl by (rule step_learn[where e=e]) (simp_all add: sizes_ok_def)
+  subgoal by (blast dest: conflict_result_none)
+  subgoal by (simp add: conflict_result_def)
+  subgoal by (simp add: find_result_def)
+  done
 
 lemma search_rec_spec:
   shows \<open>\<Gamma>; (search_rec_step ^^ k) R p l t f \<Turnstile>\<^sub>F search_contract k p l t f\<close>
@@ -126,7 +143,8 @@ lemma solve_spec:
   shows \<open>\<Gamma>; solve p \<Turnstile>\<^sub>F solve_contract p\<close>
   apply (crush_boot f: solve_def contract: solve_contract_def)
   apply (crush_base specs add: search_spec contracts add: search_contract_def split!: option.splits
-      simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq pext_start unset_count_replicate Answer_Sat_mk_def)
+      simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq pext_start unset_count_replicate Answer_Sat_mk_def
+        clauses_ok_def)
   done
 
 text \<open>The contract of \<^verbatim>\<open>solve\<close> with, for a model, the bound on its values and arguments.\<close>
@@ -148,7 +166,8 @@ lemma solve_vals_spec:
   shows \<open>\<Gamma>; solve p \<Turnstile>\<^sub>F solve_contract_vals p\<close>
   apply (crush_boot f: solve_def contract: solve_contract_vals_def)
   apply (crush_base specs add: search_spec contracts add: search_contract_def split!: option.splits
-      simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq pext_start unset_count_replicate Answer_Sat_mk_def)
+      simp add: fuel unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq pext_start unset_count_replicate Answer_Sat_mk_def
+        clauses_ok_def)
   apply (auto simp add: model_vals_ok_def)?
   done
 

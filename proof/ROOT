@@ -8,6 +8,7 @@ session "QFUF_Proof" = "QFUF_CoreSpec" +
   theories
     QFUF_Pure
     QFUF_Contracts
+    QFUF_Explain
     QFUF_Proof
 
 session "QFUF_Smt" in "smt" = "QFUF_CoreSpec" +
