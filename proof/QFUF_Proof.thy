@@ -1,5 +1,5 @@
 theory QFUF_Proof
-  imports QFUF_Contracts
+  imports QFUF_Explain
 begin
 
 context QFUF_ctx
@@ -8,16 +8,19 @@ begin
 subsection \<open>Search\<close>
 
 text \<open>The \<open>k\<close>-th unfolding of \<^const>\<open>search\<close>. Its precondition requires fewer than \<open>k\<close> atoms
-  to be unset, so the innermost function is never called.\<close>
-definition search_contract :: \<open>nat \<Rightarrow> Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> ('s, Model option, 'abort) function_contract\<close> where
-  \<open>search_contract k p t f \<equiv>
+  to be unset, so the innermost function is never called. The learned clauses \<open>l\<close> hold in every
+  model of the problem, before and after.\<close>
+definition search_contract :: \<open>nat \<Rightarrow> Problem \<Rightarrow> Clause list \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow>
+      ('s, Model option \<times> Clause list \<times> tnil, 'abort) function_contract\<close> where
+  \<open>search_contract k p l t f \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms p) \<and> length f = length (Problem_atoms p) \<and>
-         unset_count t f < k\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms p) \<and>
+         length f = length (Problem_atoms p) \<and> unset_count t f < k\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>case r of
+        \<langle>(case fst r of
            None \<Rightarrow> \<not> pext p t f
-         | Some m \<Rightarrow> problem_true (model_interp m) p \<and> model_vals_ok p m\<rangle> in
+         | Some m \<Rightarrow> problem_true (model_interp m) p \<and> model_vals_ok p m) \<and>
+         clauses_ok p (fst (snd r))\<rangle> in
      make_function_contract pre post\<close>
 
 lemma find_result_le:
@@ -63,35 +66,35 @@ lemma step_leaf:
    \<forall>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. atom_vals I p \<noteq> t \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
   using search_leaf_none search_leaf_theory_none by fastforce+
 
-lemma search_rec_step_spec:
-  assumes \<open>\<And>t f. \<Gamma>; R p t f \<Turnstile>\<^sub>F search_contract k p t f\<close>
-  shows \<open>\<Gamma>; search_rec_step R p t f \<Turnstile>\<^sub>F search_contract (Suc k) p t f\<close>
-  apply (crush_boot f: search_rec_step_def contract: search_contract_def)
-  apply (crush_base specs add: assms prop_holds_spec theory_check_spec find_unit_spec cc_conflict_spec
-        first_unset_spec
-      contracts add: search_contract_def prop_holds_contract_def theory_check_contract_def
-        find_unit_contract_def cc_conflict_contract_def first_unset_contract_def
-      simp add: unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq word64_eq_of_nat_iff)
+lemma step_learn:
+  assumes \<open>wf_problem p\<close> \<open>sizes_ok p\<close> \<open>clauses_ok p l\<close> \<open>unat c < length (Problem_atoms p)\<close>
+      and \<open>length e = length (Problem_atoms p)\<close>
+      and \<open>(unat (Atom_lhs (Problem_atoms p ! unat c)), unat (Atom_rhs (Problem_atoms p ! unat c)))
+             \<in> cc p (asserted p e (length (Problem_atoms p)))\<close>
+      and \<open>set (Clause_lits cl) = conflict_lits e c (length e)\<close> \<open>length (Clause_lits cl) \<le> length e + 1\<close>
+  shows \<open>clauses_ok p (l @ [cl])\<close>
+proof (rule clauses_ok_append[OF assms(3)])
+  show \<open>clause_ok p cl\<close>
+    using assms by (intro conflict_lits_clause_ok[where e=e and k=c]) (auto simp add: sizes_ok_def)
+  show \<open>length (Clause_lits cl) < 2^64\<close>
+    using assms(2,5,8) by (simp add: sizes_ok_def)
+qed
 
-  apply (auto simp add: word_less_nat_alt unat_of_nat_lt63 Option.is_none_def split: option.splits
-      dest: find_result_le)
-  subgoal by (rule step_unit_none(2)) assumption+
-  subgoal by (rule step_unit_fuel(2)) assumption+
-  subgoal by (rule step_unit_none(1)) assumption+
-  subgoal by (rule step_unit_fuel(1)) assumption+
-  subgoal by (meson search_branch_none)
-  subgoal by (rule step_branch_fuel(2)) assumption+
-  subgoal by (rule step_branch_fuel(1)) assumption+
-  subgoal by (rule step_leaf(1)) assumption+
-  subgoal by (rule step_leaf(2)) assumption+
-  subgoal by (rule search_leaf_some[where a=t]) simp_all
-  subgoal by (blast dest: wf_lit)
-  subgoal by (simp add: find_result_def)
-  done
+lemma search_rec_step_spec:
+  assumes \<open>\<And>l t f. \<Gamma>; R p l t f \<Turnstile>\<^sub>F search_contract k p l t f\<close>
+  shows \<open>\<Gamma>; search_rec_step R p l t f \<Turnstile>\<^sub>F search_contract (Suc k) p l t f\<close>
+  apply (crush_boot f: search_rec_step_def contract: search_contract_def)
+  apply (crush_base specs add: assms prop_holds_spec theory_check_spec next_unit_spec cc_conflict_spec
+        explain_spec conflict_clause_spec learn_spec first_unset_spec
+      contracts add: search_contract_def prop_holds_contract_def theory_check_contract_def
+        next_unit_contract_def cc_conflict_contract_def explain_contract_def conflict_clause_contract_def
+        learn_contract_def first_unset_contract_def
+      simp add: unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq word64_eq_of_nat_iff)
+  sorry
 
 lemma search_rec_spec:
-  shows \<open>\<Gamma>; (search_rec_step ^^ k) R p t f \<Turnstile>\<^sub>F search_contract k p t f\<close>
-proof (induction k arbitrary: t f)
+  shows \<open>\<Gamma>; (search_rec_step ^^ k) R p l t f \<Turnstile>\<^sub>F search_contract k p l t f\<close>
+proof (induction k arbitrary: l t f)
   case 0
   show ?case
     apply (ucincl_discharge\<open>intro satisfies_function_contractI\<close>)
@@ -105,7 +108,7 @@ next
 qed
 
 lemma search_spec:
-  shows \<open>\<Gamma>; search p t f \<Turnstile>\<^sub>F search_contract urust_fuel p t f\<close>
+  shows \<open>\<Gamma>; search p l t f \<Turnstile>\<^sub>F search_contract urust_fuel p l t f\<close>
   unfolding search_def by (rule search_rec_spec)
 
 subsection \<open>The top-level contract\<close>

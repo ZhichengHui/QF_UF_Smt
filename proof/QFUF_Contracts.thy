@@ -26,6 +26,19 @@ proof -
   then show ?thesis using assms(1) by metis
 qed
 
+lemma unat_of_nat_le:
+  \<open>unat (word_of_nat n :: 64 word) \<le> n\<close>
+  by (simp add: unat_of_nat)
+
+lemma unat_idx_lt:
+  \<open>i < unat (word_of_nat n :: 64 word) \<Longrightarrow> unat (word_of_nat i :: 64 word) < n\<close>
+  \<open>i < n \<Longrightarrow> unat (word_of_nat i :: 64 word) < n\<close>
+  by (meson le_less_trans order_less_le_trans unat_of_nat_le)+
+
+lemma unat_lt_len:
+  \<open>x < unat (word_of_nat n :: 64 word) \<Longrightarrow> x < n\<close>
+  using order_less_le_trans unat_of_nat_le by blast
+
 lemma wf_args_lt_length:
   \<open>wf_problem p \<Longrightarrow> k < length (Problem_terms p) \<Longrightarrow> x \<in> set (Term_args (Problem_terms p ! k)) \<Longrightarrow>
    unat x < length (Problem_terms p)\<close>
@@ -222,7 +235,7 @@ proof -
 qed
 
 lemma unat_lt_of_ne:
-  assumes \<open>unat (x :: 64 word) \<le> n\<close> \<open>n < 2^63\<close> \<open>x \<noteq> word_of_nat n\<close>
+  assumes \<open>unat (x :: 64 word) \<le> n\<close> \<open>n < 2^64\<close> \<open>x \<noteq> word_of_nat n\<close>
   shows \<open>unat x < n\<close>
 proof (rule ccontr)
   assume \<open>\<not> unat x < n\<close>
@@ -231,7 +244,7 @@ proof (rule ccontr)
 qed
 
 lemma unat_eq_of_not_less:
-  assumes \<open>unat (x :: 64 word) \<le> n\<close> \<open>n < 2^63\<close> \<open>\<not> x < word_of_nat n\<close>
+  assumes \<open>unat (x :: 64 word) \<le> n\<close> \<open>n < 2^64\<close> \<open>\<not> x < word_of_nat n\<close>
   shows \<open>unat x = n\<close>
 proof -
   have \<open>unat (word_of_nat n :: 64 word) = n\<close> using assms(2) by (simp add: unat_of_nat_eq)
@@ -242,7 +255,7 @@ definition clause_unit_contract :: \<open>bool list \<Rightarrow> bool list \<Ri
   \<open>clause_unit_contract t f c \<equiv>
      let pre = can_alloc_reference \<star>
         \<langle>(\<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < length t) \<and> length f = length t \<and>
-         length t < 2^63 \<and> length (Clause_lits c) < 2^63\<rangle> in
+         length t < 2^63 \<and> length (Clause_lits c) < 2^64\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star> \<langle>unit_result t f c r\<rangle> in
      make_function_contract pre post\<close>
 
@@ -585,15 +598,14 @@ lemma find_result_clause:
 
 text \<open>Clauses that \<^const>\<open>find_unit\<close> may scan: clauses of the problem or learned ones.\<close>
 definition clauses_ok :: \<open>Problem \<Rightarrow> Clause list \<Rightarrow> bool\<close> where
-  \<open>clauses_ok p cs \<equiv> length cs < 2^63 \<and> (\<forall>c \<in> set cs. clause_ok p c \<and> length (Clause_lits c) < 2^63)\<close>
+  \<open>clauses_ok p cs \<equiv> \<forall>c \<in> set cs. clause_ok p c \<and> length (Clause_lits c) < 2^64\<close>
 
 lemma clauses_ok_problem:
   \<open>wf_problem p \<Longrightarrow> sizes_ok p \<Longrightarrow> clauses_ok p (Problem_clauses p)\<close>
-  unfolding clauses_ok_def sizes_ok_def using clause_ok_problem by blast
+  unfolding clauses_ok_def sizes_ok_def using clause_ok_problem by fastforce
 
 lemma clauses_ok_append:
-  \<open>clauses_ok p cs \<Longrightarrow> clause_ok p c \<Longrightarrow> length (Clause_lits c) < 2^63 \<Longrightarrow> length cs + 1 < 2^63 \<Longrightarrow>
-   clauses_ok p (cs @ [c])\<close>
+  \<open>clauses_ok p cs \<Longrightarrow> clause_ok p c \<Longrightarrow> length (Clause_lits c) < 2^64 \<Longrightarrow> clauses_ok p (cs @ [c])\<close>
   unfolding clauses_ok_def by auto
 
 text \<open>A pair of atom sides that a partition joins lies in the congruence closure.\<close>
@@ -962,12 +974,12 @@ lemma find_unit_spec:
       simp add: unat_of_nat_eq less_Suc_eq)
   subgoal for i x
     by (rule find_result_clause[where c=\<open>cs ! unat (word_of_nat i :: 64 word)\<close>])
-      (auto simp add: clauses_ok_def unat_of_nat_lt63)
+      (auto simp add: clauses_ok_def unat_of_nat_lt63 dest: unat_idx_lt)
   subgoal for i x
     by (rule find_result_clause[where c=\<open>cs ! unat (word_of_nat i :: 64 word)\<close>])
-      (auto simp add: clauses_ok_def unat_of_nat_lt63)
-  apply (auto simp add: clauses_ok_def unat_of_nat_lt63 intro: find_result_none)
-  apply (meson clause_ok_def nth_mem)
+      (auto simp add: clauses_ok_def unat_of_nat_lt63 dest: unat_idx_lt)
+  apply (auto simp add: clauses_ok_def unat_of_nat_lt63 intro: find_result_none dest: unat_idx_lt)
+  apply (meson clause_ok_def nth_mem unat_idx_lt)+
   done
 
 definition next_unit_contract :: \<open>Problem \<Rightarrow> Clause list \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> ('s, Lit, 'abort) function_contract\<close> where
