@@ -261,9 +261,9 @@ fn finish(p: &Problem, a: &[bool], rep: &mut Vec<usize>) -> Option<Model> {
     if diseqs_ok(p, a, p.atoms.len(), rep) { Some(build_model(p, rep)) } else { None }
 }
 
-/// The first atom `j` with `f[j]` whose two sides the closed partition `rep` joins;
-/// `p.atoms.len()` if there is none. `rep` is `&mut` for the reason given at `finish`.
-fn false_joined(p: &Problem, f: &[bool], rep: &mut Vec<usize>) -> usize {
+/// The first atom `j` with `f[j]` whose two sides lie in one class of `rep`; `p.atoms.len()` if
+/// there is none.
+fn first_joined(p: &Problem, f: &[bool], rep: &[usize]) -> usize {
     for j in 0..p.atoms.len() {
         if f[j] && rep[p.atoms[j].lhs] == rep[p.atoms[j].rhs] {
             return j;
@@ -272,10 +272,9 @@ fn false_joined(p: &Problem, f: &[bool], rep: &mut Vec<usize>) -> usize {
     p.atoms.len()
 }
 
-/// Whether the partition `rep` joins the two sides of atom `k`.
-/// `rep` is `&mut` for the reason given at `finish`.
-fn joined(p: &Problem, k: usize, rep: &mut Vec<usize>) -> bool {
-    rep[p.atoms[k].lhs] == rep[p.atoms[k].rhs]
+/// `first_joined` on the closed partition `rep`. `rep` is `&mut` for the reason given at `finish`.
+fn false_joined(p: &Problem, f: &[bool], rep: &mut Vec<usize>) -> usize {
+    first_joined(p, f, rep)
 }
 
 /// A model in which exactly the atoms `k` with `a[k]` hold, if there is one.
@@ -1142,6 +1141,17 @@ fn close_rows(p: &Problem, rows: &[bool], rep: &mut Vec<usize>) {
     }
 }
 
+/// Are terms `a` and `b` in one class of `rep`?
+fn same_class(rep: &[usize], a: usize, b: usize) -> bool {
+    rep[a] == rep[b]
+}
+
+/// Whether the partition `rep` joins the two sides of atom `k`.
+/// `rep` is `&mut` for the reason given at `finish`.
+fn joined(p: &Problem, k: usize, rep: &mut Vec<usize>) -> bool {
+    same_class(rep, p.atoms[k].lhs, p.atoms[k].rhs)
+}
+
 /// Whether the equalities of the atoms `j` with `e[j]`, merged by `close_rows`, join the two
 /// sides of atom `k`; if so, so does their congruence closure.
 fn rows_join(p: &Problem, e: &[bool], rows: &[bool], k: usize) -> bool {
@@ -1151,64 +1161,105 @@ fn rows_join(p: &Problem, e: &[bool], rows: &[bool], k: usize) -> bool {
     joined(p, k, &mut rep)
 }
 
-/// The merges of a congruence closure of the atoms set in `t`, in order, as edges `(xs[i], ys[i])`
-/// with label `ls[i]`: an atom `j < p.atoms.len()` whose sides are `xs[i]` and `ys[i]`, or
-/// `p.atoms.len()` for a merge of the congruent terms `xs[i]` and `ys[i]`. Every edge joins two
-/// classes, so the edges form a forest, and the two sides of a congruence edge are joined by
-/// earlier edges.
-fn merge_log(p: &Problem, t: &[bool]) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
-    let n = p.terms.len();
-    let m = p.atoms.len();
-    let mut rep = init_rep(n);
-    let mut xs = Vec::new();
-    let mut ys = Vec::new();
-    let mut ls = Vec::new();
-    for j in 0..m {
-        let x = p.atoms[j].lhs;
-        let y = p.atoms[j].rhs;
-        if t[j] && rep[x] != rep[y] {
-            merge(&mut rep, x, y);
-            xs.push(x);
-            ys.push(y);
+/// `v[i]`, or `d` if `i` is out of bounds.
+fn get_or(v: &[usize], i: usize, d: usize) -> usize {
+    if i < v.len() { v[i] } else { d }
+}
+
+/// Sets `v[i]` to `x` if `i` is in bounds.
+fn set_at(v: &mut Vec<usize>, i: usize, x: usize) {
+    if i < v.len() {
+        v[i] = x;
+    }
+}
+
+/// Sets `v[i]` if `i` is in bounds.
+fn set_true(v: &mut Vec<bool>, i: usize) {
+    if i < v.len() {
+        v[i] = true;
+    }
+}
+
+/// Merges the classes of the two sides of every atom `j` with `t[j]` that `rep` keeps apart, and
+/// logs each merge as the edge `(xs, ys)` with label `ls` = `j`.
+fn log_atoms(p: &Problem, t: &[bool], rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) {
+    for j in 0..p.atoms.len() {
+        if t[j] && rep[p.atoms[j].lhs] != rep[p.atoms[j].rhs] {
+            merge(rep, p.atoms[j].lhs, p.atoms[j].rhs);
+            xs.push(p.atoms[j].lhs);
+            ys.push(p.atoms[j].rhs);
             ls.push(j);
         }
     }
-    for _round in 0..n + 1 {
-        let mut changed = false;
-        for i in 0..n {
-            for j in 0..i {
-                if rep[i] != rep[j] && congruent(p, &rep, i, j) {
-                    merge(&mut rep, i, j);
-                    xs.push(i);
-                    ys.push(j);
-                    ls.push(m);
-                    changed = true;
-                }
-            }
-        }
-        if !changed {
-            return (xs, ys, ls);
+}
+
+/// `scan_row` that logs each merge of terms `i` and `j` as the edge `(i, j)` with label
+/// `p.atoms.len()`.
+fn log_row(p: &Problem, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>, i: usize) -> bool {
+    let mut changed = false;
+    for j in 0..i {
+        if rep[i] != rep[j] && congruent(p, rep, i, j) {
+            merge(rep, i, j);
+            xs.push(i);
+            ys.push(j);
+            ls.push(p.atoms.len());
+            changed = true;
         }
     }
+    changed
+}
+
+/// One round of `log_row` over all terms; returns whether it merged anything.
+fn log_scan(p: &Problem, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) -> bool {
+    let mut changed = false;
+    for i in 0..p.terms.len() {
+        if log_row(p, rep, xs, ys, ls, i) {
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// `close` with `log_scan`.
+fn log_close(p: &Problem, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) {
+    for _round in 0..p.terms.len() + 1 {
+        if !log_scan(p, rep, xs, ys, ls) {
+            return;
+        }
+    }
+}
+
+/// The merges of a congruence closure of the atoms set in `t`, in order, as edges `(xs[i], ys[i])`
+/// with label `ls[i]`: an atom `j < p.atoms.len()` whose sides are `xs[i]` and `ys[i]`, or
+/// `p.atoms.len()` for a merge of the congruent terms `xs[i]` and `ys[i]`. Every edge joins two
+/// classes, so the edges form a forest, and the arguments of the two terms of a congruence edge
+/// are joined by earlier edges.
+fn merge_log(p: &Problem, t: &[bool]) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
+    let mut rep = init_rep(p.terms.len());
+    let mut xs = Vec::new();
+    let mut ys = Vec::new();
+    let mut ls = Vec::new();
+    log_atoms(p, t, &mut rep, &mut xs, &mut ys, &mut ls);
+    log_close(p, &mut rep, &mut xs, &mut ys, &mut ls);
     (xs, ys, ls)
 }
 
-/// One round of a breadth-first search along the edges `(xs[i], ys[i])`: a reached term `y` has a
-/// predecessor `pv[y] < n` reached before it, and the index `pe[y]` of the edge. Returns whether
-/// it reached a new term.
+/// One round of a breadth-first search over the `n` terms along the edges `(xs[i], ys[i])`: a
+/// reached term `y` has a predecessor `pv[y] < n` reached before it, and the index `pe[y]` of the
+/// edge. Returns whether it reached a new term.
 fn bfs_round(n: usize, xs: &[usize], ys: &[usize], pv: &mut Vec<usize>, pe: &mut Vec<usize>) -> bool {
     let mut changed = false;
     for i in 0..xs.len() {
         let x = xs[i];
-        let y = ys[i];
-        if x < n && y < n {
+        let y = get_or(ys, i, n);
+        if x < pv.len() && y < pv.len() {
             if pv[x] < n && pv[y] == n {
                 pv[y] = x;
-                pe[y] = i;
+                set_at(pe, y, i);
                 changed = true;
             } else if pv[y] < n && pv[x] == n {
                 pv[x] = y;
-                pe[x] = i;
+                set_at(pe, x, i);
                 changed = true;
             }
         }
@@ -1216,70 +1267,85 @@ fn bfs_round(n: usize, xs: &[usize], ys: &[usize], pv: &mut Vec<usize>, pe: &mut
     changed
 }
 
-/// Breadth-first search from term `a` until term `b` is reached (see `bfs_round`); returns `pv`
-/// and `pe`.
+/// `bfs_round` until term `b` is reached or a round reaches nothing (at most `n` rounds).
+fn bfs_rounds(n: usize, xs: &[usize], ys: &[usize], b: usize, pv: &mut Vec<usize>, pe: &mut Vec<usize>) {
+    for _round in 0..n {
+        if get_or(pv, b, n) < n || !bfs_round(n, xs, ys, pv, pe) {
+            return;
+        }
+    }
+}
+
+/// Breadth-first search from term `a` towards term `b` (see `bfs_round`); returns `pv` and `pe`.
 fn bfs(n: usize, xs: &[usize], ys: &[usize], a: usize, b: usize) -> (Vec<usize>, Vec<usize>) {
     let mut pv = vec![n; n];
     let mut pe = vec![0; n];
-    pv[a] = a;
-    for _round in 0..n {
-        if pv[b] < n || !bfs_round(n, xs, ys, &mut pv, &mut pe) {
-            return (pv, pe);
+    set_at(&mut pv, a, a);
+    bfs_rounds(n, xs, ys, b, &mut pv, &mut pe);
+    (pv, pe)
+}
+
+/// Appends the pairs of corresponding arguments of terms `u` and `v` to `qa`, `qb`.
+fn push_args(p: &Problem, u: usize, v: usize, qa: &mut Vec<usize>, qb: &mut Vec<usize>) {
+    if u < p.terms.len() && v < p.terms.len() {
+        for r in 0..p.terms[u].args.len() {
+            if r < p.terms[v].args.len() {
+                qa.push(p.terms[u].args[r]);
+                qb.push(p.terms[v].args[r]);
+            }
         }
     }
-    (pv, pe)
+}
+
+/// Walks the path of the search `pv`, `pe` back from term `b` to term `a`. Each edge not `used`
+/// before: an atom edge sets its atom in `e`; a congruence edge sets its two terms in `rows` and
+/// appends their argument pairs to `qa`, `qb`.
+fn walk(p: &Problem, xs: &[usize], ys: &[usize], ls: &[usize], pv: &[usize], pe: &[usize], a: usize, b: usize,
+        e: &mut Vec<bool>, rows: &mut Vec<bool>, used: &mut Vec<bool>, qa: &mut Vec<usize>, qb: &mut Vec<usize>) {
+    let n = p.terms.len();
+    let m = p.atoms.len();
+    let mut x = b;
+    for _step in 0..n {
+        if x != a && get_or(pv, x, n) < n {
+            let g = get_or(pe, x, used.len());
+            if g < used.len() && !used[g] {
+                used[g] = true;
+                let l = get_or(ls, g, m);
+                if l < m {
+                    set_true(e, l);
+                } else {
+                    let u = get_or(xs, g, n);
+                    let v = get_or(ys, g, n);
+                    set_true(rows, u);
+                    set_true(rows, v);
+                    push_args(p, u, v, qa, qb);
+                }
+            }
+            x = get_or(pv, x, n);
+        }
+    }
 }
 
 /// A set of atoms set in `t` whose equalities, closed under congruence, join the two sides of atom
 /// `k`, read off `merge_log`: the atom edges on the path between the two sides in the forest, and
-/// recursively those that explain the arguments of its congruence edges. Returns the atoms and the
-/// terms of the congruence edges used.
+/// recursively those that explain the argument pairs of its congruence edges. Returns the atoms
+/// and the terms of the congruence edges used.
 fn path_explain(p: &Problem, t: &[bool], k: usize) -> (Vec<bool>, Vec<bool>) {
     let n = p.terms.len();
-    let m = p.atoms.len();
     let (xs, ys, ls) = merge_log(p, t);
-    let mut e = vec![false; m];
+    let mut e = vec![false; p.atoms.len()];
     let mut rows = vec![false; n];
     let mut used = vec![false; xs.len()];
     let mut qa = Vec::new();
     let mut qb = Vec::new();
     qa.push(p.atoms[k].lhs);
     qb.push(p.atoms[k].rhs);
-    let mut bound = 1;
-    for u in 0..n {
-        bound = bound + p.terms[u].args.len();
-    }
-    for i in 0..bound {
-        if i < qa.len() {
-            let a = qa[i];
-            let b = qb[i];
-            if a != b && a < n && b < n {
-                let (pv, pe) = bfs(n, &xs, &ys, a, b);
-                let mut x = b;
-                for _s in 0..n {
-                    if x != a && x < n && pv[x] < n {
-                        let g = pe[x];
-                        if g < ls.len() && !used[g] {
-                            used[g] = true;
-                            if ls[g] < m {
-                                e[ls[g]] = true;
-                            } else {
-                                let u = xs[g];
-                                let v = ys[g];
-                                rows[u] = true;
-                                rows[v] = true;
-                                for r in 0..p.terms[u].args.len() {
-                                    if r < p.terms[v].args.len() {
-                                        qa.push(p.terms[u].args[r]);
-                                        qb.push(p.terms[v].args[r]);
-                                    }
-                                }
-                            }
-                        }
-                        x = pv[x];
-                    }
-                }
-            }
+    for i in 0..n + n + 1 {
+        let a = get_or(&qa, i, n);
+        let b = get_or(&qb, i, n);
+        if a < n && b < n && a != b {
+            let (pv, pe) = bfs(n, &xs, &ys, a, b);
+            walk(p, &xs, &ys, &ls, &pv, &pe, a, b, &mut e, &mut rows, &mut used, &mut qa, &mut qb);
         }
     }
     (e, rows)

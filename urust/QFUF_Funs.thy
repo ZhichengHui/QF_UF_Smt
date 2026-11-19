@@ -226,21 +226,21 @@ definition "finish" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ((
     }
   \<rbrakk>\<close>
 
-(* Rust: false_joined *)
-definition "false_joined" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>false_joined \<equiv> \<lambda>p f rep. FunctionBody \<lbrakk>
+(* Rust: first_joined *)
+definition "first_joined" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>first_joined \<equiv> \<lambda>p f rep. FunctionBody \<lbrakk>
     for j in 0_usize .. len(p.Problem_atoms) {
-      if (f[j]) && (((* rep)[p.Problem_atoms[j].Atom_lhs]) == ((* rep)[p.Problem_atoms[j].Atom_rhs])) {
+      if (f[j]) && ((rep[p.Problem_atoms[j].Atom_lhs]) == (rep[p.Problem_atoms[j].Atom_rhs])) {
         return j;
       }
     };
     len(p.Problem_atoms)
   \<rbrakk>\<close>
 
-(* Rust: joined *)
-definition "joined" :: \<open>Problem \<Rightarrow> (64 word) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>joined \<equiv> \<lambda>p k rep. FunctionBody \<lbrakk>
-    ((* rep)[p.Problem_atoms[k].Atom_lhs]) == ((* rep)[p.Problem_atoms[k].Atom_rhs])
+(* Rust: false_joined *)
+definition "false_joined" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>false_joined \<equiv> \<lambda>p f rep. FunctionBody \<lbrakk>
+    first_joined(p, f, * rep)
   \<rbrakk>\<close>
 
 (* Rust: theory_check *)
@@ -261,43 +261,85 @@ definition "cc_conflict" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarro
     false_joined(p, f, rep)
   \<rbrakk>\<close>
 
+(* Rust: log_atoms *)
+definition "log_atoms" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>log_atoms \<equiv> \<lambda>p t rep xs ys ls. FunctionBody \<lbrakk>
+    for j in 0_usize .. len(p.Problem_atoms) {
+      if (t[j]) && (((* rep)[p.Problem_atoms[j].Atom_lhs]) != ((* rep)[p.Problem_atoms[j].Atom_rhs])) {
+        merge(rep, p.Problem_atoms[j].Atom_lhs, p.Problem_atoms[j].Atom_rhs);
+        vec_push(xs, p.Problem_atoms[j].Atom_lhs);
+        vec_push(ys, p.Problem_atoms[j].Atom_rhs);
+        vec_push(ls, j);
+      }
+    }
+  \<rbrakk>\<close>
+
+(* Rust: log_row *)
+definition "log_row" :: \<open>Problem \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>log_row \<equiv> \<lambda>p rep xs ys ls i. FunctionBody \<lbrakk>
+    let mut changed = false;
+    for j in 0_usize .. i {
+      if (((* rep)[i]) != ((* rep)[j])) && congruent(p, * rep, i, j) {
+        merge(rep, i, j);
+        vec_push(xs, i);
+        vec_push(ys, j);
+        vec_push(ls, len(p.Problem_atoms));
+        * changed = true;
+      }
+    };
+    * changed
+  \<rbrakk>\<close>
+
+(* Rust: log_scan *)
+definition "log_scan" :: \<open>Problem \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>log_scan \<equiv> \<lambda>p rep xs ys ls. FunctionBody \<lbrakk>
+    let mut changed = false;
+    for i in 0_usize .. len(p.Problem_terms) {
+      if log_row(p, rep, xs, ys, ls, i) {
+        * changed = true;
+      }
+    };
+    * changed
+  \<rbrakk>\<close>
+
+(* Rust: log_close *)
+definition "log_close" :: \<open>Problem \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>log_close \<equiv> \<lambda>p rep xs ys ls. FunctionBody \<lbrakk>
+    for v_round in 0_usize .. len(p.Problem_terms) + 1_usize {
+      if !log_scan(p, rep, xs, ys, ls) {
+        return;
+      }
+    }
+  \<rbrakk>\<close>
+
 (* Rust: merge_log *)
 definition "merge_log" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ('s, (((64 word) list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>merge_log \<equiv> \<lambda>p t. FunctionBody \<lbrakk>
-    let n = len(p.Problem_terms);
-    let m = len(p.Problem_atoms);
-    let mut rep = { let init_1 = init_rep(n); \<llangle>init_1 :: (64 word) list\<rrangle> };
+    let mut rep = { let init_1 = init_rep(len(p.Problem_terms)); \<llangle>init_1 :: (64 word) list\<rrangle> };
     let mut xs = { let init_3 = { let res_2 = []; \<llangle>res_2 :: (64 word) list\<rrangle> }; \<llangle>init_3 :: (64 word) list\<rrangle> };
     let mut ys = { let init_5 = { let res_4 = []; \<llangle>res_4 :: (64 word) list\<rrangle> }; \<llangle>init_5 :: (64 word) list\<rrangle> };
     let mut ls = { let init_7 = { let res_6 = []; \<llangle>res_6 :: (64 word) list\<rrangle> }; \<llangle>init_7 :: (64 word) list\<rrangle> };
-    for j in 0_usize .. m {
-      let x = p.Problem_atoms[j].Atom_lhs;
-      let y = p.Problem_atoms[j].Atom_rhs;
-      if (t[j]) && (((* rep)[x]) != ((* rep)[y])) {
-        merge(rep, x, y);
-        vec_push(xs, x);
-        vec_push(ys, y);
-        vec_push(ls, j);
-      }
-    };
-    for v_round in 0_usize .. n + 1_usize {
-      let mut changed = false;
-      for i in 0_usize .. n {
-        for j in 0_usize .. i {
-          if (((* rep)[i]) != ((* rep)[j])) && congruent(p, * rep, i, j) {
-            merge(rep, i, j);
-            vec_push(xs, i);
-            vec_push(ys, j);
-            vec_push(ls, m);
-            * changed = true;
-          }
-        }
-      };
-      if !(* changed) {
-        return (* xs, * ys, * ls);
-      }
-    };
+    log_atoms(p, t, rep, xs, ys, ls);
+    log_close(p, rep, xs, ys, ls);
     (* xs, * ys, * ls)
+  \<rbrakk>\<close>
+
+(* Rust: get_or *)
+definition "get_or" :: \<open>((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>get_or \<equiv> \<lambda>v i d. FunctionBody \<lbrakk>
+    if i < len(v) {
+      v[i]
+    } else {
+      d
+    }
+  \<rbrakk>\<close>
+
+(* Rust: set_at *)
+definition "set_at" :: \<open>(('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>set_at \<equiv> \<lambda>v i x. FunctionBody \<lbrakk>
+    if i < len(* v) {
+      * (v[i]) = x;
+    }
   \<rbrakk>\<close>
 
 (* Rust: bfs_round *)
@@ -306,16 +348,16 @@ definition "bfs_round" :: \<open>(64 word) \<Rightarrow> ((64 word) list) \<Righ
     let mut changed = false;
     for i in 0_usize .. len(xs) {
       let x = xs[i];
-      let y = ys[i];
-      if (x < n) && (y < n) {
+      let y = get_or(ys, i, n);
+      if (x < len(* pv)) && (y < len(* pv)) {
         if (((* pv)[x]) < n) && (((* pv)[y]) == n) {
           * (pv[y]) = x;
-          * (pe[y]) = i;
+          set_at(pe, y, i);
           * changed = true;
         } else {
           if (((* pv)[y]) < n) && (((* pv)[x]) == n) {
             * (pv[x]) = y;
-            * (pe[x]) = i;
+            set_at(pe, x, i);
             * changed = true;
           }
         }
@@ -324,73 +366,97 @@ definition "bfs_round" :: \<open>(64 word) \<Rightarrow> ((64 word) list) \<Righ
     * changed
   \<rbrakk>\<close>
 
+(* Rust: bfs_rounds *)
+definition "bfs_rounds" :: \<open>(64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>bfs_rounds \<equiv> \<lambda>n xs ys b pv pe. FunctionBody \<lbrakk>
+    for v_round in 0_usize .. n {
+      if (get_or(* pv, b, n) < n) || (!bfs_round(n, xs, ys, pv, pe)) {
+        return;
+      }
+    }
+  \<rbrakk>\<close>
+
 (* Rust: bfs *)
 definition "bfs" :: \<open>(64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, (((64 word) list) \<times> ((64 word) list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>bfs \<equiv> \<lambda>n xs ys a b. FunctionBody \<lbrakk>
     let mut pv = { let init_1 = vec_from_elem(n, n); \<llangle>init_1 :: (64 word) list\<rrangle> };
     let mut pe = { let init_2 = vec_from_elem(0_usize, n); \<llangle>init_2 :: (64 word) list\<rrangle> };
-    * (pv[a]) = a;
-    for v_round in 0_usize .. n {
-      if (((* pv)[b]) < n) || (!bfs_round(n, xs, ys, pv, pe)) {
-        return (* pv, * pe);
-      }
-    };
+    set_at(pv, a, a);
+    bfs_rounds(n, xs, ys, b, pv, pe);
     (* pv, * pe)
+  \<rbrakk>\<close>
+
+(* Rust: set_true *)
+definition "set_true" :: \<open>(('addr, 'gv, bool list) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>set_true \<equiv> \<lambda>v i. FunctionBody \<lbrakk>
+    if i < len(* v) {
+      * (v[i]) = true;
+    }
+  \<rbrakk>\<close>
+
+(* Rust: push_args *)
+definition "push_args" :: \<open>Problem \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>push_args \<equiv> \<lambda>p u v qa qb. FunctionBody \<lbrakk>
+    if (u < len(p.Problem_terms)) && (v < len(p.Problem_terms)) {
+      for r in 0_usize .. len(p.Problem_terms[u].Term_args) {
+        if r < len(p.Problem_terms[v].Term_args) {
+          vec_push(qa, p.Problem_terms[u].Term_args[r]);
+          vec_push(qb, p.Problem_terms[v].Term_args[r]);
+        }
+      }
+    }
+  \<rbrakk>\<close>
+
+(* Rust: walk *)
+definition "walk" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (('addr, 'gv, bool list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, bool list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, bool list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>walk \<equiv> \<lambda>p xs ys ls pv pe a b e rows used qa qb. FunctionBody \<lbrakk>
+    let n = len(p.Problem_terms);
+    let m = len(p.Problem_atoms);
+    let mut x = b;
+    for v_step in 0_usize .. n {
+      if ((* x) != a) && (get_or(pv, * x, n) < n) {
+        let g = get_or(pe, * x, len(* used));
+        if (g < len(* used)) && (!((* used)[g])) {
+          * (used[g]) = true;
+          let l = get_or(ls, g, m);
+          if l < m {
+            set_true(e, l);
+          } else {
+            let u = get_or(xs, g, n);
+            let v = get_or(ys, g, n);
+            set_true(rows, u);
+            set_true(rows, v);
+            push_args(p, u, v, qa, qb);
+          }
+        };
+        * x = get_or(pv, * x, n);
+      }
+    }
   \<rbrakk>\<close>
 
 (* Rust: path_explain *)
 definition "path_explain" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (64 word) \<Rightarrow> ('s, ((bool list) \<times> (bool list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>path_explain \<equiv> \<lambda>p t k. FunctionBody \<lbrakk>
     let n = len(p.Problem_terms);
-    let m = len(p.Problem_atoms);
     let destr_1 = merge_log(p, t);
     let xs = destr_1.0;
     let ys = destr_1.1;
     let ls = destr_1.2;
-    let mut e = { let init_2 = vec_from_elem(false, m); \<llangle>init_2 :: bool list\<rrangle> };
+    let mut e = { let init_2 = vec_from_elem(false, len(p.Problem_atoms)); \<llangle>init_2 :: bool list\<rrangle> };
     let mut rows = { let init_3 = vec_from_elem(false, n); \<llangle>init_3 :: bool list\<rrangle> };
     let mut used = { let init_4 = vec_from_elem(false, len(xs)); \<llangle>init_4 :: bool list\<rrangle> };
     let mut qa = { let init_6 = { let res_5 = []; \<llangle>res_5 :: (64 word) list\<rrangle> }; \<llangle>init_6 :: (64 word) list\<rrangle> };
     let mut qb = { let init_8 = { let res_7 = []; \<llangle>res_7 :: (64 word) list\<rrangle> }; \<llangle>init_8 :: (64 word) list\<rrangle> };
     vec_push(qa, p.Problem_atoms[k].Atom_lhs);
     vec_push(qb, p.Problem_atoms[k].Atom_rhs);
-    let mut bound = 1_usize;
-    for u in 0_usize .. n {
-      * bound = (* bound) + len(p.Problem_terms[u].Term_args);
-    };
-    for i in 0_usize .. * bound {
-      if i < len(* qa) {
-        let a = (* qa)[i];
-        let b = (* qb)[i];
-        if ((a != b) && (a < n)) && (b < n) {
-          let destr_9 = bfs(n, xs, ys, a, b);
-          let pv = destr_9.0;
-          let pe = destr_9.1;
-          let mut x = b;
-          for v_s in 0_usize .. n {
-            if (((* x) != a) && ((* x) < n)) && ((pv[* x]) < n) {
-              let g = pe[* x];
-              if (g < len(ls)) && (!((* used)[g])) {
-                * (used[g]) = true;
-                if (ls[g]) < m {
-                  * (e[ls[g]]) = true;
-                } else {
-                  let u = xs[g];
-                  let v = ys[g];
-                  * (rows[u]) = true;
-                  * (rows[v]) = true;
-                  for r in 0_usize .. len(p.Problem_terms[u].Term_args) {
-                    if r < len(p.Problem_terms[v].Term_args) {
-                      vec_push(qa, p.Problem_terms[u].Term_args[r]);
-                      vec_push(qb, p.Problem_terms[v].Term_args[r]);
-                    }
-                  }
-                }
-              };
-              * x = pv[* x];
-            }
-          }
-        }
+    for i in 0_usize .. (n + n) + 1_usize {
+      let a = get_or(* qa, i, n);
+      let b = get_or(* qb, i, n);
+      if ((a < n) && (b < n)) && (a != b) {
+        let destr_9 = bfs(n, xs, ys, a, b);
+        let pv = destr_9.0;
+        let pe = destr_9.1;
+        \<epsilon>\<open>funcall13 walk \<lbrakk>p\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>pv\<rbrakk> \<lbrakk>pe\<rbrakk> \<lbrakk>a\<rbrakk> \<lbrakk>b\<rbrakk> \<lbrakk>e\<rbrakk> \<lbrakk>rows\<rbrakk> \<lbrakk>used\<rbrakk> \<lbrakk>qa\<rbrakk> \<lbrakk>qb\<rbrakk>\<close>;
       }
     };
     (* e, * rows)
@@ -429,6 +495,18 @@ definition "close_rows" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow
         return;
       }
     }
+  \<rbrakk>\<close>
+
+(* Rust: same_class *)
+definition "same_class" :: \<open>((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>same_class \<equiv> \<lambda>rep a b. FunctionBody \<lbrakk>
+    (rep[a]) == (rep[b])
+  \<rbrakk>\<close>
+
+(* Rust: joined *)
+definition "joined" :: \<open>Problem \<Rightarrow> (64 word) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>joined \<equiv> \<lambda>p k rep. FunctionBody \<lbrakk>
+    same_class(* rep, p.Problem_atoms[k].Atom_lhs, p.Problem_atoms[k].Atom_rhs)
   \<rbrakk>\<close>
 
 (* Rust: rows_join *)
