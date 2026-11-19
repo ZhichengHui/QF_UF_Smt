@@ -191,6 +191,7 @@ locale QFUF_heap =
   + ref_14: reference_allocatable reference_types _ _ _ _ _ _ _ prism_14 \<comment> \<open>SmtEntry list\<close>
   + ref_15: reference_allocatable reference_types _ _ _ _ _ _ _ prism_15 \<comment> \<open>SmtValue list\<close>
   + ref_16: reference_allocatable reference_types _ _ _ _ _ _ _ prism_16 \<comment> \<open>SmtInterp list\<close>
+  + ref_17: reference_allocatable reference_types _ _ _ _ _ _ _ prism_17 \<comment> \<open>SmtTerm list\<close>
   for reference_types :: \<open>'s::{sepalg} \<Rightarrow> 'addr \<Rightarrow> 'gv \<Rightarrow> 'abort \<Rightarrow> 'i prompt \<Rightarrow> 'o prompt_output \<Rightarrow> unit\<close>
   and prism_1 :: \<open>('gv, bool) prism\<close>
   and prism_2 :: \<open>('gv, (64 word) list) prism\<close>
@@ -208,13 +209,14 @@ locale QFUF_heap =
   and prism_14 :: \<open>('gv, SmtEntry list) prism\<close>
   and prism_15 :: \<open>('gv, SmtValue list) prism\<close>
   and prism_16 :: \<open>('gv, SmtInterp list) prism\<close>
+  and prism_17 :: \<open>('gv, SmtTerm list) prism\<close>
 begin
 
 abbreviation check_sat :: \<open>nat \<Rightarrow> SmtProblem \<Rightarrow> ('s, SmtAnswer, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>check_sat fuel \<equiv>
      QFUF_ctx.check_sat update_raw_fun dereference_raw_fun reference_raw_fun
        prism_1 prism_2 prism_3 prism_4 prism_5 prism_6 prism_7 prism_8 prism_9 prism_10 prism_11 prism_12
-       prism_13 prism_14 prism_15 prism_16 fuel\<close>
+       prism_13 prism_14 prism_15 prism_16 prism_17 fuel\<close>
 
 abbreviation check_sat_contract :: \<open>SmtProblem \<Rightarrow> ('s, SmtAnswer, 'abort) function_contract\<close> where
   \<open>check_sat_contract \<equiv> QFUF_ctx.check_sat_contract can_alloc_reference\<close>

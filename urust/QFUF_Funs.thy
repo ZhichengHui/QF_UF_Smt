@@ -1822,6 +1822,248 @@ definition "input_size" :: \<open>SmtProblem \<Rightarrow> ('s, 64 word, 'abort,
     * n
   \<rbrakk>\<close>
 
+text \<open>Recursive group occs, occ: defined by iterating occs_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>
+
+definition "occs_rec_step" :: \<open>(((SmtTerm list) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body) \<times> (SmtTerm \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> (((SmtTerm list) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body) \<times> (SmtTerm \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
+  \<open>occs_rec_step \<equiv> \<lambda>(rec_occs, rec_occ). (\<lambda>ts c. FunctionBody \<lbrakk>
+    let mut n = 0_usize;
+    for i in 0_usize .. len(ts) {
+      * n = sat_add(* n, \<epsilon>\<open>rec_occ\<close>(ts[i], c));
+    };
+    * n
+  \<rbrakk>,
+   \<lambda>t c. FunctionBody \<lbrakk>
+    match t {
+      SmtTerm_Fun(f, args) \<Rightarrow> {
+        sat_add(if f == c {
+          1_usize
+        } else {
+          0_usize
+        }, \<epsilon>\<open>rec_occs\<close>(args, c))
+      },
+      SmtTerm_Def(_, args) | SmtTerm_App(_, args) \<Rightarrow> {
+        \<epsilon>\<open>rec_occs\<close>(args, c)
+      },
+      _ \<Rightarrow> {
+        0_usize
+      }
+    }
+  \<rbrakk>)\<close>
+
+(* Rust: occs *)
+definition "occs" :: \<open>(SmtTerm list) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>occs \<equiv> (fst ((occs_rec_step ^^ urust_fuel) (\<lambda>ts c. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>,
+   \<lambda>t c. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>)))\<close>
+
+(* Rust: occ *)
+definition "occ" :: \<open>SmtTerm \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>occ \<equiv> (snd ((occs_rec_step ^^ urust_fuel) (\<lambda>ts c. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>,
+   \<lambda>t c. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>)))\<close>
+
+(* Rust: occ_all *)
+definition "occ_all" :: \<open>SmtProblem \<Rightarrow> (SmtTerm list) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>occ_all \<equiv> \<lambda>p a c. FunctionBody \<lbrakk>
+    let mut n = occs(a, c);
+    for d in 0_usize .. len(p.SmtProblem_defs) {
+      * n = sat_add(* n, occ(p.SmtProblem_defs[d].SmtDef_body, c));
+    };
+    * n
+  \<rbrakk>\<close>
+
+(* Rust: const_sym *)
+definition "const_sym" :: \<open>SmtTerm \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>const_sym \<equiv> \<lambda>t n. FunctionBody \<lbrakk>
+    match t {
+      SmtTerm_Fun(f, args) \<Rightarrow> {
+        if len(args) == 0_usize {
+          f
+        } else {
+          n
+        }
+      },
+      _ \<Rightarrow> {
+        n
+      }
+    }
+  \<rbrakk>\<close>
+
+(* Rust: eq_partner *)
+definition "eq_partner" :: \<open>SmtTerm \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>eq_partner \<equiv> \<lambda>t c n. FunctionBody \<lbrakk>
+    match t {
+      SmtTerm_App(SmtOp_Eq, args) \<Rightarrow> {
+        if len(args) != 2_usize {
+          return n;
+        };
+        let x = const_sym(args[0_usize], n);
+        let y = const_sym(args[1_usize], n);
+        if ((x == c) && (y < n)) && (y != c) {
+          return y;
+        };
+        if ((y == c) && (x < n)) && (x != c) {
+          return x;
+        };
+        n
+      },
+      _ \<Rightarrow> {
+        n
+      }
+    }
+  \<rbrakk>\<close>
+
+(* Rust: eq_count *)
+definition "eq_count" :: \<open>(SmtTerm list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>eq_count \<equiv> \<lambda>ts c n. FunctionBody \<lbrakk>
+    let mut k = 0_usize;
+    for i in 0_usize .. len(ts) {
+      if eq_partner(ts[i], c, n) < n {
+        * k += 1_usize;
+      }
+    };
+    * k
+  \<rbrakk>\<close>
+
+(* Rust: first_partner *)
+definition "first_partner" :: \<open>(SmtTerm list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>first_partner \<equiv> \<lambda>ts c n. FunctionBody \<lbrakk>
+    for i in 0_usize .. len(ts) {
+      let g = eq_partner(ts[i], c, n);
+      if g < n {
+        return g;
+      }
+    };
+    n
+  \<rbrakk>\<close>
+
+text \<open>Recursive group find_conjs, find_conj: defined by iterating find_conjs_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>
+
+definition "find_conjs_rec_step" :: \<open>(((SmtTerm list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body) \<times> (SmtTerm \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> (((SmtTerm list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body) \<times> (SmtTerm \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
+  \<open>find_conjs_rec_step \<equiv> \<lambda>(rec_find_conjs, rec_find_conj). (\<lambda>ts c tot n. FunctionBody \<lbrakk>
+    for i in 0_usize .. len(ts) {
+      let g = \<epsilon>\<open>rec_find_conj\<close>(ts[i], c, tot, n);
+      if g < n {
+        return g;
+      }
+    };
+    n
+  \<rbrakk>,
+   \<lambda>t c tot n. FunctionBody \<lbrakk>
+    match t {
+      SmtTerm_App(SmtOp_And, args) \<Rightarrow> {
+        if eq_count(args, c, n) == tot {
+          return first_partner(args, c, n);
+        };
+        \<epsilon>\<open>rec_find_conjs\<close>(args, c, tot, n)
+      },
+      SmtTerm_App(SmtOp_Or, args) \<Rightarrow> {
+        \<epsilon>\<open>rec_find_conjs\<close>(args, c, tot, n)
+      },
+      _ \<Rightarrow> {
+        n
+      }
+    }
+  \<rbrakk>)\<close>
+
+(* Rust: find_conjs *)
+definition "find_conjs" :: \<open>(SmtTerm list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>find_conjs \<equiv> (fst ((find_conjs_rec_step ^^ urust_fuel) (\<lambda>ts c tot n. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>,
+   \<lambda>t c tot n. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>)))\<close>
+
+(* Rust: find_conj *)
+definition "find_conj" :: \<open>SmtTerm \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>find_conj \<equiv> (snd ((find_conjs_rec_step ^^ urust_fuel) (\<lambda>ts c tot n. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>,
+   \<lambda>t c tot n. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>)))\<close>
+
+(* Rust: elim_partner *)
+definition "elim_partner" :: \<open>SmtProblem \<Rightarrow> (SmtTerm list) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>elim_partner \<equiv> \<lambda>p a c. FunctionBody \<lbrakk>
+    let n = len(p.SmtProblem_funs);
+    if len(p.SmtProblem_funs[c].SmtFun_args) != 0_usize {
+      return n;
+    };
+    let tot = occ_all(p, a, c);
+    if (tot == 0_usize) || (tot >= cap()) {
+      return n;
+    };
+    let g = find_conjs(a, c, tot, n);
+    if ((g < n) && (len(p.SmtProblem_funs[g].SmtFun_args) == 0_usize)) && ((p.SmtProblem_funs[g].SmtFun_ret) == (p.SmtProblem_funs[c].SmtFun_ret)) {
+      return g;
+    };
+    n
+  \<rbrakk>\<close>
+
+text \<open>Recursive group renames, rename: defined by iterating renames_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>
+
+definition "renames_rec_step" :: \<open>(((SmtTerm list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, SmtTerm list, 'abort, 'i prompt, 'o prompt_output) function_body) \<times> (SmtTerm \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, SmtTerm, 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> (((SmtTerm list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, SmtTerm list, 'abort, 'i prompt, 'o prompt_output) function_body) \<times> (SmtTerm \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, SmtTerm, 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
+  \<open>renames_rec_step \<equiv> \<lambda>(rec_renames, rec_rename). (\<lambda>ts c g. FunctionBody \<lbrakk>
+    let mut out = { let init_2 = { let res_1 = []; \<llangle>res_1 :: SmtTerm list\<rrangle> }; \<llangle>init_2 :: SmtTerm list\<rrangle> };
+    for i in 0_usize .. len(ts) {
+      vec_push(out, \<epsilon>\<open>rec_rename\<close>(ts[i], c, g));
+    };
+    * out
+  \<rbrakk>,
+   \<lambda>t c g. FunctionBody \<lbrakk>
+    match t {
+      SmtTerm_Fun(f, args) \<Rightarrow> {
+        SmtTerm_Fun_mk(if f == c {
+          g
+        } else {
+          f
+        }, \<epsilon>\<open>rec_renames\<close>(args, c, g))
+      },
+      SmtTerm_Def(d, args) \<Rightarrow> {
+        SmtTerm_Def_mk(d, \<epsilon>\<open>rec_renames\<close>(args, c, g))
+      },
+      SmtTerm_App(o_v, args) \<Rightarrow> {
+        SmtTerm_App_mk(o_v, \<epsilon>\<open>rec_renames\<close>(args, c, g))
+      },
+      _ \<Rightarrow> {
+        t
+      }
+    }
+  \<rbrakk>)\<close>
+
+(* Rust: renames *)
+definition "renames" :: \<open>(SmtTerm list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, SmtTerm list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>renames \<equiv> (fst ((renames_rec_step ^^ urust_fuel) (\<lambda>ts c g. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>,
+   \<lambda>t c g. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>)))\<close>
+
+(* Rust: rename *)
+definition "rename" :: \<open>SmtTerm \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, SmtTerm, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>rename \<equiv> (snd ((renames_rec_step ^^ urust_fuel) (\<lambda>ts c g. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>,
+   \<lambda>t c g. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>)))\<close>
+
+(* Rust: eliminate *)
+definition "eliminate" :: \<open>SmtProblem \<Rightarrow> ('s, ((SmtTerm list) \<times> ((64 word) list) \<times> ((64 word) list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>eliminate \<equiv> \<lambda>p. FunctionBody \<lbrakk>
+    let mut a = { let init_1 = p.SmtProblem_asserts; \<llangle>init_1 :: SmtTerm list\<rrangle> };
+    let mut cs = { let init_3 = { let res_2 = []; \<llangle>res_2 :: (64 word) list\<rrangle> }; \<llangle>init_3 :: (64 word) list\<rrangle> };
+    let mut gs = { let init_5 = { let res_4 = []; \<llangle>res_4 :: (64 word) list\<rrangle> }; \<llangle>init_5 :: (64 word) list\<rrangle> };
+    for c in 0_usize .. len(p.SmtProblem_funs) {
+      let g = elim_partner(p, * a, c);
+      if g < len(p.SmtProblem_funs) {
+        * a = renames(* a, c, g);
+        vec_push(cs, c);
+        vec_push(gs, g);
+      }
+    };
+    (* a, * cs, * gs)
+  \<rbrakk>\<close>
+
+(* Rust: restore *)
+definition "restore" :: \<open>SmtModel \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, SmtModel, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>restore \<equiv> \<lambda>m cs gs. FunctionBody \<lbrakk>
+    let mut funs = { let init_1 = m.SmtModel_funs; \<llangle>init_1 :: SmtInterp list\<rrangle> };
+    for k in 0_usize .. len(cs) {
+      let i = (len(cs) - 1_usize) - k;
+      if (((cs[i]) < len(* funs)) && (i < len(gs))) && ((gs[i]) < len(* funs)) {
+        let v = (* funs)[gs[i]];
+        * (funs[cs[i]]) = v;
+      }
+    };
+    SmtModel_mk { SmtModel_domains: m.SmtModel_domains, SmtModel_funs: * funs }
+  \<rbrakk>\<close>
+
 (* Rust: check_sat *)
 definition "check_sat" :: \<open>SmtProblem \<Rightarrow> ('s, SmtAnswer, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>check_sat \<equiv> \<lambda>p. FunctionBody \<lbrakk>
@@ -1831,9 +2073,14 @@ definition "check_sat" :: \<open>SmtProblem \<Rightarrow> ('s, SmtAnswer, 'abort
     if input_size(p) > max_size() {
       return SmtAnswer_Unknown;
     };
-    match solve(tr_problem(p)) {
+    let destr_1 = eliminate(p);
+    let a = destr_1.0;
+    let cs = destr_1.1;
+    let gs = destr_1.2;
+    let q = SmtProblem_mk { SmtProblem_num_sorts: p.SmtProblem_num_sorts, SmtProblem_funs: p.SmtProblem_funs, SmtProblem_defs: p.SmtProblem_defs, SmtProblem_asserts: a };
+    match solve(tr_problem(q)) {
       Answer_Sat(m) \<Rightarrow> {
-        SmtAnswer_Sat_mk(tr_model(p, m))
+        SmtAnswer_Sat_mk(restore(tr_model(q, m), cs, gs))
       },
       Answer_Unsat \<Rightarrow> {
         SmtAnswer_Unsat

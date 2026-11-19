@@ -362,9 +362,11 @@ pub fn solve(p: &Problem) -> Answer {
 
 // ---------------------------------------------------------------------------------------------
 // The general problem structure: the interface to the SMT-LIB front end. These definitions are,
-// word for word, those of the front end (`frontend/src/problem.rs`); see there for their meaning.
+// word for word, those of the front end (`frontend/src/problem.rs`), except for the derived `Clone`
+// and `PartialEq` (the equality elimination copies terms); see there for their meaning.
 
 /// A sort.
+#[derive(Clone, PartialEq)]
 pub enum SmtSort {
     Bool,
     /// `(_ BitVec w)`, `w >= 1`.
@@ -374,6 +376,7 @@ pub enum SmtSort {
 }
 
 /// The theory function symbols of Core and FixedSizeBitVectors/QF_BV (SMT-LIB 2.6).
+#[derive(Clone)]
 pub enum SmtOp {
     // Core
     Not,
@@ -430,6 +433,7 @@ pub enum SmtOp {
 }
 
 /// A term.
+#[derive(Clone)]
 pub enum SmtTerm {
     BoolConst(bool),
     /// A bit-vector constant, least significant bit first.
@@ -445,12 +449,14 @@ pub enum SmtTerm {
 }
 
 /// A declared function symbol: the sorts of its arguments and of its result.
+#[derive(Clone)]
 pub struct SmtFun {
     pub args: Vec<SmtSort>,
     pub ret: SmtSort,
 }
 
 /// A defined function: the sorts of its parameters and of its result, and its body.
+#[derive(Clone)]
 pub struct SmtDef {
     pub params: Vec<SmtSort>,
     pub ret: SmtSort,
@@ -466,6 +472,7 @@ pub struct SmtProblem {
 
 /// A value: a truth value, a bit-vector (least significant bit first) or an element of an
 /// uninterpreted sort (an index into its domain).
+#[derive(Clone)]
 pub enum SmtValue {
     Bool(bool),
     Bv(Vec<bool>),
@@ -473,6 +480,7 @@ pub enum SmtValue {
 }
 
 /// One point of a function table: the arguments and the value there.
+#[derive(Clone)]
 pub struct SmtEntry {
     pub args: Vec<SmtValue>,
     pub val: SmtValue,
@@ -481,6 +489,7 @@ pub struct SmtEntry {
 /// The interpretation of a declared function symbol: at given arguments, the value of the first
 /// entry with these arguments, and `default` if there is none (for a constant: the first entry, if
 /// there is one).
+#[derive(Clone)]
 pub struct SmtInterp {
     pub entries: Vec<SmtEntry>,
     pub default: SmtValue,
@@ -1110,8 +1119,10 @@ pub fn check_sat(p: &SmtProblem) -> SmtAnswer {
     if input_size(p) > max_size() {
         return SmtAnswer::Unknown;
     }
-    match solve(&tr_problem(p)) {
-        Answer::Sat(m) => SmtAnswer::Sat(tr_model(p, &m)),
+    let (a, cs, gs) = eliminate(p);
+    let q = SmtProblem { num_sorts: p.num_sorts, funs: p.funs.clone(), defs: p.defs.clone(), asserts: a };
+    match solve(&tr_problem(&q)) {
+        Answer::Sat(m) => SmtAnswer::Sat(restore(tr_model(&q, &m), &cs, &gs)),
         Answer::Unsat => SmtAnswer::Unsat,
     }
 }
@@ -1806,4 +1817,193 @@ fn cdcl(p: &Problem, l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>, lv: Vec<usize>,
     }
     let (r2, l2) = search(p, l1, t.clone(), f.clone());
     (r2, l2, d)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Equality elimination: a declared constant `c` whose every occurrence is a side of an equality
+// `(= c x)` or `(= x c)` with a constant `x`, all of them conjuncts of one conjunction at a positive
+// position of an assertion (reached from the assertion through `and` and `or` only), is replaced
+// by the other side `g` of the first of them. The conjunction implies `c = g`, so a model of the
+// problem with `c` replaced is a model of the problem once `c` means what `g` means; and a model of
+// the problem satisfies the problem with `c` replaced: where the conjunction holds, `c` already has
+// the value of `g`, and elsewhere replacing `c` can only make the conjunction true, which keeps a
+// true assertion true. One pass over the declared symbols, in order.
+// These functions have mutable locals of the type `Vec<SmtTerm>`, so they stay at the end of the
+// file (see above).
+
+/// The number of applications of the declared symbol `c` in `t`, saturated at `cap()`.
+fn occ(t: &SmtTerm, c: usize) -> usize {
+    match t {
+        SmtTerm::Fun(f, args) => sat_add(if *f == c { 1 } else { 0 }, occs(args, c)),
+        SmtTerm::Def(_, args) | SmtTerm::App(_, args) => occs(args, c),
+        _ => 0,
+    }
+}
+
+/// `occ` summed over `ts`, saturated at `cap()`.
+fn occs(ts: &Vec<SmtTerm>, c: usize) -> usize {
+    let mut n: usize = 0;
+    for i in 0..ts.len() {
+        n = sat_add(n, occ(&ts[i], c));
+    }
+    n
+}
+
+/// `occ` in the assertions `a` and in the bodies of the definitions of `p`, saturated at `cap()`.
+fn occ_all(p: &SmtProblem, a: &Vec<SmtTerm>, c: usize) -> usize {
+    let mut n = occs(a, c);
+    for d in 0..p.defs.len() {
+        n = sat_add(n, occ(&p.defs[d].body, c));
+    }
+    n
+}
+
+/// The symbol `f` if `t` is the constant `f` (an application without arguments), `n` otherwise.
+fn const_sym(t: &SmtTerm, n: usize) -> usize {
+    match t {
+        SmtTerm::Fun(f, args) => {
+            if args.len() == 0 { *f } else { n }
+        }
+        _ => n,
+    }
+}
+
+/// The symbol `g` if `t` is `(= c g)` or `(= g c)` for constants `c` and `g < n` other than `c`;
+/// `n` otherwise.
+fn eq_partner(t: &SmtTerm, c: usize, n: usize) -> usize {
+    match t {
+        SmtTerm::App(SmtOp::Eq, args) => {
+            if args.len() != 2 {
+                return n;
+            }
+            let x = const_sym(&args[0], n);
+            let y = const_sym(&args[1], n);
+            if x == c && y < n && y != c {
+                return y;
+            }
+            if y == c && x < n && x != c {
+                return x;
+            }
+            n
+        }
+        _ => n,
+    }
+}
+
+/// The number of terms of `ts` for which `eq_partner` finds a partner.
+fn eq_count(ts: &Vec<SmtTerm>, c: usize, n: usize) -> usize {
+    let mut k: usize = 0;
+    for i in 0..ts.len() {
+        if eq_partner(&ts[i], c, n) < n {
+            k += 1;
+        }
+    }
+    k
+}
+
+/// The partner of the first term of `ts` for which `eq_partner` finds one; `n` if there is none.
+fn first_partner(ts: &Vec<SmtTerm>, c: usize, n: usize) -> usize {
+    for i in 0..ts.len() {
+        let g = eq_partner(&ts[i], c, n);
+        if g < n {
+            return g;
+        }
+    }
+    n
+}
+
+/// Searches the positive positions of `t` (`t` itself and, below an `and` or `or`, its arguments)
+/// for a conjunction with `tot` conjuncts for which `eq_partner` finds a partner; returns the
+/// first partner in the first such conjunction, `n` if there is none.
+fn find_conj(t: &SmtTerm, c: usize, tot: usize, n: usize) -> usize {
+    match t {
+        SmtTerm::App(SmtOp::And, args) => {
+            if eq_count(args, c, n) == tot {
+                return first_partner(args, c, n);
+            }
+            find_conjs(args, c, tot, n)
+        }
+        SmtTerm::App(SmtOp::Or, args) => find_conjs(args, c, tot, n),
+        _ => n,
+    }
+}
+
+/// `find_conj` on the terms of `ts` in turn; the first result below `n`, or `n`.
+fn find_conjs(ts: &Vec<SmtTerm>, c: usize, tot: usize, n: usize) -> usize {
+    for i in 0..ts.len() {
+        let g = find_conj(&ts[i], c, tot, n);
+        if g < n {
+            return g;
+        }
+    }
+    n
+}
+
+/// The symbol that replaces the declared symbol `c` in the assertions `a` of `p` (with the
+/// definitions of `p`), or `p.funs.len()` if `c` is not eliminated: `c` and its partner are
+/// constants of the same sort, and every occurrence of `c` is in the conjunction `find_conj` found.
+fn elim_partner(p: &SmtProblem, a: &Vec<SmtTerm>, c: usize) -> usize {
+    let n = p.funs.len();
+    if p.funs[c].args.len() != 0 {
+        return n;
+    }
+    let tot = occ_all(p, a, c);
+    if tot == 0 || tot >= cap() {
+        return n;
+    }
+    let g = find_conjs(a, c, tot, n);
+    if g < n && p.funs[g].args.len() == 0 && p.funs[g].ret == p.funs[c].ret {
+        return g;
+    }
+    n
+}
+
+/// `t` with every application of the symbol `c` replaced by one of `g`.
+fn rename(t: &SmtTerm, c: usize, g: usize) -> SmtTerm {
+    match t {
+        SmtTerm::Fun(f, args) => SmtTerm::Fun(if *f == c { g } else { *f }, renames(args, c, g)),
+        SmtTerm::Def(d, args) => SmtTerm::Def(*d, renames(args, c, g)),
+        SmtTerm::App(o, args) => SmtTerm::App(o.clone(), renames(args, c, g)),
+        _ => t.clone(),
+    }
+}
+
+/// `rename` on every term of `ts`.
+fn renames(ts: &Vec<SmtTerm>, c: usize, g: usize) -> Vec<SmtTerm> {
+    let mut out = Vec::new();
+    for i in 0..ts.len() {
+        out.push(rename(&ts[i], c, g));
+    }
+    out
+}
+
+/// The assertions of `p` after equality elimination, and the eliminated symbols `cs[i]` with
+/// their replacements `gs[i]`, in the order of elimination.
+fn eliminate(p: &SmtProblem) -> (Vec<SmtTerm>, Vec<usize>, Vec<usize>) {
+    let mut a = p.asserts.clone();
+    let mut cs = Vec::new();
+    let mut gs = Vec::new();
+    for c in 0..p.funs.len() {
+        let g = elim_partner(p, &a, c);
+        if g < p.funs.len() {
+            a = renames(&a, c, g);
+            cs.push(c);
+            gs.push(g);
+        }
+    }
+    (a, cs, gs)
+}
+
+/// The model `m` of the problem after elimination, made a model of the problem before: in
+/// reverse order of elimination, each eliminated symbol `cs[i]` gets the table of `gs[i]`.
+fn restore(m: SmtModel, cs: &Vec<usize>, gs: &Vec<usize>) -> SmtModel {
+    let mut funs = m.funs;
+    for k in 0..cs.len() {
+        let i = cs.len() - 1 - k;
+        if cs[i] < funs.len() && i < gs.len() && gs[i] < funs.len() {
+            let v = funs[gs[i]].clone();
+            funs[cs[i]] = v;
+        }
+    }
+    SmtModel { domains: m.domains, funs: funs }
 }

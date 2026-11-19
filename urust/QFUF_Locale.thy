@@ -25,6 +25,7 @@ locale QFUF_ctx =
   + ref_14: reference_allocatable reference_types _ _ _ _ _ _ _ prism_14 \<comment> \<open>SmtEntry list\<close>
   + ref_15: reference_allocatable reference_types _ _ _ _ _ _ _ prism_15 \<comment> \<open>SmtValue list\<close>
   + ref_16: reference_allocatable reference_types _ _ _ _ _ _ _ prism_16 \<comment> \<open>SmtInterp list\<close>
+  + ref_17: reference_allocatable reference_types _ _ _ _ _ _ _ prism_17 \<comment> \<open>SmtTerm list\<close>
   for reference_types :: \<open>'s::{sepalg} \<Rightarrow> 'addr \<Rightarrow> 'gv \<Rightarrow> 'abort \<Rightarrow> 'i prompt \<Rightarrow> 'o prompt_output \<Rightarrow> unit\<close>
   and prism_1 :: \<open>('gv, bool) prism\<close>
   and prism_2 :: \<open>('gv, (64 word) list) prism\<close>
@@ -42,6 +43,7 @@ locale QFUF_ctx =
   and prism_14 :: \<open>('gv, SmtEntry list) prism\<close>
   and prism_15 :: \<open>('gv, SmtValue list) prism\<close>
   and prism_16 :: \<open>('gv, SmtInterp list) prism\<close>
+  and prism_17 :: \<open>('gv, SmtTerm list) prism\<close>
   + fixes urust_fuel :: nat
 begin
 
@@ -61,6 +63,7 @@ adhoc_overloading store_reference_const \<rightleftharpoons> ref_13.new
 adhoc_overloading store_reference_const \<rightleftharpoons> ref_14.new
 adhoc_overloading store_reference_const \<rightleftharpoons> ref_15.new
 adhoc_overloading store_reference_const \<rightleftharpoons> ref_16.new
+adhoc_overloading store_reference_const \<rightleftharpoons> ref_17.new
 adhoc_overloading store_update_const \<rightleftharpoons> update_fun
 
 end
