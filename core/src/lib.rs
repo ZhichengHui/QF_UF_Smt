@@ -302,22 +302,14 @@ fn theory_check(p: &Problem, a: &[bool]) -> Option<Model> {
     finish(p, a, &mut rep)
 }
 
-/// The first atom `j` with `f[j]` whose two sides the equalities of the atoms with `t[j]`, closed
-/// under congruence, join; `p.atoms.len()` if there is none.
-fn cc_conflict(p: &Problem, t: &[bool], f: &[bool]) -> usize {
-    let mut rep = init_rep(p.terms.len());
-    assert_eqs(p, t, p.atoms.len(), &mut rep);
-    close(p, &mut rep);
-    false_joined(p, f, &mut rep)
-}
-
 /// Tries every completion of the partial assignment in which atom `x` is true if `t[x]`, false if
 /// `f[x]`, and unset otherwise; `l` are clauses learned so far, which every interpretation
 /// satisfies. First propagates: a clause of the problem or of `l` with all literals false cuts the
 /// branch, and the unset literal of a clause whose other literals are all false is set true (one
 /// literal per call). Without such clauses, cuts the branch when the true and false atoms
-/// contradict each other by congruence closure, learning a clause that excludes the conflict, and
-/// otherwise branches on the first unset atom. Returns the learned clauses with the result.
+/// contradict each other by congruence closure, learning a clause that excludes the conflict;
+/// otherwise sets the unset atoms that the closure implies (`cc_propagate`), and if there are none,
+/// branches on the first unset atom. Returns the learned clauses with the result.
 /// Every call sets one more atom, so the calls are nested at most `p.atoms.len() + 1` deep.
 fn search(p: &Problem, l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>) -> (Option<Model>, Vec<Clause>) {
     let u = next_unit(p, &l, &t, &f);
@@ -334,9 +326,12 @@ fn search(p: &Problem, l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>) -> (Option<Mo
         }
         return search(p, l, t1, f1);
     }
-    let c = cc_conflict(p, &t, &f);
+    let (c, t2, f2) = cc_propagate(p, &t, &f);
     if c < t.len() {
         return (None, learn(l, conflict_clause(&explain(p, &t, c), c)));
+    }
+    if differs(&t, &t2) || differs(&f, &f2) {
+        return search(p, l, t2, f2);
     }
     let k = first_unset(&t, &f);
     if k == t.len() {
@@ -1396,4 +1391,84 @@ fn learn(l: Vec<Clause>, c: Clause) -> Vec<Clause> {
     let mut l1 = l;
     l1.push(c);
     l1
+}
+
+/// The atoms set true in `t`, and every atom unset under `t`, `f` whose two sides lie in one class
+/// of `rep`.
+fn joined_unset(p: &Problem, t: &[bool], f: &[bool], rep: &[usize]) -> Vec<bool> {
+    let mut t1 = t.to_vec();
+    for j in 0..p.atoms.len() {
+        if !t[j] && !f[j] && rep[p.atoms[j].lhs] == rep[p.atoms[j].rhs] {
+            t1[j] = true;
+        }
+    }
+    t1
+}
+
+/// Does some atom set in `t1` differ from `t`?
+fn differs(t: &[bool], t1: &[bool]) -> bool {
+    for i in 0..t.len() {
+        if t[i] != t1[i] {
+            return true;
+        }
+    }
+    false
+}
+
+/// The classes of `rep` of the two sides of every atom `b` with `f[b]`, as pairs `(us[i], vs[i])`.
+fn false_pairs(p: &Problem, f: &[bool], rep: &[usize]) -> (Vec<usize>, Vec<usize>) {
+    let mut us = Vec::new();
+    let mut vs = Vec::new();
+    for b in 0..p.atoms.len() {
+        if f[b] {
+            us.push(rep[p.atoms[b].lhs]);
+            vs.push(rep[p.atoms[b].rhs]);
+        }
+    }
+    (us, vs)
+}
+
+/// Is `(x, y)` or `(y, x)` one of the pairs `(us[i], vs[i])`? `vs` is at least as long as `us`.
+fn has_pair(us: &[usize], vs: &[usize], x: usize, y: usize) -> bool {
+    for i in 0..us.len() {
+        if (us[i] == x && vs[i] == y) || (us[i] == y && vs[i] == x) {
+            return true;
+        }
+    }
+    false
+}
+
+/// The atoms set false in `f`, and every atom unset under `t`, `f` whose two sides lie in classes
+/// of `rep` that the two sides of an atom set false lie in.
+fn separated_unset(p: &Problem, t: &[bool], f: &[bool], rep: &[usize]) -> Vec<bool> {
+    let (us, vs) = false_pairs(p, f, rep);
+    let mut f1 = f.to_vec();
+    for j in 0..p.atoms.len() {
+        let x = rep[p.atoms[j].lhs];
+        let y = rep[p.atoms[j].rhs];
+        if !t[j] && !f[j] && x != y && has_pair(&us, &vs, x, y) {
+            f1[j] = true;
+        }
+    }
+    f1
+}
+
+/// `joined_unset` and `separated_unset` on the closed partition `rep`: the atoms set true and false
+/// after theory propagation. `rep` is `&mut` for the reason given at `finish`.
+fn implied(p: &Problem, t: &[bool], f: &[bool], rep: &mut Vec<usize>) -> (Vec<bool>, Vec<bool>) {
+    let t1 = joined_unset(p, t, f, rep);
+    let f1 = separated_unset(p, t, f, rep);
+    (t1, f1)
+}
+
+/// The closure of the equalities of the atoms with `t[j]`: the first atom `c` with `f[c]` whose two
+/// sides it joins (`p.atoms.len()` if there is none), and the result of `implied` (theory
+/// propagation).
+fn cc_propagate(p: &Problem, t: &[bool], f: &[bool]) -> (usize, Vec<bool>, Vec<bool>) {
+    let mut rep = init_rep(p.terms.len());
+    assert_eqs(p, t, p.atoms.len(), &mut rep);
+    close(p, &mut rep);
+    let c = false_joined(p, f, &mut rep);
+    let (t1, f1) = implied(p, t, f, &mut rep);
+    (c, t1, f1)
 }

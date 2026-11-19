@@ -267,13 +267,79 @@ definition "theory_check" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarr
     finish(p, a, rep)
   \<rbrakk>\<close>
 
-(* Rust: cc_conflict *)
-definition "cc_conflict" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>cc_conflict \<equiv> \<lambda>p t f. FunctionBody \<lbrakk>
+(* Rust: joined_unset *)
+definition "joined_unset" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, bool list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>joined_unset \<equiv> \<lambda>p t f rep. FunctionBody \<lbrakk>
+    let mut t1 = { let init_1 = t; \<llangle>init_1 :: bool list\<rrangle> };
+    for j in 0_usize .. len(p.Problem_atoms) {
+      if ((!(t[j])) && (!(f[j]))) && ((rep[p.Problem_atoms[j].Atom_lhs]) == (rep[p.Problem_atoms[j].Atom_rhs])) {
+        * (t1[j]) = true;
+      }
+    };
+    * t1
+  \<rbrakk>\<close>
+
+(* Rust: false_pairs *)
+definition "false_pairs" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, (((64 word) list) \<times> ((64 word) list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>false_pairs \<equiv> \<lambda>p f rep. FunctionBody \<lbrakk>
+    let mut us = { let init_2 = { let res_1 = []; \<llangle>res_1 :: (64 word) list\<rrangle> }; \<llangle>init_2 :: (64 word) list\<rrangle> };
+    let mut vs = { let init_4 = { let res_3 = []; \<llangle>res_3 :: (64 word) list\<rrangle> }; \<llangle>init_4 :: (64 word) list\<rrangle> };
+    for b in 0_usize .. len(p.Problem_atoms) {
+      if f[b] {
+        vec_push(us, rep[p.Problem_atoms[b].Atom_lhs]);
+        vec_push(vs, rep[p.Problem_atoms[b].Atom_rhs]);
+      }
+    };
+    (* us, * vs)
+  \<rbrakk>\<close>
+
+(* Rust: has_pair *)
+definition "has_pair" :: \<open>((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>has_pair \<equiv> \<lambda>us vs x y. FunctionBody \<lbrakk>
+    for i in 0_usize .. len(us) {
+      if (((us[i]) == x) && ((vs[i]) == y)) || (((us[i]) == y) && ((vs[i]) == x)) {
+        return true;
+      }
+    };
+    false
+  \<rbrakk>\<close>
+
+(* Rust: separated_unset *)
+definition "separated_unset" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, bool list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>separated_unset \<equiv> \<lambda>p t f rep. FunctionBody \<lbrakk>
+    let destr_1 = false_pairs(p, f, rep);
+    let us = destr_1.0;
+    let vs = destr_1.1;
+    let mut f1 = { let init_2 = f; \<llangle>init_2 :: bool list\<rrangle> };
+    for j in 0_usize .. len(p.Problem_atoms) {
+      let x = rep[p.Problem_atoms[j].Atom_lhs];
+      let y = rep[p.Problem_atoms[j].Atom_rhs];
+      if (((!(t[j])) && (!(f[j]))) && (x != y)) && has_pair(us, vs, x, y) {
+        * (f1[j]) = true;
+      }
+    };
+    * f1
+  \<rbrakk>\<close>
+
+(* Rust: implied *)
+definition "implied" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, ((bool list) \<times> (bool list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>implied \<equiv> \<lambda>p t f rep. FunctionBody \<lbrakk>
+    let t1 = joined_unset(p, t, f, * rep);
+    let f1 = separated_unset(p, t, f, * rep);
+    (t1, f1)
+  \<rbrakk>\<close>
+
+(* Rust: cc_propagate *)
+definition "cc_propagate" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, ((64 word) \<times> (bool list) \<times> (bool list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>cc_propagate \<equiv> \<lambda>p t f. FunctionBody \<lbrakk>
     let mut rep = { let init_1 = init_rep(len(p.Problem_terms)); \<llangle>init_1 :: (64 word) list\<rrangle> };
     assert_eqs(p, t, len(p.Problem_atoms), rep);
     close(p, rep);
-    false_joined(p, f, rep)
+    let c = false_joined(p, f, rep);
+    let destr_2 = implied(p, t, f, rep);
+    let t1 = destr_2.0;
+    let f1 = destr_2.1;
+    (c, t1, f1)
   \<rbrakk>\<close>
 
 (* Rust: log_atoms *)
@@ -566,6 +632,17 @@ definition "learn" :: \<open>(Clause list) \<Rightarrow> Clause \<Rightarrow> ('
     * l1
   \<rbrakk>\<close>
 
+(* Rust: differs *)
+definition "differs" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>differs \<equiv> \<lambda>t t1. FunctionBody \<lbrakk>
+    for i in 0_usize .. len(t) {
+      if (t[i]) != (t1[i]) {
+        return true;
+      }
+    };
+    false
+  \<rbrakk>\<close>
+
 text \<open>Recursive group search: defined by iterating search_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>
 
 definition "search_rec_step" :: \<open>((Problem \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> ((Problem \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, ((Model option) \<times> (Clause list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
@@ -584,9 +661,15 @@ definition "search_rec_step" :: \<open>((Problem \<Rightarrow> (Clause list) \<R
       };
       return \<epsilon>\<open>rec_search\<close>(p, l, * t1, * f1);
     };
-    let c = cc_conflict(p, t, f);
+    let destr_3 = cc_propagate(p, t, f);
+    let c = destr_3.0;
+    let t2 = destr_3.1;
+    let f2 = destr_3.2;
     if c < len(t) {
       return (None, learn(l, conflict_clause(explain(p, t, c), c)));
+    };
+    if differs(t, t2) || differs(f, f2) {
+      return \<epsilon>\<open>rec_search\<close>(p, l, t2, f2);
     };
     let k = first_unset(t, f);
     if k == len(t) {
@@ -595,15 +678,15 @@ definition "search_rec_step" :: \<open>((Problem \<Rightarrow> (Clause list) \<R
       };
       return (None, l);
     };
-    let mut t1 = { let init_3 = t; \<llangle>init_3 :: bool list\<rrangle> };
+    let mut t1 = { let init_4 = t; \<llangle>init_4 :: bool list\<rrangle> };
     * (t1[k]) = true;
-    let destr_4 = \<epsilon>\<open>rec_search\<close>(p, l, * t1, f);
-    let r = destr_4.0;
-    let l1 = destr_4.1;
+    let destr_5 = \<epsilon>\<open>rec_search\<close>(p, l, * t1, f);
+    let r = destr_5.0;
+    let l1 = destr_5.1;
     if urust_func_option_is_some(r) {
       return (r, l1);
     };
-    let mut f2 = { let init_5 = f; \<llangle>init_5 :: bool list\<rrangle> };
+    let mut f2 = { let init_6 = f; \<llangle>init_6 :: bool list\<rrangle> };
     * (f2[k]) = true;
     \<epsilon>\<open>rec_search\<close>(p, l1, t, * f2)
   \<rbrakk>)\<close>

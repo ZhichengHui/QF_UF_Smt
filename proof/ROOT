@@ -9,6 +9,7 @@ session "QFUF_Proof" = "QFUF_CoreSpec" +
     QFUF_Pure
     QFUF_Contracts
     QFUF_Explain
+    QFUF_Propagate
     QFUF_Proof
 
 session "QFUF_Smt" in "smt" = "QFUF_CoreSpec" +
