@@ -353,7 +353,8 @@ fn search(p: &Problem, l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>) -> (Option<Mo
 
 pub fn solve(p: &Problem) -> Answer {
     let n = p.atoms.len();
-    let (r, _l, _j) = cdcl(p, Vec::new(), vec![false; n], vec![false; n], vec![0; n], vec![0; n], vec![0; n], 0, 0);
+    let (rep, xs, ys, ls) = root_log(p);
+    let (r, _l, _j) = cdcl(p, Vec::new(), vec![false; n], vec![false; n], vec![0; n], vec![0; n], vec![0; n], &rep, &xs, &ys, &ls, 0, 0);
     match r {
         Some(m) => Answer::Sat(m),
         None => Answer::Unsat,
@@ -1350,13 +1351,12 @@ fn walk(p: &Problem, xs: &[usize], ys: &[usize], ls: &[usize], pv: &[usize], pe:
     }
 }
 
-/// A set of atoms set in `t` whose equalities, closed under congruence, join the two sides of atom
-/// `k`, read off `merge_log`: the atom edges on the path between the two sides in the forest, and
-/// recursively those that explain the argument pairs of its congruence edges. Returns the atoms
-/// and the terms of the congruence edges used.
-fn path_explain(p: &Problem, t: &[bool], k: usize) -> (Vec<bool>, Vec<bool>) {
+/// A set of atoms whose equalities, closed under congruence, join the two sides of atom `k`, read
+/// off the merge log `xs`, `ys`, `ls` (see `merge_log`): the atom edges on the path between the two
+/// sides in the forest, and recursively those that explain the argument pairs of its congruence
+/// edges. Returns the atoms and the terms of the congruence edges used.
+fn path_explain_log(p: &Problem, xs: &[usize], ys: &[usize], ls: &[usize], k: usize) -> (Vec<bool>, Vec<bool>) {
     let n = p.terms.len();
-    let (xs, ys, ls) = merge_log(p, t);
     let mut e = vec![false; p.atoms.len()];
     let mut rows = vec![false; n];
     let mut used = vec![false; xs.len()];
@@ -1368,11 +1368,17 @@ fn path_explain(p: &Problem, t: &[bool], k: usize) -> (Vec<bool>, Vec<bool>) {
         let a = get_or(&qa, i, n);
         let b = get_or(&qb, i, n);
         if a < n && b < n && a != b {
-            let (pv, pe) = bfs(n, &xs, &ys, a, b);
-            walk(p, &xs, &ys, &ls, &pv, &pe, a, b, &mut e, &mut rows, &mut used, &mut qa, &mut qb);
+            let (pv, pe) = bfs(n, xs, ys, a, b);
+            walk(p, xs, ys, ls, &pv, &pe, a, b, &mut e, &mut rows, &mut used, &mut qa, &mut qb);
         }
     }
     (e, rows)
+}
+
+/// `path_explain_log` on `merge_log` of the atoms set in `t`.
+fn path_explain(p: &Problem, t: &[bool], k: usize) -> (Vec<bool>, Vec<bool>) {
+    let (xs, ys, ls) = merge_log(p, t);
+    path_explain_log(p, &xs, &ys, &ls, k)
 }
 
 /// A subset of the atoms set in `t` whose equalities, closed under congruence, join the two sides
@@ -1380,6 +1386,16 @@ fn path_explain(p: &Problem, t: &[bool], k: usize) -> (Vec<bool>, Vec<bool>) {
 /// otherwise.
 fn explain(p: &Problem, t: &[bool], k: usize) -> Vec<bool> {
     let (e, rows) = path_explain(p, t, k);
+    if rows_join(p, &e, &rows, k) {
+        return e;
+    }
+    t.to_vec()
+}
+
+/// `explain` with `path_explain_log` on the merge log `xs`, `ys`, `ls` of a closure of the atoms
+/// set in `t`.
+fn explain_log(p: &Problem, t: &[bool], xs: &[usize], ys: &[usize], ls: &[usize], k: usize) -> Vec<bool> {
+    let (e, rows) = path_explain_log(p, xs, ys, ls, k);
     if rows_join(p, &e, &rows, k) {
         return e;
     }
@@ -1450,15 +1466,35 @@ fn has_pair(us: &[usize], vs: &[usize], x: usize, y: usize) -> bool {
     false
 }
 
+/// The classes of `rep` of the two sides of every atom `b` with `f[b]`, as flags over the terms
+/// (representatives out of bounds are left out).
+fn false_sides(p: &Problem, f: &[bool], rep: &[usize]) -> Vec<bool> {
+    let mut mk = vec![false; p.terms.len()];
+    for b in 0..p.atoms.len() {
+        if f[b] {
+            set_true(&mut mk, rep[p.atoms[b].lhs]);
+            set_true(&mut mk, rep[p.atoms[b].rhs]);
+        }
+    }
+    mk
+}
+
+/// `v[i]`, or false if `i` is out of bounds.
+fn flag_at(v: &[bool], i: usize) -> bool {
+    i < v.len() && v[i]
+}
+
 /// The atoms set false in `f`, and every atom unset under `t`, `f` whose two sides lie in classes
-/// of `rep` that the two sides of an atom set false lie in.
+/// of `rep` that the two sides of an atom set false lie in. `false_sides` filters the atoms before
+/// the pairs of `false_pairs` are searched.
 fn separated_unset(p: &Problem, t: &[bool], f: &[bool], rep: &[usize]) -> Vec<bool> {
     let (us, vs) = false_pairs(p, f, rep);
+    let mk = false_sides(p, f, rep);
     let mut f1 = f.to_vec();
     for j in 0..p.atoms.len() {
         let x = rep[p.atoms[j].lhs];
         let y = rep[p.atoms[j].rhs];
-        if !t[j] && !f[j] && x != y && has_pair(&us, &vs, x, y) {
+        if !t[j] && !f[j] && x != y && flag_at(&mk, x) && flag_at(&mk, y) && has_pair(&us, &vs, x, y) {
             f1[j] = true;
         }
     }
@@ -1483,6 +1519,123 @@ fn cc_propagate(p: &Problem, t: &[bool], f: &[bool]) -> (usize, Vec<bool>, Vec<b
     let c = false_joined(p, f, &mut rep);
     let (t1, f1) = implied(p, t, f, &mut rep);
     (c, t1, f1)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Incremental closure (`cc_step`).
+//
+// `cdcl` carries a partition `rep` and its merge log `xs`, `ys`, `ls` (see `merge_log`) down its
+// recursion: the closure of the atoms set true when it was computed. Each class of `rep` lies in
+// the congruence closure of the atoms set true, which stays so when more atoms become true.
+// `cc_step` extends both: it merges the sides of the atoms set true since, and then rescans only
+// the terms an argument of which changed its class: two terms that become congruent have an
+// argument pair whose classes were merged, and a merge changes the representative of one of the
+// two classes. Every merge joins two classes, so the log stays a forest in which the path between
+// two terms does not change once they are joined; an explanation read off the log of a later
+// node is the one of the node that joined them. Soundness rests only on the check of every
+// explanation by `rows_join`; that the partition is closed and the log is a forest only matters
+// for the speed and the quality of the explanations.
+
+/// Does an argument of term `i` have another representative in `rep` than in `old`?
+fn arg_moved(p: &Problem, old: &[usize], rep: &[usize], i: usize) -> bool {
+    for k in 0..p.terms[i].args.len() {
+        if old[p.terms[i].args[k]] != rep[p.terms[i].args[k]] {
+            return true;
+        }
+    }
+    false
+}
+
+/// The terms with an argument that has another representative in `rep` than in `old`.
+fn moved_rows(p: &Problem, old: &[usize], rep: &[usize]) -> Vec<bool> {
+    let mut rows = vec![false; p.terms.len()];
+    for i in 0..p.terms.len() {
+        if arg_moved(p, old, rep, i) {
+            rows[i] = true;
+        }
+    }
+    rows
+}
+
+/// Merges the class of term `i` with that of every term `j` that is congruent to it but in
+/// another class, and logs each merge as the edge `(i, j)` with label `p.atoms.len()`; returns
+/// whether it merged anything.
+fn log_col(p: &Problem, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>, i: usize) -> bool {
+    let mut changed = false;
+    for j in 0..p.terms.len() {
+        if rep[i] != rep[j] && congruent(p, rep, i, j) {
+            merge(rep, i, j);
+            xs.push(i);
+            ys.push(j);
+            ls.push(p.atoms.len());
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// `log_col` on every term `i` with `rows[i]`; returns whether it merged anything.
+fn log_moved(p: &Problem, rows: &[bool], rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) -> bool {
+    let mut changed = false;
+    for i in 0..p.terms.len() {
+        if rows[i] && log_col(p, rep, xs, ys, ls, i) {
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// Copies `rep` into `old`.
+fn copy_into(old: &mut Vec<usize>, rep: &[usize]) {
+    for i in 0..old.len() {
+        if i < rep.len() {
+            old[i] = rep[i];
+        }
+    }
+}
+
+/// One round of the incremental closure: `log_moved` on the terms with an argument whose
+/// representative changed since `old`, after copying `rep` into `old`; returns whether it merged
+/// anything.
+fn round_moved(p: &Problem, old: &mut Vec<usize>, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) -> bool {
+    let rows = moved_rows(p, old, rep);
+    copy_into(old, rep);
+    log_moved(p, &rows, rep, xs, ys, ls)
+}
+
+/// Rounds of `round_moved` until one merges nothing (at most `n + 1` rounds). If `old` was
+/// closed, so is the result.
+fn close_moved(p: &Problem, old: &mut Vec<usize>, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) {
+    for _round in 0..p.terms.len() + 1 {
+        if !round_moved(p, old, rep, xs, ys, ls) {
+            return;
+        }
+    }
+}
+
+/// `cc_propagate` on the partition `rep0` with log `xs0`, `ys0`, `ls0`, extended by the atoms set
+/// true in `t` and closed by `close_moved`; also returns the extended partition and log.
+fn cc_step(p: &Problem, t: &[bool], f: &[bool], rep0: &[usize], xs0: &[usize], ys0: &[usize], ls0: &[usize])
+           -> (usize, Vec<bool>, Vec<bool>, Vec<usize>, Vec<usize>, Vec<usize>, Vec<usize>) {
+    let mut old = rep0.to_vec();
+    let mut rep = rep0.to_vec();
+    let mut xs = xs0.to_vec();
+    let mut ys = ys0.to_vec();
+    let mut ls = ls0.to_vec();
+    log_atoms(p, t, &mut rep, &mut xs, &mut ys, &mut ls);
+    close_moved(p, &mut old, &mut rep, &mut xs, &mut ys, &mut ls);
+    let c = false_joined(p, f, &mut rep);
+    let (t1, f1) = implied(p, t, f, &mut rep);
+    (c, t1, f1, rep, xs, ys, ls)
+}
+
+/// The closure of no equalities and its merge log: where `cdcl` starts. `close` and `merge_log`
+/// compute the same partition, the congruence closure of no equalities.
+fn root_log(p: &Problem) -> (Vec<usize>, Vec<usize>, Vec<usize>, Vec<usize>) {
+    let mut rep = init_rep(p.terms.len());
+    close(p, &mut rep);
+    let (xs, ys, ls) = merge_log(p, &vec![false; p.atoms.len()]);
+    (rep, xs, ys, ls)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1525,17 +1678,6 @@ fn note_true(t: &[bool], t1: &[bool], v: &[usize], y: usize) -> Vec<usize> {
     w
 }
 
-/// The atoms set true in `t` with a time stamp below `s`.
-fn true_before(t: &[bool], ts: &[usize], s: usize) -> Vec<bool> {
-    let mut e = vec![false; t.len()];
-    for j in 0..t.len() {
-        if t[j] && get_or(ts, j, s) < s {
-            e[j] = true;
-        }
-    }
-    e
-}
-
 /// The clause "atom `x` or not atom `x`".
 fn tautology(x: usize) -> Clause {
     let mut lits = Vec::new();
@@ -1564,12 +1706,12 @@ fn indexed_clause(p: &Problem, l: &[Clause], r: usize, x: usize) -> Clause {
     tautology(x)
 }
 
-/// Why the closure joined the two sides of atom `x`: the clause "some atom set true before `x` is
-/// false, or `x` is true", with the atoms that `path_explain` finds if `rows_join` confirms them,
-/// and the tautology on `x` otherwise.
-fn theory_reason(p: &Problem, t: &[bool], ts: &[usize], x: usize) -> Clause {
-    let e0 = true_before(t, ts, get_or(ts, x, 0));
-    let (e, rows) = path_explain(p, &e0, x);
+/// Why the closure joined the two sides of atom `x`: the clause "some atom of `path_explain_log` on
+/// the merge log `xs`, `ys`, `ls` is false, or `x` is true", if `rows_join` confirms those atoms,
+/// and the tautology on `x` otherwise. On the log of the search path (see `cc_step`) these atoms
+/// were set true before `x`.
+fn theory_reason(p: &Problem, xs: &[usize], ys: &[usize], ls: &[usize], x: usize) -> Clause {
+    let (e, rows) = path_explain_log(p, xs, ys, ls, x);
     if rows_join(p, &e, &rows, x) {
         return conflict_clause(&e, x);
     }
@@ -1577,10 +1719,10 @@ fn theory_reason(p: &Problem, t: &[bool], ts: &[usize], x: usize) -> Clause {
 }
 
 /// The reason of atom `x` as a clause; the tautology on `x` if it has none.
-fn reason(p: &Problem, l: &[Clause], t: &[bool], ts: &[usize], rs: &[usize], x: usize) -> Clause {
+fn reason(p: &Problem, l: &[Clause], xs: &[usize], ys: &[usize], ls: &[usize], rs: &[usize], x: usize) -> Clause {
     let r = get_or(rs, x, 0);
     if r == 1 {
-        return theory_reason(p, t, ts, x);
+        return theory_reason(p, xs, ys, ls, x);
     }
     indexed_clause(p, l, r, x)
 }
@@ -1646,13 +1788,13 @@ fn level_below(lv: &[usize], cp: &[bool], cn: &[bool], d: usize) -> usize {
 /// it with the reason of the last of them, `x`: drops the literal of `x` that the assignment makes
 /// false and adds the literals of the reason other than the one of `x` it makes true. Returns
 /// whether it resolved, and the clause.
-fn resolve_step(p: &Problem, l: &[Clause], t: &[bool], lv: &[usize], ts: &[usize], rs: &[usize], d: usize,
-                cp: &[bool], cn: &[bool]) -> (bool, Vec<bool>, Vec<bool>) {
+fn resolve_step(p: &Problem, l: &[Clause], t: &[bool], lv: &[usize], ts: &[usize], rs: &[usize],
+                xs: &[usize], ys: &[usize], ls: &[usize], d: usize, cp: &[bool], cn: &[bool]) -> (bool, Vec<bool>, Vec<bool>) {
     let x = last_at(lv, ts, cp, cn, d);
     if x >= cp.len() || x >= cn.len() || x >= t.len() || get_or(rs, x, 0) == 0 || !other_at(lv, cp, cn, d, x) {
         return (false, cp.to_vec(), cn.to_vec());
     }
-    let r = reason(p, l, t, ts, rs, x);
+    let r = reason(p, l, xs, ys, ls, rs, x);
     let mut cp1 = cp.to_vec();
     let mut cn1 = cn.to_vec();
     if t[x] {
@@ -1684,7 +1826,8 @@ fn lits_clause(cp: &[bool], cn: &[bool]) -> Clause {
 /// unique implication point) or an atom without a reason is reached (at most `t.len() + 1` steps).
 /// Returns the clause, whether it has exactly one atom at level `d`, and the highest level below
 /// `d` of its atoms.
-fn analyze(p: &Problem, l: &[Clause], t: &[bool], lv: &[usize], ts: &[usize], rs: &[usize], d: usize, c: &Clause)
+fn analyze(p: &Problem, l: &[Clause], t: &[bool], lv: &[usize], ts: &[usize], rs: &[usize],
+           xs: &[usize], ys: &[usize], ls: &[usize], d: usize, c: &Clause)
            -> (Clause, bool, usize) {
     let (cp0, cn0) = add_lits(c, t.len(), true, &vec![false; t.len()], &vec![false; t.len()]);
     let mut cp = cp0;
@@ -1692,7 +1835,7 @@ fn analyze(p: &Problem, l: &[Clause], t: &[bool], lv: &[usize], ts: &[usize], rs
     let mut go = true;
     for _step in 0..t.len() + 1 {
         if go {
-            let (g, cp1, cn1) = resolve_step(p, l, t, lv, ts, rs, d, &cp, &cn);
+            let (g, cp1, cn1) = resolve_step(p, l, t, lv, ts, rs, xs, ys, ls, d, &cp, &cn);
             go = g;
             cp = cp1;
             cn = cn1;
@@ -1707,9 +1850,9 @@ fn analyze(p: &Problem, l: &[Clause], t: &[bool], lv: &[usize], ts: &[usize], rs
 /// A conflict on clause `c` at level `d`: learns the clause of `analyze`. If it has exactly one
 /// atom at level `d > 0`, returns a jump to the highest level `b < d` of its other atoms, where it
 /// propagates; otherwise returns level `d` (the branch is refuted).
-fn on_conflict(p: &Problem, l: Vec<Clause>, t: &[bool], lv: &[usize], ts: &[usize], rs: &[usize], d: usize,
-               c: &Clause) -> (Option<Model>, Vec<Clause>, usize) {
-    let (a, one, b) = analyze(p, &l, t, lv, ts, rs, d, c);
+fn on_conflict(p: &Problem, l: Vec<Clause>, t: &[bool], lv: &[usize], ts: &[usize], rs: &[usize],
+               xs: &[usize], ys: &[usize], ls: &[usize], d: usize, c: &Clause) -> (Option<Model>, Vec<Clause>, usize) {
+    let (a, one, b) = analyze(p, &l, t, lv, ts, rs, xs, ys, ls, d, c);
     let l1 = learn(l, a);
     if one && b < d {
         return (None, l1, b);
@@ -1744,7 +1887,7 @@ fn unit_index(p: &Problem, l: &[Clause], t: &[bool], f: &[bool]) -> usize {
 /// level `d` handles the result of its branch: a jump to level `d` propagates the last learned
 /// clause; a refuted branch `k` true continues with `k` false.
 fn cdcl(p: &Problem, l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>, lv: Vec<usize>, rs: Vec<usize>, ts: Vec<usize>,
-        d: usize, s: usize) -> (Option<Model>, Vec<Clause>, usize) {
+        rep: &[usize], xs: &[usize], ys: &[usize], ls: &[usize], d: usize, s: usize) -> (Option<Model>, Vec<Clause>, usize) {
     let s1 = sat_add(s, 1);
     let u = next_unit(p, &l, &t, &f);
     if u.atom == t.len() && u.pos {
@@ -1752,7 +1895,7 @@ fn cdcl(p: &Problem, l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>, lv: Vec<usize>,
             return (None, l, d);
         }
         let c = indexed_clause(p, &l, unit_index(p, &l, &t, &f), 0);
-        return on_conflict(p, l, &t, &lv, &ts, &rs, d, &c);
+        return on_conflict(p, l, &t, &lv, &ts, &rs, xs, ys, ls, d, &c);
     }
     if u.atom < t.len() {
         let ci = unit_index(p, &l, &t, &f);
@@ -1763,18 +1906,18 @@ fn cdcl(p: &Problem, l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>, lv: Vec<usize>,
         } else {
             f1[u.atom] = true;
         }
-        return cdcl(p, l, t1, f1, note(&lv, u.atom, d), note(&rs, u.atom, ci), note(&ts, u.atom, s), d, s1);
+        return cdcl(p, l, t1, f1, note(&lv, u.atom, d), note(&rs, u.atom, ci), note(&ts, u.atom, s), rep, xs, ys, ls, d, s1);
     }
-    let (c, t2, f2) = cc_propagate(p, &t, &f);
+    let (c, t2, f2, rep2, xs2, ys2, ls2) = cc_step(p, &t, &f, rep, xs, ys, ls);
     if c < t.len() {
-        let cl = conflict_clause(&explain(p, &t, c), c);
-        return on_conflict(p, l, &t, &lv, &ts, &rs, d, &cl);
+        let cl = conflict_clause(&explain_log(p, &t, &xs2, &ys2, &ls2, c), c);
+        return on_conflict(p, l, &t, &lv, &ts, &rs, &xs2, &ys2, &ls2, d, &cl);
     }
     if differs(&t, &t2) || differs(&f, &f2) {
         let lv2 = note_new(&t, &f, &t2, &f2, &lv, d);
         let rs2 = note_true(&t, &t2, &rs, 1);
         let ts2 = note_new(&t, &f, &t2, &f2, &ts, s);
-        return cdcl(p, l, t2, f2, lv2, rs2, ts2, d, s1);
+        return cdcl(p, l, t2, f2, lv2, rs2, ts2, &rep2, &xs2, &ys2, &ls2, d, s1);
     }
     let k = first_unset(&t, &f);
     if k == t.len() {
@@ -1786,14 +1929,14 @@ fn cdcl(p: &Problem, l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>, lv: Vec<usize>,
     let d1 = sat_add(d, 1);
     let mut t1 = t.clone();
     t1[k] = true;
-    let (r, l1, j) = cdcl(p, l, t1, f.clone(), note(&lv, k, d1), rs.clone(), note(&ts, k, s), d1, s1);
+    let (r, l1, j) = cdcl(p, l, t1, f.clone(), note(&lv, k, d1), rs.clone(), note(&ts, k, s), rep, xs, ys, ls, d1, s1);
     if r.is_some() {
         return (r, l1, j);
     }
     if j >= d1 {
         let mut f1 = f.clone();
         f1[k] = true;
-        return cdcl(p, l1, t.clone(), f1, note(&lv, k, d), rs.clone(), note(&ts, k, s), d, s1);
+        return cdcl(p, l1, t.clone(), f1, note(&lv, k, d), rs.clone(), note(&ts, k, s), rep, xs, ys, ls, d, s1);
     }
     if j < d {
         return (None, l1, j);
@@ -1809,7 +1952,7 @@ fn cdcl(p: &Problem, l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>, lv: Vec<usize>,
             } else {
                 f3[u1.atom] = true;
             }
-            return cdcl(p, l1, t3, f3, note(&lv, u1.atom, d), note(&rs, u1.atom, ci), note(&ts, u1.atom, s), d, s1);
+            return cdcl(p, l1, t3, f3, note(&lv, u1.atom, d), note(&rs, u1.atom, ci), note(&ts, u1.atom, s), rep, xs, ys, ls, d, s1);
         }
         if u1.pos {
             return (None, l1, d);

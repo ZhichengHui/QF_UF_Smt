@@ -443,21 +443,20 @@ proof -
   then show ?thesis using assms by simp
 qed
 
-definition path_explain_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow>
+definition path_explain_log_contract :: \<open>Problem \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow> 64 word \<Rightarrow>
       ('s, bool list \<times> bool list \<times> tnil, 'abort) function_contract\<close> where
-  \<open>path_explain_contract p t k \<equiv>
+  \<open>path_explain_log_contract p xs ys ls k \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms p) \<and> unat k < length (Problem_atoms p)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> unat k < length (Problem_atoms p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
         \<langle>length (fst r) = length (Problem_atoms p) \<and> length (fst (snd r)) = length (Problem_terms p)\<rangle> in
      make_function_contract pre post\<close>
 
-lemma path_explain_spec:
-  shows \<open>\<Gamma>; path_explain p t k \<Turnstile>\<^sub>F path_explain_contract p t k\<close>
-  apply (crush_boot f: path_explain_def contract: path_explain_contract_def)
-  apply (crush_base specs add: merge_log_spec contracts add: merge_log_contract_def inline: vec_push_def
-      simp add: sizes_ok_def unat_of_nat_lt63)
-  subgoal for xs ys ls e_ref rows_ref used_ref qa_ref qb_ref
+lemma path_explain_log_spec:
+  shows \<open>\<Gamma>; path_explain_log p xs ys ls k \<Turnstile>\<^sub>F path_explain_log_contract p xs ys ls k\<close>
+  apply (crush_boot f: path_explain_log_def contract: path_explain_log_contract_def)
+  apply (crush_base inline: vec_push_def simp add: sizes_ok_def unat_of_nat_lt63)
+  subgoal for e_ref rows_ref used_ref qa_ref qb_ref
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> (\<Squnion>g' v. e_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_atoms p)\<rangle>) \<star>
         (\<Squnion>g' v. rows_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms p)\<rangle>) \<star> (\<Squnion>g' v. used_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star>
@@ -472,6 +471,22 @@ lemma path_explain_spec:
         simp add: sizes_ok_def unat_of_nat_lt63)
     done
   apply (simp add: unat_double_lt)
+  done
+
+definition path_explain_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow>
+      ('s, bool list \<times> bool list \<times> tnil, 'abort) function_contract\<close> where
+  \<open>path_explain_contract p t k \<equiv>
+     let pre = can_alloc_reference \<star>
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms p) \<and> unat k < length (Problem_atoms p)\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star>
+        \<langle>length (fst r) = length (Problem_atoms p) \<and> length (fst (snd r)) = length (Problem_terms p)\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma path_explain_spec:
+  shows \<open>\<Gamma>; path_explain p t k \<Turnstile>\<^sub>F path_explain_contract p t k\<close>
+  apply (crush_boot f: path_explain_def contract: path_explain_contract_def)
+  apply (crush_base specs add: merge_log_spec path_explain_log_spec
+      contracts add: merge_log_contract_def path_explain_log_contract_def)
   done
 
 definition explain_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> ('s, bool list, 'abort) function_contract\<close> where
@@ -491,6 +506,26 @@ lemma explain_spec:
   apply (crush_boot f: explain_def contract: explain_contract_def)
   apply (crush_base specs add: path_explain_spec rows_join_spec
       contracts add: path_explain_contract_def rows_join_contract_def)
+  done
+
+definition explain_log_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow>
+      64 word \<Rightarrow> ('s, bool list, 'abort) function_contract\<close> where
+  \<open>explain_log_contract p t xs ys ls k \<equiv>
+     let pre = can_alloc_reference \<star>
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms p) \<and> unat k < length (Problem_atoms p) \<and>
+         (unat (Atom_lhs (Problem_atoms p ! unat k)), unat (Atom_rhs (Problem_atoms p ! unat k)))
+           \<in> cc p (asserted p t (length (Problem_atoms p)))\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star>
+        \<langle>length r = length (Problem_atoms p) \<and>
+         (unat (Atom_lhs (Problem_atoms p ! unat k)), unat (Atom_rhs (Problem_atoms p ! unat k)))
+           \<in> cc p (asserted p r (length (Problem_atoms p)))\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma explain_log_spec:
+  shows \<open>\<Gamma>; explain_log p t xs ys ls k \<Turnstile>\<^sub>F explain_log_contract p t xs ys ls k\<close>
+  apply (crush_boot f: explain_log_def contract: explain_log_contract_def)
+  apply (crush_base specs add: path_explain_log_spec rows_join_spec
+      contracts add: path_explain_log_contract_def rows_join_contract_def)
   done
 
 subsection \<open>Learned clauses\<close>
