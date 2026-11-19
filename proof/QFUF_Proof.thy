@@ -1,5 +1,5 @@
 theory QFUF_Proof
-  imports QFUF_Propagate
+  imports QFUF_Analyze
 begin
 
 context QFUF_ctx

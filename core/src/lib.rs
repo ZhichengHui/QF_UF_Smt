@@ -352,7 +352,8 @@ fn search(p: &Problem, l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>) -> (Option<Mo
 }
 
 pub fn solve(p: &Problem) -> Answer {
-    let (r, _l) = search(p, Vec::new(), vec![false; p.atoms.len()], vec![false; p.atoms.len()]);
+    let n = p.atoms.len();
+    let (r, _l, _j) = cdcl(p, Vec::new(), vec![false; n], vec![false; n], vec![0; n], vec![0; n], vec![0; n], 0, 0);
     match r {
         Some(m) => Answer::Sat(m),
         None => Answer::Unsat,
@@ -1471,4 +1472,338 @@ fn cc_propagate(p: &Problem, t: &[bool], f: &[bool]) -> (usize, Vec<bool>, Vec<b
     let c = false_joined(p, f, &mut rep);
     let (t1, f1) = implied(p, t, f, &mut rep);
     (c, t1, f1)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Conflict analysis and backjumping (`cdcl`).
+//
+// For every atom `x` it sets, the search records the decision level `lv[x]`, a time stamp `ts[x]`
+// (increasing along a path of the search) and a reason `rs[x]`: 0 for a decision or an atom set
+// without a reason, 1 for an atom whose two sides the closure joined, and `2 + i` for clause `i`
+// of the problem's clauses followed by the learned ones. The records only guide the analysis:
+// every clause it derives is a resolvent of clauses that hold in every model, whatever they say.
+// The analysis keeps its clause as two lists of flags over the atoms, `cp` (positive literals)
+// and `cn` (negative literals).
+
+/// `v` with `v[x]` set to `y` if `x` is in bounds.
+fn note(v: &[usize], x: usize, y: usize) -> Vec<usize> {
+    let mut w = v.to_vec();
+    set_at(&mut w, x, y);
+    w
+}
+
+/// `v` with `v[j]` set to `y` for every atom `j` set in `t1` or `f1` but in neither `t` nor `f`.
+fn note_new(t: &[bool], f: &[bool], t1: &[bool], f1: &[bool], v: &[usize], y: usize) -> Vec<usize> {
+    let mut w = v.to_vec();
+    for j in 0..t.len() {
+        if j < f.len() && j < t1.len() && j < f1.len() && !t[j] && !f[j] && (t1[j] || f1[j]) {
+            set_at(&mut w, j, y);
+        }
+    }
+    w
+}
+
+/// `v` with `v[j]` set to `y` for every atom `j` set in `t1` but not in `t`.
+fn note_true(t: &[bool], t1: &[bool], v: &[usize], y: usize) -> Vec<usize> {
+    let mut w = v.to_vec();
+    for j in 0..t.len() {
+        if j < t1.len() && !t[j] && t1[j] {
+            set_at(&mut w, j, y);
+        }
+    }
+    w
+}
+
+/// The atoms set true in `t` with a time stamp below `s`.
+fn true_before(t: &[bool], ts: &[usize], s: usize) -> Vec<bool> {
+    let mut e = vec![false; t.len()];
+    for j in 0..t.len() {
+        if t[j] && get_or(ts, j, s) < s {
+            e[j] = true;
+        }
+    }
+    e
+}
+
+/// The clause "atom `x` or not atom `x`".
+fn tautology(x: usize) -> Clause {
+    let mut lits = Vec::new();
+    lits.push(Lit { atom: x, pos: true });
+    lits.push(Lit { atom: x, pos: false });
+    Clause { lits: lits }
+}
+
+/// A copy of clause `c`.
+fn copy_clause(c: &Clause) -> Clause {
+    let mut lits = Vec::new();
+    for i in 0..c.lits.len() {
+        lits.push(Lit { atom: c.lits[i].atom, pos: c.lits[i].pos });
+    }
+    Clause { lits: lits }
+}
+
+/// Clause `r - 2` of the problem's clauses followed by `l`; the tautology on `x` if there is none.
+fn indexed_clause(p: &Problem, l: &[Clause], r: usize, x: usize) -> Clause {
+    if r >= 2 && r - 2 < p.clauses.len() {
+        return copy_clause(&p.clauses[r - 2]);
+    }
+    if r >= 2 && r - 2 - p.clauses.len() < l.len() {
+        return copy_clause(&l[r - 2 - p.clauses.len()]);
+    }
+    tautology(x)
+}
+
+/// Why the closure joined the two sides of atom `x`: the clause "some atom set true before `x` is
+/// false, or `x` is true", with the atoms that `path_explain` finds if `rows_join` confirms them,
+/// and the tautology on `x` otherwise.
+fn theory_reason(p: &Problem, t: &[bool], ts: &[usize], x: usize) -> Clause {
+    let e0 = true_before(t, ts, get_or(ts, x, 0));
+    let (e, rows) = path_explain(p, &e0, x);
+    if rows_join(p, &e, &rows, x) {
+        return conflict_clause(&e, x);
+    }
+    tautology(x)
+}
+
+/// The reason of atom `x` as a clause; the tautology on `x` if it has none.
+fn reason(p: &Problem, l: &[Clause], t: &[bool], ts: &[usize], rs: &[usize], x: usize) -> Clause {
+    let r = get_or(rs, x, 0);
+    if r == 1 {
+        return theory_reason(p, t, ts, x);
+    }
+    indexed_clause(p, l, r, x)
+}
+
+/// The clause `cp`, `cn` with the literals of `c` added, except the literal of atom `x` with sign
+/// `pos` (and literals of atoms out of bounds).
+fn add_lits(c: &Clause, x: usize, pos: bool, cp: &[bool], cn: &[bool]) -> (Vec<bool>, Vec<bool>) {
+    let mut cp1 = cp.to_vec();
+    let mut cn1 = cn.to_vec();
+    for i in 0..c.lits.len() {
+        let a = c.lits[i].atom;
+        if !(a == x && c.lits[i].pos == pos) && a < cp1.len() && a < cn1.len() {
+            if c.lits[i].pos {
+                cp1[a] = true;
+            } else {
+                cn1[a] = true;
+            }
+        }
+    }
+    (cp1, cn1)
+}
+
+/// Is atom `j` in the clause `cp`, `cn` at level `d`?
+fn at_level(lv: &[usize], cp: &[bool], cn: &[bool], d: usize, j: usize) -> bool {
+    (cp[j] || (j < cn.len() && cn[j])) && get_or(lv, j, d) == d
+}
+
+/// The atom of the clause `cp`, `cn` at level `d` with the highest time stamp; `cp.len()` if
+/// there is none.
+fn last_at(lv: &[usize], ts: &[usize], cp: &[bool], cn: &[bool], d: usize) -> usize {
+    let mut x = cp.len();
+    for j in 0..cp.len() {
+        if at_level(lv, cp, cn, d, j) && (x == cp.len() || get_or(ts, j, 0) > get_or(ts, x, 0)) {
+            x = j;
+        }
+    }
+    x
+}
+
+/// Is an atom other than `x` in the clause `cp`, `cn` at level `d`?
+fn other_at(lv: &[usize], cp: &[bool], cn: &[bool], d: usize, x: usize) -> bool {
+    for j in 0..cp.len() {
+        if j != x && at_level(lv, cp, cn, d, j) {
+            return true;
+        }
+    }
+    false
+}
+
+/// The highest level below `d` of an atom of the clause `cp`, `cn`; 0 if there is none.
+fn level_below(lv: &[usize], cp: &[bool], cn: &[bool], d: usize) -> usize {
+    let mut b = 0;
+    for j in 0..cp.len() {
+        let v = get_or(lv, j, d);
+        if (cp[j] || (j < cn.len() && cn[j])) && v < d && v > b {
+            b = v;
+        }
+    }
+    b
+}
+
+/// One step of the analysis: if the clause `cp`, `cn` has two atoms or more at level `d`, resolves
+/// it with the reason of the last of them, `x`: drops the literal of `x` that the assignment makes
+/// false and adds the literals of the reason other than the one of `x` it makes true. Returns
+/// whether it resolved, and the clause.
+fn resolve_step(p: &Problem, l: &[Clause], t: &[bool], lv: &[usize], ts: &[usize], rs: &[usize], d: usize,
+                cp: &[bool], cn: &[bool]) -> (bool, Vec<bool>, Vec<bool>) {
+    let x = last_at(lv, ts, cp, cn, d);
+    if x >= cp.len() || x >= cn.len() || x >= t.len() || get_or(rs, x, 0) == 0 || !other_at(lv, cp, cn, d, x) {
+        return (false, cp.to_vec(), cn.to_vec());
+    }
+    let r = reason(p, l, t, ts, rs, x);
+    let mut cp1 = cp.to_vec();
+    let mut cn1 = cn.to_vec();
+    if t[x] {
+        cn1[x] = false;
+    } else {
+        cp1[x] = false;
+    }
+    let (cp2, cn2) = add_lits(&r, x, t[x], &cp1, &cn1);
+    (true, cp2, cn2)
+}
+
+/// The clause with the positive literals of the atoms `j` with `cp[j]` and the negative ones of
+/// those with `cn[j]`.
+fn lits_clause(cp: &[bool], cn: &[bool]) -> Clause {
+    let mut lits = Vec::new();
+    for j in 0..cp.len() {
+        if cp[j] {
+            lits.push(Lit { atom: j, pos: true });
+        }
+        if j < cn.len() && cn[j] {
+            lits.push(Lit { atom: j, pos: false });
+        }
+    }
+    Clause { lits: lits }
+}
+
+/// Conflict analysis of the clause `c`, false under the assignment `t`: resolves it with the
+/// reasons of its atoms at level `d`, latest first, until one atom at level `d` is left (the first
+/// unique implication point) or an atom without a reason is reached (at most `t.len() + 1` steps).
+/// Returns the clause, whether it has exactly one atom at level `d`, and the highest level below
+/// `d` of its atoms.
+fn analyze(p: &Problem, l: &[Clause], t: &[bool], lv: &[usize], ts: &[usize], rs: &[usize], d: usize, c: &Clause)
+           -> (Clause, bool, usize) {
+    let (cp0, cn0) = add_lits(c, t.len(), true, &vec![false; t.len()], &vec![false; t.len()]);
+    let mut cp = cp0;
+    let mut cn = cn0;
+    let mut go = true;
+    for _step in 0..t.len() + 1 {
+        if go {
+            let (g, cp1, cn1) = resolve_step(p, l, t, lv, ts, rs, d, &cp, &cn);
+            go = g;
+            cp = cp1;
+            cn = cn1;
+        }
+    }
+    let x = last_at(lv, ts, &cp, &cn, d);
+    let one = x < cp.len() && !other_at(lv, &cp, &cn, d, x);
+    let b = level_below(lv, &cp, &cn, d);
+    (lits_clause(&cp, &cn), one, b)
+}
+
+/// A conflict on clause `c` at level `d`: learns the clause of `analyze`. If it has exactly one
+/// atom at level `d > 0`, returns a jump to the highest level `b < d` of its other atoms, where it
+/// propagates; otherwise returns level `d` (the branch is refuted).
+fn on_conflict(p: &Problem, l: Vec<Clause>, t: &[bool], lv: &[usize], ts: &[usize], rs: &[usize], d: usize,
+               c: &Clause) -> (Option<Model>, Vec<Clause>, usize) {
+    let (a, one, b) = analyze(p, &l, t, lv, ts, rs, d, c);
+    let l1 = learn(l, a);
+    if one && b < d {
+        return (None, l1, b);
+    }
+    (None, l1, d)
+}
+
+/// The reason index (`2 + i`) of the first clause of the problem's clauses followed by `l` that
+/// is falsified or unit under `t`, `f`: the clause on which `next_unit` stops; 0 if there is none.
+fn unit_index(p: &Problem, l: &[Clause], t: &[bool], f: &[bool]) -> usize {
+    for i in 0..p.clauses.len() {
+        let u = clause_unit(t, f, &p.clauses[i]);
+        if u.atom < t.len() || u.pos {
+            return sat_add(2, i);
+        }
+    }
+    for i in 0..l.len() {
+        let u = clause_unit(t, f, &l[i]);
+        if u.atom < t.len() || u.pos {
+            return sat_add(sat_add(2, p.clauses.len()), i);
+        }
+    }
+    0
+}
+
+/// The search with conflict analysis and backjumping: `search` on the partial assignment `t`, `f`
+/// at decision level `d`, with the records `lv`, `rs`, `ts` of the set atoms (see above) and the
+/// next time stamp `s`. A conflict (a falsified clause, or a closure conflict) is analysed
+/// (`on_conflict`). Returns the result, the learned clauses and a level `j`. Without a model: if
+/// `j >= d`, no completion of `t`, `f` is a model (the branch is refuted); if `j < d`, the search
+/// returns to level `j`, where the last learned clause propagates. The decision on atom `k` at
+/// level `d` handles the result of its branch: a jump to level `d` propagates the last learned
+/// clause; a refuted branch `k` true continues with `k` false.
+fn cdcl(p: &Problem, l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>, lv: Vec<usize>, rs: Vec<usize>, ts: Vec<usize>,
+        d: usize, s: usize) -> (Option<Model>, Vec<Clause>, usize) {
+    let s1 = sat_add(s, 1);
+    let u = next_unit(p, &l, &t, &f);
+    if u.atom == t.len() && u.pos {
+        if t.len() == 0 {
+            return (None, l, d);
+        }
+        let c = indexed_clause(p, &l, unit_index(p, &l, &t, &f), 0);
+        return on_conflict(p, l, &t, &lv, &ts, &rs, d, &c);
+    }
+    if u.atom < t.len() {
+        let ci = unit_index(p, &l, &t, &f);
+        let mut t1 = t.clone();
+        let mut f1 = f.clone();
+        if u.pos {
+            t1[u.atom] = true;
+        } else {
+            f1[u.atom] = true;
+        }
+        return cdcl(p, l, t1, f1, note(&lv, u.atom, d), note(&rs, u.atom, ci), note(&ts, u.atom, s), d, s1);
+    }
+    let (c, t2, f2) = cc_propagate(p, &t, &f);
+    if c < t.len() {
+        let cl = conflict_clause(&explain(p, &t, c), c);
+        return on_conflict(p, l, &t, &lv, &ts, &rs, d, &cl);
+    }
+    if differs(&t, &t2) || differs(&f, &f2) {
+        let lv2 = note_new(&t, &f, &t2, &f2, &lv, d);
+        let rs2 = note_true(&t, &t2, &rs, 1);
+        let ts2 = note_new(&t, &f, &t2, &f2, &ts, s);
+        return cdcl(p, l, t2, f2, lv2, rs2, ts2, d, s1);
+    }
+    let k = first_unset(&t, &f);
+    if k == t.len() {
+        if prop_holds(p, &t) {
+            return (theory_check(p, &t), l, d);
+        }
+        return (None, l, d);
+    }
+    let d1 = sat_add(d, 1);
+    let mut t1 = t.clone();
+    t1[k] = true;
+    let (r, l1, j) = cdcl(p, l, t1, f.clone(), note(&lv, k, d1), rs.clone(), note(&ts, k, s), d1, s1);
+    if r.is_some() {
+        return (r, l1, j);
+    }
+    if j >= d1 {
+        let mut f1 = f.clone();
+        f1[k] = true;
+        return cdcl(p, l1, t.clone(), f1, note(&lv, k, d), rs.clone(), note(&ts, k, s), d, s1);
+    }
+    if j < d {
+        return (None, l1, j);
+    }
+    if l1.len() > 0 {
+        let u1 = clause_unit(&t, &f, &l1[l1.len() - 1]);
+        if u1.atom < t.len() {
+            let ci = sat_add(sat_add(1, p.clauses.len()), l1.len());
+            let mut t3 = t.clone();
+            let mut f3 = f.clone();
+            if u1.pos {
+                t3[u1.atom] = true;
+            } else {
+                f3[u1.atom] = true;
+            }
+            return cdcl(p, l1, t3, f3, note(&lv, u1.atom, d), note(&rs, u1.atom, ci), note(&ts, u1.atom, s), d, s1);
+        }
+        if u1.pos {
+            return (None, l1, d);
+        }
+    }
+    let (r2, l2) = search(p, l1, t.clone(), f.clone());
+    (r2, l2, d)
 }
