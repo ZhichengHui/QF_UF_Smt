@@ -1,6 +1,8 @@
 //! Regression tests for learning from congruence-closure conflicts (#45). In each problem the
 //! same closure conflict arises under every assignment of 40 free atoms that the search decides
 //! before the atoms of the conflict; without the learned clauses the search meets it 2^40 times.
+//! The wide and late variants (#58) need a long explanation queue or a second closure round; an
+//! explanation that misses them falls back to all true atoms and the search runs out of time.
 //! Every Sat model is checked by an independent evaluator and every answer is compared with z3
 //! when the `z3` binary is on PATH. The helpers up to `B` are copied from `search.rs`.
 
@@ -242,4 +244,85 @@ fn learned_path_explanations() {
         assert!(!check(b.0));
         assert!(check(sat));
     }
+}
+
+/// `repeated_conflict` with `f` applied to `filler` copies of a constant `w` before its last
+/// argument: `f(w, .., w, x) != f(w, .., w, y)`. The explanation queues the argument pairs of
+/// `f(w, .., x)` and `f(w, .., y)` in order, so the pair `x, y` comes after `filler` pairs `w, w`.
+/// The problem has 88 terms; `explain` follows the first `2 * 88 + 1` queued pairs and, if they do
+/// not explain the conflict, falls back to all true atoms, which include the 40 free atoms.
+fn wide_conflict(escape: bool, filler: usize) -> Problem {
+    let mut b = B::new();
+    let (x, y, z, w) = (b.konst(), b.konst(), b.konst(), b.konst());
+    let mut ax = vec![w; filler];
+    let mut ay = vec![w; filler];
+    ax.push(x);
+    ay.push(y);
+    let (fx, fy) = (b.app(7, &ax), b.app(7, &ay));
+    let efxy = b.eq(fx, fy);
+    let ezy = b.eq(z, y);
+    b.free(40);
+    let exy = b.eq(x, y);
+    let exz = b.eq(x, z);
+    let e = b.fresh();
+    b.cl(&[(efxy, false)]);
+    b.cl(&[(ezy, true)]);
+    if escape {
+        b.cl(&[(exy, true), (exz, true), (e, true)]);
+    } else {
+        b.cl(&[(exy, true), (exz, true)]);
+    }
+    assert_eq!(b.0.terms.len(), 88);
+    b.0
+}
+
+/// With 100 filler pairs, the pair `x, y` is queued after the first 88 pairs but within the
+/// first 177: the explanation must follow it, or the fallback keeps the free atoms in the learned
+/// clauses and the unsat problem takes 2^40 conflicts. With 200 filler pairs it is past the
+/// queue, the path explanation misses `x = y`, and only the check by `rows_join` keeps the
+/// learned clause valid: without it the clause is `f(..x) = f(..y)`, which makes the
+/// satisfiable problem unsat.
+#[test]
+fn learned_conflict_with_wide_terms() {
+    assert!(!check(wide_conflict(false, 100)));
+    assert!(check(wide_conflict(true, 100)));
+    assert!(check(wide_conflict(true, 200)));
+}
+
+/// `f(x) != f(y)` with `x = g(u)`, `y = g(v)` and `z = v`, then 40 free atoms, then `u = v`,
+/// `u = z` and `e`, with the clause `u = v or u = z` (`or e` if `escape`). The terms `f(x)` and
+/// `f(y)` come before `g(u)` and `g(v)`, so a closure round in term order joins `g(u)` and `g(v)`
+/// only after the row of `f(y)`: `f(x)` and `f(y)` join in the second round. The merge log and
+/// the closure of `rows_join` both need that round, or the explanation falls back to all true
+/// atoms.
+fn late_congruence_conflict(escape: bool) -> Problem {
+    let mut b = B::new();
+    let (x, y) = (b.konst(), b.konst());
+    let (fx, fy) = (b.app(7, &[x]), b.app(7, &[y]));
+    let (u, v, z) = (b.konst(), b.konst(), b.konst());
+    let (gu, gv) = (b.app(8, &[u]), b.app(8, &[v]));
+    let efxy = b.eq(fx, fy);
+    let ex = b.eq(x, gu);
+    let ey = b.eq(y, gv);
+    let ezv = b.eq(z, v);
+    b.free(40);
+    let euv = b.eq(u, v);
+    let euz = b.eq(u, z);
+    let e = b.fresh();
+    b.cl(&[(efxy, false)]);
+    b.cl(&[(ex, true)]);
+    b.cl(&[(ey, true)]);
+    b.cl(&[(ezv, true)]);
+    if escape {
+        b.cl(&[(euv, true), (euz, true), (e, true)]);
+    } else {
+        b.cl(&[(euv, true), (euz, true)]);
+    }
+    b.0
+}
+
+#[test]
+fn learned_conflict_over_two_rounds() {
+    assert!(!check(late_congruence_conflict(false)));
+    assert!(check(late_congruence_conflict(true)));
 }
