@@ -237,6 +237,79 @@ lemma log_col_spec:
     done
   done
 
+lemma rev_idx_lt:
+  assumes \<open>i < n\<close> \<open>n < 9223372036854775808\<close>
+  shows \<open>unat (word64_of_nat n - 1 - word64_of_nat i) = n - 1 - i\<close> \<open>word64_of_nat i \<le> (word64_of_nat n - 1 :: 64 word)\<close>
+    \<open>1 \<le> (word64_of_nat n :: 64 word)\<close>
+proof -
+  have n: \<open>unat (word64_of_nat n :: 64 word) = n\<close> \<open>unat (word64_of_nat i :: 64 word) = i\<close>
+    using assms by (simp_all add: unat_of_nat_eq)
+  then show \<open>1 \<le> (word64_of_nat n :: 64 word)\<close> using assms(1) by (simp add: word_le_nat_alt)
+  then have m: \<open>unat (word64_of_nat n - 1 :: 64 word) = n - 1\<close> using n by (simp add: unat_sub)
+  then show \<open>word64_of_nat i \<le> (word64_of_nat n - 1 :: 64 word)\<close> using n assms(1) by (simp add: word_le_nat_alt)
+  then show \<open>unat (word64_of_nat n - 1 - word64_of_nat i) = n - 1 - i\<close> using n m by (simp add: unat_sub)
+qed
+
+definition buckets_contract :: \<open>Problem \<Rightarrow> ('s, 64 word list \<times> 64 word list \<times> tnil, 'abort) function_contract\<close> where
+  \<open>buckets_contract p \<equiv>
+     let pre = can_alloc_reference \<star> \<langle>wf_problem p \<and> sizes_ok p\<rangle> in
+     let post = \<lambda>_. can_alloc_reference in
+     make_function_contract pre post\<close>
+
+lemma buckets_spec:
+  shows \<open>\<Gamma>; buckets p rs \<Turnstile>\<^sub>F buckets_contract p\<close>
+  apply (crush_boot f: buckets_def contract: buckets_contract_def)
+  apply (crush_base simp add: sizes_ok_def)
+  subgoal for bh_ref bn_ref
+    apply (ucincl_discharge\<open>
+      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>g' v. bh_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. bn_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v)\<close>
+        and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
+        and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+        and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_raw_for_loop_framedI'\<close>)
+    apply (crush_base specs add: get_or_spec set_at_any_spec contracts add: get_or_contract_def set_at_any_contract_def
+        simp add: unat_of_nat_eq less_Suc_eq sizes_ok_def)
+    apply (auto simp add: rev_idx_lt)
+    done
+  done
+
+definition log_bucket_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
+      ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
+      ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
+      ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
+      64 word \<Rightarrow> (nat \<times> nat) set \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+  \<open>log_bucket_contract p rep g rs xs gx xv ys gy yv ls gl lv i E \<equiv>
+     let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> xs \<mapsto>\<langle>\<top>\<rangle> gx\<down>xv \<star> ys \<mapsto>\<langle>\<top>\<rangle> gy\<down>yv \<star> ls \<mapsto>\<langle>\<top>\<rangle> gl\<down>lv \<star>
+        \<langle>cc_inv p E rs \<and> unat i < length (Problem_terms p) \<and> Term_args (Problem_terms p ! unat i) \<noteq> []\<rangle> in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p E rs'\<rangle>) \<star>
+        (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) in
+     make_function_contract pre post\<close>
+
+lemma log_bucket_spec:
+  shows \<open>\<Gamma>; log_bucket p bh bn rep xs ys ls i \<Turnstile>\<^sub>F log_bucket_contract p rep g rs xs gx xv ys gy yv ls gl lv i E\<close>
+  apply (crush_boot f: log_bucket_def contract: log_bucket_contract_def)
+  apply (crush_base specs add: get_or_spec contracts add: get_or_contract_def simp add: cc_inv_def sizes_ok_def)
+  subgoal for changed_ref jv j_ref
+    apply (ucincl_discharge\<open>
+      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c) \<star> (\<Squnion>gj j. j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j) \<star>
+        (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p E rs'\<rangle>) \<star>
+        (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v)\<close>
+        and BRK=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c) \<star> (\<Squnion>gj j. j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j) \<star>
+        (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p E rs'\<rangle>) \<star>
+        (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v)\<close>
+        and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+        and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_raw_for_loop_framedI'\<close>)
+    apply (crush_base specs add: get_or_spec congruent_spec merge_spec
+        contracts add: get_or_contract_def congruent_contract_def merge_contract_def
+        inline: vec_push_def simp add: unat_of_nat_eq less_Suc_eq cc_inv_length)
+    apply (auto simp add: cc_inv_length not_le word_less_nat_alt unat_of_nat_lt63 intro: cc_inv_merge args_len_lt unat_lt_len
+        dest: wf_args_lt_length)
+    apply (auto simp add: cc_inv_def sizes_ok_def)
+    done
+  apply (auto simp add: rep_ok_def intro!: wf_args_lt_length)
+  done
+
 definition log_moved_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
       ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
       ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
@@ -250,7 +323,7 @@ definition log_moved_contract :: \<open>Problem \<Rightarrow> bool list \<Righta
      make_function_contract pre post\<close>
 
 lemma log_moved_spec:
-  shows \<open>\<Gamma>; log_moved p perm st rows rep xs ys ls \<Turnstile>\<^sub>F log_moved_contract p rows rep g rs xs gx xv ys gy yv ls gl lv E\<close>
+  shows \<open>\<Gamma>; log_moved p perm st bh bn rows rep xs ys ls \<Turnstile>\<^sub>F log_moved_contract p rows rep g rs xs gx xv ys gy yv ls gl lv E\<close>
   apply (crush_boot f: log_moved_def contract: log_moved_contract_def)
   apply (crush_base simp add: cc_inv_def sizes_ok_def)
   subgoal for changed_ref
@@ -262,7 +335,7 @@ lemma log_moved_spec:
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_raw_for_loop_framedI'\<close>)
-    apply (crush_base specs add: log_col_spec contracts add: log_col_contract_def
+    apply (crush_base specs add: log_col_spec log_bucket_spec contracts add: log_col_contract_def log_bucket_contract_def
         simp add: unat_of_nat_eq less_Suc_eq cc_inv_length)
     apply (auto simp add: cc_inv_def sizes_ok_def)
     done
@@ -306,8 +379,8 @@ definition round_moved_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 
 lemma round_moved_spec:
   shows \<open>\<Gamma>; round_moved p perm st old rep xs ys ls \<Turnstile>\<^sub>F round_moved_contract p old rep g rs xs ys ls E\<close>
   apply (crush_boot f: round_moved_def contract: round_moved_contract_def)
-  apply (crush_base specs add: moved_rows_spec copy_into_spec[where n=\<open>length (Problem_terms p)\<close>] log_moved_spec
-      contracts add: moved_rows_contract_def copy_into_contract_def log_moved_contract_def
+  apply (crush_base specs add: moved_rows_spec copy_into_spec[where n=\<open>length (Problem_terms p)\<close>] buckets_spec log_moved_spec
+      contracts add: moved_rows_contract_def copy_into_contract_def buckets_contract_def log_moved_contract_def
       simp add: cc_inv_length)
   done
 

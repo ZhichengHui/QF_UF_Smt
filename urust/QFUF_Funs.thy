@@ -433,6 +433,12 @@ definition "merge_log" :: \<open>Problem \<Rightarrow> (bool list) \<Rightarrow>
     (* xs, * ys, * ls)
   \<rbrakk>\<close>
 
+(* Rust: cap *)
+definition "cap" :: \<open>('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>cap \<equiv> FunctionBody \<lbrakk>
+    9223372036854775808_usize
+  \<rbrakk>\<close>
+
 (* Rust: get_or *)
 definition "get_or" :: \<open>((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>get_or \<equiv> \<lambda>v i d. FunctionBody \<lbrakk>
@@ -451,47 +457,59 @@ definition "set_at" :: \<open>(('addr, 'gv, (64 word) list) Global_Store.ref) \<
     }
   \<rbrakk>\<close>
 
-(* Rust: bfs_round *)
-definition "bfs_round" :: \<open>(64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>bfs_round \<equiv> \<lambda>n xs ys pv pe. FunctionBody \<lbrakk>
-    let mut changed = false;
+(* Rust: log_adj *)
+definition "log_adj" :: \<open>(64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, (((64 word) list) \<times> ((64 word) list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>log_adj \<equiv> \<lambda>n xs ys. FunctionBody \<lbrakk>
+    let mut ah = { let init_1 = vec_from_elem(cap(), n); \<llangle>init_1 :: (64 word) list\<rrangle> };
+    let mut an = { let init_3 = { let res_2 = []; \<llangle>res_2 :: (64 word) list\<rrangle> }; \<llangle>init_3 :: (64 word) list\<rrangle> };
     for i in 0_usize .. len(xs) {
-      let x = xs[i];
-      let y = get_or(ys, i, n);
-      if (x < len(* pv)) && (y < len(* pv)) {
-        if (((* pv)[x]) < n) && (((* pv)[y]) == n) {
-          * (pv[y]) = x;
-          set_at(pe, y, i);
-          * changed = true;
-        } else {
-          if (((* pv)[y]) < n) && (((* pv)[x]) == n) {
-            * (pv[x]) = y;
-            set_at(pe, x, i);
-            * changed = true;
-          }
-        }
-      }
+      let s = len(* an);
+      vec_push(an, get_or(* ah, xs[i], cap()));
+      set_at(ah, xs[i], s);
+      let s1 = len(* an);
+      vec_push(an, get_or(* ah, get_or(ys, i, n), cap()));
+      set_at(ah, get_or(ys, i, n), s1);
     };
-    * changed
+    (* ah, * an)
   \<rbrakk>\<close>
 
-(* Rust: bfs_rounds *)
-definition "bfs_rounds" :: \<open>(64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>bfs_rounds \<equiv> \<lambda>n xs ys b pv pe. FunctionBody \<lbrakk>
-    for v_round in 0_usize .. n {
-      if (get_or(* pv, b, n) < n) || (!bfs_round(n, xs, ys, pv, pe)) {
-        return;
-      }
+(* Rust: bfs_visit *)
+definition "bfs_visit" :: \<open>(64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>bfs_visit \<equiv> \<lambda>n xs ys an x s0 pv pe q. FunctionBody \<lbrakk>
+    let mut s = s0;
+    for v_k in 0_usize .. len(an) {
+      if (* s) >= len(an) {
+        break;
+      };
+      let e = (* s) / 2_usize;
+      let y = if ((* s) % 2_usize) == 0_usize {
+        get_or(ys, e, n)
+      } else {
+        get_or(xs, e, n)
+      };
+      if (y < len(* pv)) && (((* pv)[y]) == n) {
+        * (pv[y]) = x;
+        set_at(pe, y, e);
+        vec_push(q, y);
+      };
+      * s = an[* s];
     }
   \<rbrakk>\<close>
 
 (* Rust: bfs *)
-definition "bfs" :: \<open>(64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, (((64 word) list) \<times> ((64 word) list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>bfs \<equiv> \<lambda>n xs ys a b. FunctionBody \<lbrakk>
+definition "bfs" :: \<open>(64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, (((64 word) list) \<times> ((64 word) list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>bfs \<equiv> \<lambda>n xs ys ah an a b. FunctionBody \<lbrakk>
     let mut pv = { let init_1 = vec_from_elem(n, n); \<llangle>init_1 :: (64 word) list\<rrangle> };
     let mut pe = { let init_2 = vec_from_elem(0_usize, n); \<llangle>init_2 :: (64 word) list\<rrangle> };
+    let mut q = { let init_4 = { let res_3 = []; \<llangle>res_3 :: (64 word) list\<rrangle> }; \<llangle>init_4 :: (64 word) list\<rrangle> };
     set_at(pv, a, a);
-    bfs_rounds(n, xs, ys, b, pv, pe);
+    vec_push(q, a);
+    for i in 0_usize .. n {
+      if (i >= len(* q)) || (get_or(* pv, b, n) < n) {
+        break;
+      };
+      \<epsilon>\<open>funcall9 bfs_visit \<lbrakk>n\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>an\<rbrakk> \<lbrakk>(* q)[i]\<rbrakk> \<lbrakk>get_or(ah, (* q)[i], cap())\<rbrakk> \<lbrakk>pv\<rbrakk> \<lbrakk>pe\<rbrakk> \<lbrakk>q\<rbrakk>\<close>;
+    };
     (* pv, * pe)
   \<rbrakk>\<close>
 
@@ -531,6 +549,8 @@ definition "walk" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Rightarrow>
           }
         };
         * x = get_or(pv, * x, n);
+      } else {
+        break;
       }
     }
   \<rbrakk>\<close>
@@ -544,15 +564,18 @@ definition "path_explain_log" :: \<open>Problem \<Rightarrow> ((64 word) list) \
     let mut used = { let init_3 = vec_from_elem(false, len(xs)); \<llangle>init_3 :: bool list\<rrangle> };
     let mut qa = { let init_5 = { let res_4 = []; \<llangle>res_4 :: (64 word) list\<rrangle> }; \<llangle>init_5 :: (64 word) list\<rrangle> };
     let mut qb = { let init_7 = { let res_6 = []; \<llangle>res_6 :: (64 word) list\<rrangle> }; \<llangle>init_7 :: (64 word) list\<rrangle> };
+    let destr_8 = log_adj(n, xs, ys);
+    let ah = destr_8.0;
+    let an = destr_8.1;
     vec_push(qa, p.Problem_atoms[k].Atom_lhs);
     vec_push(qb, p.Problem_atoms[k].Atom_rhs);
     for i in 0_usize .. (n + n) + 1_usize {
       let a = get_or(* qa, i, n);
       let b = get_or(* qb, i, n);
       if ((a < n) && (b < n)) && (a != b) {
-        let destr_8 = bfs(n, xs, ys, a, b);
-        let pv = destr_8.0;
-        let pe = destr_8.1;
+        let destr_9 = bfs(n, xs, ys, ah, an, a, b);
+        let pv = destr_9.0;
+        let pe = destr_9.1;
         \<epsilon>\<open>funcall13 walk \<lbrakk>p\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk> \<lbrakk>pv\<rbrakk> \<lbrakk>pe\<rbrakk> \<lbrakk>a\<rbrakk> \<lbrakk>b\<rbrakk> \<lbrakk>e\<rbrakk> \<lbrakk>rows\<rbrakk> \<lbrakk>used\<rbrakk> \<lbrakk>qa\<rbrakk> \<lbrakk>qb\<rbrakk>\<close>;
       }
     };
@@ -731,12 +754,6 @@ definition "root_log" :: \<open>Problem \<Rightarrow> ('s, (((64 word) list) \<t
     let ys = destr_2.1;
     let ls = destr_2.2;
     (* rep, xs, ys, ls)
-  \<rbrakk>\<close>
-
-(* Rust: cap *)
-definition "cap" :: \<open>('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>cap \<equiv> FunctionBody \<lbrakk>
-    9223372036854775808_usize
   \<rbrakk>\<close>
 
 (* Rust: sat_add *)
@@ -1262,6 +1279,45 @@ definition "copy_into" :: \<open>(('addr, 'gv, (64 word) list) Global_Store.ref)
     }
   \<rbrakk>\<close>
 
+(* Rust: buckets *)
+definition "buckets" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, (((64 word) list) \<times> ((64 word) list) \<times> tnil), 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>buckets \<equiv> \<lambda>p rep. FunctionBody \<lbrakk>
+    let n = len(p.Problem_terms);
+    let mut bh = { let init_1 = vec_from_elem(n, n); \<llangle>init_1 :: (64 word) list\<rrangle> };
+    let mut bn = { let init_2 = vec_from_elem(n, n); \<llangle>init_2 :: (64 word) list\<rrangle> };
+    for k in 0_usize .. n {
+      let i = (n - 1_usize) - k;
+      if len(p.Problem_terms[i].Term_args) > 0_usize {
+        let c = get_or(rep, p.Problem_terms[i].Term_args[0_usize], n);
+        set_at(bn, i, get_or(* bh, c, n));
+        set_at(bh, c, i);
+      }
+    };
+    (* bh, * bn)
+  \<rbrakk>\<close>
+
+(* Rust: log_bucket *)
+definition "log_bucket" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>log_bucket \<equiv> \<lambda>p bh bn rep xs ys ls i. FunctionBody \<lbrakk>
+    let n = len(p.Problem_terms);
+    let mut changed = false;
+    let mut j = get_or(bh, (* rep)[p.Problem_terms[i].Term_args[0_usize]], n);
+    for v_k in 0_usize .. n {
+      if (* j) >= n {
+        break;
+      };
+      if (((* rep)[i]) != ((* rep)[* j])) && congruent(p, * rep, i, * j) {
+        merge(rep, i, * j);
+        vec_push(xs, i);
+        vec_push(ys, * j);
+        vec_push(ls, len(p.Problem_atoms));
+        * changed = true;
+      };
+      * j = get_or(bn, * j, n);
+    };
+    * changed
+  \<rbrakk>\<close>
+
 (* Rust: log_col *)
 definition "log_col" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>log_col \<equiv> \<lambda>p perm start rep xs ys ls i. FunctionBody \<lbrakk>
@@ -1281,12 +1337,20 @@ definition "log_col" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Rightarr
   \<rbrakk>\<close>
 
 (* Rust: log_moved *)
-definition "log_moved" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (bool list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>log_moved \<equiv> \<lambda>p perm start rows rep xs ys ls. FunctionBody \<lbrakk>
+definition "log_moved" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (bool list) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> (('addr, 'gv, (64 word) list) Global_Store.ref) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>log_moved \<equiv> \<lambda>p perm start bh bn rows rep xs ys ls. FunctionBody \<lbrakk>
     let mut changed = false;
     for i in 0_usize .. len(p.Problem_terms) {
-      if (rows[i]) && log_col(p, perm, start, rep, xs, ys, ls, i) {
-        * changed = true;
+      if rows[i] {
+        if len(p.Problem_terms[i].Term_args) > 0_usize {
+          if log_bucket(p, bh, bn, rep, xs, ys, ls, i) {
+            * changed = true;
+          }
+        } else {
+          if log_col(p, perm, start, rep, xs, ys, ls, i) {
+            * changed = true;
+          }
+        }
       }
     };
     * changed
@@ -1297,7 +1361,10 @@ definition "round_moved" :: \<open>Problem \<Rightarrow> ((64 word) list) \<Righ
   \<open>round_moved \<equiv> \<lambda>p perm start old rep xs ys ls. FunctionBody \<lbrakk>
     let rows = moved_rows(p, * old, * rep);
     copy_into(old, * rep);
-    log_moved(p, perm, start, rows, rep, xs, ys, ls)
+    let destr_1 = buckets(p, * rep);
+    let bh = destr_1.0;
+    let bn = destr_1.1;
+    \<epsilon>\<open>funcall10 log_moved \<lbrakk>p\<rbrakk> \<lbrakk>perm\<rbrakk> \<lbrakk>start\<rbrakk> \<lbrakk>bh\<rbrakk> \<lbrakk>bn\<rbrakk> \<lbrakk>rows\<rbrakk> \<lbrakk>rep\<rbrakk> \<lbrakk>xs\<rbrakk> \<lbrakk>ys\<rbrakk> \<lbrakk>ls\<rbrakk>\<close>
   \<rbrakk>\<close>
 
 (* Rust: close_moved *)

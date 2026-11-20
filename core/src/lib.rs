@@ -1274,44 +1274,59 @@ fn merge_log(p: &Problem, t: &[bool]) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
     (xs, ys, ls)
 }
 
-/// One round of a breadth-first search over the `n` terms along the edges `(xs[i], ys[i])`: a
-/// reached term `y` has a predecessor `pv[y] < n` reached before it, and the index `pe[y]` of the
-/// edge. Returns whether it reached a new term.
-fn bfs_round(n: usize, xs: &[usize], ys: &[usize], pv: &mut Vec<usize>, pe: &mut Vec<usize>) -> bool {
-    let mut changed = false;
+/// The edges `(xs[i], ys[i])` as adjacency lists over the `n` terms: slot `2i` is edge `i` seen
+/// from `xs[i]`, slot `2i + 1` from `ys[i]`; the slots of term `x` are `ah[x]`, `an[ah[x]]`, ...
+/// up to the first index `>= an.len()`.
+fn log_adj(n: usize, xs: &[usize], ys: &[usize]) -> (Vec<usize>, Vec<usize>) {
+    let mut ah = vec![cap(); n];
+    let mut an = Vec::new();
     for i in 0..xs.len() {
-        let x = xs[i];
-        let y = get_or(ys, i, n);
-        if x < pv.len() && y < pv.len() {
-            if pv[x] < n && pv[y] == n {
-                pv[y] = x;
-                set_at(pe, y, i);
-                changed = true;
-            } else if pv[y] < n && pv[x] == n {
-                pv[x] = y;
-                set_at(pe, x, i);
-                changed = true;
-            }
-        }
+        let s = an.len();
+        an.push(get_or(&ah, xs[i], cap()));
+        set_at(&mut ah, xs[i], s);
+        let s1 = an.len();
+        an.push(get_or(&ah, get_or(ys, i, n), cap()));
+        set_at(&mut ah, get_or(ys, i, n), s1);
     }
-    changed
+    (ah, an)
 }
 
-/// `bfs_round` until term `b` is reached or a round reaches nothing (at most `n` rounds).
-fn bfs_rounds(n: usize, xs: &[usize], ys: &[usize], b: usize, pv: &mut Vec<usize>, pe: &mut Vec<usize>) {
-    for _round in 0..n {
-        if get_or(pv, b, n) < n || !bfs_round(n, xs, ys, pv, pe) {
-            return;
+/// Visits the slots of `log_adj` from slot `s0` on (those of term `x`): each other end `y` of an
+/// edge `e` not reached yet gets the predecessor `pv[y] = x` and the edge `pe[y] = e`, and is
+/// appended to the queue `q`.
+fn bfs_visit(n: usize, xs: &[usize], ys: &[usize], an: &[usize], x: usize, s0: usize, pv: &mut Vec<usize>,
+             pe: &mut Vec<usize>, q: &mut Vec<usize>) {
+    let mut s = s0;
+    for _k in 0..an.len() {
+        if s >= an.len() {
+            break;
         }
+        let e = s / 2;
+        let y = if s % 2 == 0 { get_or(ys, e, n) } else { get_or(xs, e, n) };
+        if y < pv.len() && pv[y] == n {
+            pv[y] = x;
+            set_at(pe, y, e);
+            q.push(y);
+        }
+        s = an[s];
     }
 }
 
-/// Breadth-first search from term `a` towards term `b` (see `bfs_round`); returns `pv` and `pe`.
-fn bfs(n: usize, xs: &[usize], ys: &[usize], a: usize, b: usize) -> (Vec<usize>, Vec<usize>) {
+/// Breadth-first search over the `n` terms along the edges `(xs[i], ys[i])` (adjacency lists `ah`,
+/// `an` of `log_adj`) from term `a` until term `b` is reached: a reached term `y` has a predecessor
+/// `pv[y] < n` reached before it, and the index `pe[y]` of the edge; returns `pv` and `pe`.
+fn bfs(n: usize, xs: &[usize], ys: &[usize], ah: &[usize], an: &[usize], a: usize, b: usize) -> (Vec<usize>, Vec<usize>) {
     let mut pv = vec![n; n];
     let mut pe = vec![0; n];
+    let mut q = Vec::new();
     set_at(&mut pv, a, a);
-    bfs_rounds(n, xs, ys, b, &mut pv, &mut pe);
+    q.push(a);
+    for i in 0..n {
+        if i >= q.len() || get_or(&pv, b, n) < n {
+            break;
+        }
+        bfs_visit(n, xs, ys, an, q[i], get_or(ah, q[i], cap()), &mut pv, &mut pe, &mut q);
+    }
     (pv, pe)
 }
 
@@ -1352,6 +1367,8 @@ fn walk(p: &Problem, xs: &[usize], ys: &[usize], ls: &[usize], pv: &[usize], pe:
                 }
             }
             x = get_or(pv, x, n);
+        } else {
+            break;
         }
     }
 }
@@ -1367,13 +1384,14 @@ fn path_explain_log(p: &Problem, xs: &[usize], ys: &[usize], ls: &[usize], k: us
     let mut used = vec![false; xs.len()];
     let mut qa = Vec::new();
     let mut qb = Vec::new();
+    let (ah, an) = log_adj(n, xs, ys);
     qa.push(p.atoms[k].lhs);
     qb.push(p.atoms[k].rhs);
     for i in 0..n + n + 1 {
         let a = get_or(&qa, i, n);
         let b = get_or(&qb, i, n);
         if a < n && b < n && a != b {
-            let (pv, pe) = bfs(n, xs, ys, a, b);
+            let (pv, pe) = bfs(n, xs, ys, &ah, &an, a, b);
             walk(p, xs, ys, ls, &pv, &pe, a, b, &mut e, &mut rows, &mut used, &mut qa, &mut qb);
         }
     }
@@ -1615,13 +1633,66 @@ fn log_col(p: &Problem, perm: &[usize], start: &[usize], rep: &mut Vec<usize>, x
     changed
 }
 
-/// `log_col` on every term `i` with `rows[i]`; returns whether it merged anything.
-fn log_moved(p: &Problem, perm: &[usize], start: &[usize], rows: &[bool], rep: &mut Vec<usize>, xs: &mut Vec<usize>,
-             ys: &mut Vec<usize>, ls: &mut Vec<usize>) -> bool {
+/// The terms with arguments grouped by the class in `rep` of their first argument: the terms whose
+/// first argument has representative `c` are `bh[c]`, `bn[bh[c]]`, `bn[bn[bh[c]]]`, ... up to the
+/// first index `>= n` (`n` the number of terms), in increasing order. Two congruent terms have first arguments of one
+/// class, so `log_bucket` looks only at those; the lists are not needed for soundness, which rests
+/// on `congruent` alone.
+fn buckets(p: &Problem, rep: &[usize]) -> (Vec<usize>, Vec<usize>) {
+    let n = p.terms.len();
+    let mut bh = vec![n; n];
+    let mut bn = vec![n; n];
+    for k in 0..n {
+        let i = n - 1 - k;
+        if p.terms[i].args.len() > 0 {
+            let c = get_or(rep, p.terms[i].args[0], n);
+            set_at(&mut bn, i, get_or(&bh, c, n));
+            set_at(&mut bh, c, i);
+        }
+    }
+    (bh, bn)
+}
+
+/// `log_col` on the terms of the list of `buckets` `bh`, `bn` of the class of the first argument of
+/// term `i`, which has arguments.
+fn log_bucket(p: &Problem, bh: &[usize], bn: &[usize], rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>,
+              ls: &mut Vec<usize>, i: usize) -> bool {
+    let n = p.terms.len();
+    let mut changed = false;
+    let mut j = get_or(bh, rep[p.terms[i].args[0]], n);
+    for _k in 0..n {
+        if j >= n {
+            break;
+        }
+        if rep[i] != rep[j] && congruent(p, rep, i, j) {
+            merge(rep, i, j);
+            xs.push(i);
+            ys.push(j);
+            ls.push(p.atoms.len());
+            changed = true;
+        }
+        j = get_or(bn, j, n);
+    }
+    changed
+}
+
+/// On every term `i` with `rows[i]`: `log_bucket` with the lists `bh`, `bn` of `buckets` if it has
+/// arguments, `log_col` otherwise; returns whether it merged anything. Each list holds the terms
+/// whose first argument had one class when `buckets` ran; a term whose first argument changed its
+/// class since has a row in the next round, so a round that merges nothing still leaves no two
+/// congruent terms apart.
+fn log_moved(p: &Problem, perm: &[usize], start: &[usize], bh: &[usize], bn: &[usize], rows: &[bool], rep: &mut Vec<usize>,
+             xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) -> bool {
     let mut changed = false;
     for i in 0..p.terms.len() {
-        if rows[i] && log_col(p, perm, start, rep, xs, ys, ls, i) {
-            changed = true;
+        if rows[i] {
+            if p.terms[i].args.len() > 0 {
+                if log_bucket(p, bh, bn, rep, xs, ys, ls, i) {
+                    changed = true;
+                }
+            } else if log_col(p, perm, start, rep, xs, ys, ls, i) {
+                changed = true;
+            }
         }
     }
     changed
@@ -1637,12 +1708,13 @@ fn copy_into(old: &mut Vec<usize>, rep: &[usize]) {
 }
 
 /// One round of the incremental closure: `log_moved` on the terms with an argument whose
-/// representative changed since `old`, after copying `rep` into `old`; returns whether it merged
-/// anything.
+/// representative changed since `old`, after copying `rep` into `old`, with the `buckets` of
+/// `rep`; returns whether it merged anything.
 fn round_moved(p: &Problem, perm: &[usize], start: &[usize], old: &mut Vec<usize>, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) -> bool {
     let rows = moved_rows(p, old, rep);
     copy_into(old, rep);
-    log_moved(p, perm, start, &rows, rep, xs, ys, ls)
+    let (bh, bn) = buckets(p, rep);
+    log_moved(p, perm, start, &bh, &bn, &rows, rep, xs, ys, ls)
 }
 
 /// Rounds of `round_moved` until one merges nothing (at most `n + 1` rounds). If `old` was

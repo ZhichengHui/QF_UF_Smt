@@ -177,6 +177,20 @@ lemma set_at_spec:
   apply (auto intro: unat_lt_len)
   done
 
+definition set_at_any_contract :: \<open>('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow>
+      ('s, unit, 'abort) function_contract\<close> where
+  \<open>set_at_any_contract v i x \<equiv>
+     let pre = can_alloc_reference \<star> (\<Squnion>g vs. v \<mapsto>\<langle>\<top>\<rangle> g\<down>vs) in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g vs. v \<mapsto>\<langle>\<top>\<rangle> g\<down>vs) in
+     make_function_contract pre post\<close>
+
+lemma set_at_any_spec:
+  shows \<open>\<Gamma>; set_at v i x \<Turnstile>\<^sub>F set_at_any_contract v i x\<close>
+  apply (crush_boot f: set_at_def contract: set_at_any_contract_def)
+  apply (crush_base simp add: word_less_nat_alt)
+  apply (auto dest: unat_lt_len)
+  done
+
 definition set_true_contract :: \<open>('addr, 'gv, bool list) Global_Store.ref \<Rightarrow> nat \<Rightarrow>
       64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
   \<open>set_true_contract v n i \<equiv>
@@ -329,47 +343,53 @@ lemma merge_log_spec:
 
 subsection \<open>The search for a path in the merge log\<close>
 
-definition bfs_round_contract :: \<open>64 word \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
-  \<open>bfs_round_contract n xs ys pv pe \<equiv>
-     let pre = can_alloc_reference \<star> (\<Squnion>g' v'. pv \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. pe \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' v'. pv \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. pe \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') in
+definition log_adj_contract :: \<open>64 word \<Rightarrow> ('s, 64 word list \<times> 64 word list \<times> tnil, 'abort) function_contract\<close> where
+  \<open>log_adj_contract n \<equiv>
+     let pre = can_alloc_reference in
+     let post = \<lambda>_. can_alloc_reference in
      make_function_contract pre post\<close>
 
-lemma bfs_round_spec:
-  shows \<open>\<Gamma>; bfs_round n xs ys pv pe \<Turnstile>\<^sub>F bfs_round_contract n xs ys pv pe\<close>
-  apply (crush_boot f: bfs_round_def contract: bfs_round_contract_def)
-  apply crush_base
-  subgoal for g1 v1 g2 v2 changed_ref
+lemma log_adj_spec:
+  shows \<open>\<Gamma>; log_adj n xs ys \<Turnstile>\<^sub>F log_adj_contract n\<close>
+  apply (crush_boot f: log_adj_def contract: log_adj_contract_def)
+  apply (crush_base inline: cap_def)
+  subgoal for ah_ref an_ref
     apply (ucincl_discharge\<open>
-      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c) \<star> (\<Squnion>g' v'. pv \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. pe \<mapsto>\<langle>\<top>\<rangle> g'\<down>v')\<close>
+      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>g' v'. ah_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. an_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v')\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_raw_for_loop_framedI'\<close>)
-    apply (crush_base specs add: get_or_spec set_at_spec contracts add: get_or_contract_def set_at_contract_def
-        simp add: word_less_nat_alt)
+    apply (crush_base specs add: get_or_spec set_at_any_spec contracts add: get_or_contract_def set_at_any_contract_def
+        inline: vec_push_def cap_def simp add: word_less_nat_alt)
     apply (auto intro: unat_lt_len unat_idx_lt)
     done
   done
 
-definition bfs_rounds_contract :: \<open>64 word \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow> 64 word \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow>
-      ('s, unit, 'abort) function_contract\<close> where
-  \<open>bfs_rounds_contract n xs ys b pv pe \<equiv>
-     let pre = can_alloc_reference \<star> (\<Squnion>g' v'. pv \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. pe \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' v'. pv \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. pe \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') in
+definition bfs_visit_contract :: \<open>('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow>
+      ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
+  \<open>bfs_visit_contract pv pe q \<equiv>
+     let pre = can_alloc_reference \<star> (\<Squnion>g' v'. pv \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. pe \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. q \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' v'. pv \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. pe \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. q \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') in
      make_function_contract pre post\<close>
 
-lemma bfs_rounds_spec:
-  shows \<open>\<Gamma>; bfs_rounds n xs ys b pv pe \<Turnstile>\<^sub>F bfs_rounds_contract n xs ys b pv pe\<close>
-  apply (crush_boot f: bfs_rounds_def contract: bfs_rounds_contract_def)
+lemma bfs_visit_spec:
+  shows \<open>\<Gamma>; bfs_visit n xs ys an x s0 pv pe q \<Turnstile>\<^sub>F bfs_visit_contract pv pe q\<close>
+  apply (crush_boot f: bfs_visit_def contract: bfs_visit_contract_def)
   apply crush_base
-  apply (ucincl_discharge\<open>
-    rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>g' v'. pv \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. pe \<mapsto>\<langle>\<top>\<rangle> g'\<down>v')\<close>
-      and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
-      and \<tau>=\<open>\<lambda>_. can_alloc_reference \<star> (\<Squnion>g' v'. pv \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. pe \<mapsto>\<langle>\<top>\<rangle> g'\<down>v')\<close>
-      and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
-    in wp_raw_for_loop_framedI'\<close>)
-  apply (crush_base specs add: get_or_spec bfs_round_spec contracts add: get_or_contract_def bfs_round_contract_def)
+  subgoal for g1 v1 g2 v2 g3 v3 s_ref
+    apply (ucincl_discharge\<open>
+      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gs s. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>s) \<star> (\<Squnion>g' v'. pv \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star>
+          (\<Squnion>g' v'. pe \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. q \<mapsto>\<langle>\<top>\<rangle> g'\<down>v')\<close>
+        and BRK=\<open>\<lambda>_ _. can_alloc_reference \<star> (\<Squnion>gs s. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>s) \<star> (\<Squnion>g' v'. pv \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star>
+          (\<Squnion>g' v'. pe \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. q \<mapsto>\<langle>\<top>\<rangle> g'\<down>v')\<close>
+        and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+        and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_raw_for_loop_framedI'\<close>)
+    apply (crush_base specs add: get_or_spec set_at_any_spec contracts add: get_or_contract_def set_at_any_contract_def
+        inline: vec_push_def simp add: word_less_nat_alt)
+    apply (auto simp add: not_le word_less_nat_alt intro: unat_lt_len unat_idx_lt)
+    done
   done
 
 definition bfs_contract :: \<open>64 word \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow>
@@ -380,10 +400,22 @@ definition bfs_contract :: \<open>64 word \<Rightarrow> 64 word list \<Rightarro
      make_function_contract pre post\<close>
 
 lemma bfs_spec:
-  shows \<open>\<Gamma>; bfs n xs ys a b \<Turnstile>\<^sub>F bfs_contract n xs ys a b\<close>
+  shows \<open>\<Gamma>; bfs n xs ys ah an a b \<Turnstile>\<^sub>F bfs_contract n xs ys a b\<close>
   apply (crush_boot f: bfs_def contract: bfs_contract_def)
-  apply (crush_base specs add: set_at_spec[where n=\<open>unat n\<close>] bfs_rounds_spec
-      contracts add: set_at_contract_def bfs_rounds_contract_def)
+  apply (crush_base specs add: set_at_any_spec contracts add: set_at_any_contract_def inline: vec_push_def)
+  subgoal for pv_ref pe_ref q_ref
+    apply (ucincl_discharge\<open>
+      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>g' v'. pv_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. pe_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star>
+          (\<Squnion>g' v'. q_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v')\<close>
+        and BRK=\<open>\<lambda>_ _. can_alloc_reference \<star> (\<Squnion>g' v'. pv_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. pe_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star>
+          (\<Squnion>g' v'. q_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v')\<close>
+        and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+        and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_raw_for_loop_framedI'\<close>)
+    apply (crush_base specs add: get_or_spec bfs_visit_spec contracts add: get_or_contract_def bfs_visit_contract_def
+        inline: cap_def simp add: word_less_nat_alt)
+    apply (auto simp add: not_le word_less_nat_alt intro: unat_lt_len unat_idx_lt)
+    done
   done
 
 definition push_args_contract :: \<open>Problem \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
@@ -423,7 +455,8 @@ lemma walk_spec:
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gx x. x_ref \<mapsto>\<langle>\<top>\<rangle> gx\<down>x) \<star> (\<Squnion>g' v'. e \<mapsto>\<langle>\<top>\<rangle> g'\<down>v' \<star> \<langle>length v' = ne\<rangle>) \<star> (\<Squnion>g' v'. rows \<mapsto>\<langle>\<top>\<rangle> g'\<down>v' \<star> \<langle>length v' = nr\<rangle>) \<star>
         (\<Squnion>g' v'. used \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. qa \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. qb \<mapsto>\<langle>\<top>\<rangle> g'\<down>v')\<close>
-        and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
+        and BRK=\<open>\<lambda>_ _. can_alloc_reference \<star> (\<Squnion>gx x. x_ref \<mapsto>\<langle>\<top>\<rangle> gx\<down>x) \<star> (\<Squnion>g' v'. e \<mapsto>\<langle>\<top>\<rangle> g'\<down>v' \<star> \<langle>length v' = ne\<rangle>) \<star> (\<Squnion>g' v'. rows \<mapsto>\<langle>\<top>\<rangle> g'\<down>v' \<star> \<langle>length v' = nr\<rangle>) \<star>
+        (\<Squnion>g' v'. used \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. qa \<mapsto>\<langle>\<top>\<rangle> g'\<down>v') \<star> (\<Squnion>g' v'. qb \<mapsto>\<langle>\<top>\<rangle> g'\<down>v')\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_raw_for_loop_framedI'\<close>)
@@ -455,7 +488,7 @@ definition path_explain_log_contract :: \<open>Problem \<Rightarrow> 64 word lis
 lemma path_explain_log_spec:
   shows \<open>\<Gamma>; path_explain_log p xs ys ls k \<Turnstile>\<^sub>F path_explain_log_contract p xs ys ls k\<close>
   apply (crush_boot f: path_explain_log_def contract: path_explain_log_contract_def)
-  apply (crush_base inline: vec_push_def simp add: sizes_ok_def unat_of_nat_lt63)
+  apply (crush_base specs add: log_adj_spec contracts add: log_adj_contract_def inline: vec_push_def simp add: sizes_ok_def unat_of_nat_lt63)
   subgoal for e_ref rows_ref used_ref qa_ref qb_ref
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> (\<Squnion>g' v. e_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_atoms p)\<rangle>) \<star>

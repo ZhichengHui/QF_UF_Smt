@@ -221,20 +221,6 @@ lemma clause_unit_at_spec:
   apply (auto simp add: clauses_ok_def clause_ok_def intro!: find_result_clause)
   done
 
-definition set_at_any_contract :: \<open>('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow>
-      ('s, unit, 'abort) function_contract\<close> where
-  \<open>set_at_any_contract v i x \<equiv>
-     let pre = can_alloc_reference \<star> (\<Squnion>g vs. v \<mapsto>\<langle>\<top>\<rangle> g\<down>vs) in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g vs. v \<mapsto>\<langle>\<top>\<rangle> g\<down>vs) in
-     make_function_contract pre post\<close>
-
-lemma set_at_any_spec:
-  shows \<open>\<Gamma>; set_at v i x \<Turnstile>\<^sub>F set_at_any_contract v i x\<close>
-  apply (crush_boot f: set_at_def contract: set_at_any_contract_def)
-  apply (crush_base simp add: word_less_nat_alt)
-  apply (auto dest: unat_lt_len)
-  done
-
 text \<open>\<^verbatim>\<open>units_at\<close> extends the assignment by atoms that it implies, and its result is the index
   of a clause that refutes it, or 0.\<close>
 definition units_at_contract :: \<open>Problem \<Rightarrow> Clause list \<Rightarrow> 64 word list \<Rightarrow>
