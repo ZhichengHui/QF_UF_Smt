@@ -114,11 +114,6 @@ proof -
     using assms(1) n unfolding atoms_inv_def rep_for_def by simp
 qed
 
-lemma cc_inv_merge_sym:
-  assumes \<open>cc_inv p E rs\<close> \<open>i < length rs\<close> \<open>j < length rs\<close> \<open>congruent_p p rs i j\<close>
-  shows \<open>cc_inv p E (merge_list rs j i)\<close>
-  using cc_inv_merge[OF assms(1,3,2)] congruent_p_sym[OF assms(4)] by simp
-
 lemma atoms_inv_lt:
   assumes \<open>atoms_inv p t k rs\<close> \<open>j < length (Problem_atoms p)\<close>
   shows \<open>unat (Atom_lhs (Problem_atoms p ! j)) < length rs\<close> \<open>unat (Atom_rhs (Problem_atoms p ! j)) < length rs\<close>

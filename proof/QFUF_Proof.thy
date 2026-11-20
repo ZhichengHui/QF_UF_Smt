@@ -279,6 +279,12 @@ lemma step_pass_len:
   \<open>ext_ok p t f t0 f0 \<Longrightarrow> length f = n \<Longrightarrow> length f0 = n\<close>
   using ext_ok_len by simp_all
 
+text \<open>The step lemmas of \<^const>\<open>cdcl\<close>, applied per goal by \<open>cdcl_rec_step_spec\<close>.\<close>
+lemmas cdcl_step_rules = step_branch_none step_branch_fuel step_leaf step_leaf_some
+  step_implied step_implied_fuel step_conflict wf_lit step_last_none step_last_fuel
+  step_last_pre last_idx_lt last_idx_one step_conflict_fits step_fallback_fuel rep_for_update rep_for_implied
+  step_pass_none step_pass_fuel step_pass_rep step_pass_len
+
 lemma cdcl_rec_step_spec:
   assumes \<open>\<And>l t f q lv rs ts wt rep xs ys ls d s. \<Gamma>; R p ix l t f q lv rs ts wt rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract k p l t f d rep\<close>
   shows \<open>\<Gamma>; cdcl_rec_step R p ix l t f q lv rs ts wt rep xs ys ls d s \<Turnstile>\<^sub>F cdcl_contract (Suc k) p l t f d rep\<close>
@@ -295,16 +301,8 @@ lemma cdcl_rec_step_spec:
       simp add: unat_of_nat_lt63 sizes_ok_def unat_of_nat_eq word64_eq_of_nat_iff)
   apply (auto simp add: word_less_nat_alt unat_of_nat_lt63 Option.is_none_def split: option.splits
       dest: find_result_le)
-  apply (all \<open>(solves \<open>rule step_branch_none step_branch_fuel step_leaf step_leaf_some
-        step_implied step_implied_fuel step_conflict wf_lit step_last_none step_last_fuel
-        step_last_pre last_idx_lt last_idx_one step_conflict_fits step_fallback_fuel rep_for_update rep_for_implied
-        step_pass_none step_pass_fuel step_pass_rep step_pass_len;
-        assumption\<close>)?\<close>)
-  apply (all \<open>(solves \<open>rotate_tac -1, erule notE, rule step_branch_none step_branch_fuel step_leaf step_leaf_some
-        step_implied step_implied_fuel step_conflict wf_lit step_last_none step_last_fuel
-        step_last_pre last_idx_lt last_idx_one step_conflict_fits step_fallback_fuel rep_for_update rep_for_implied
-        step_pass_none step_pass_fuel step_pass_rep step_pass_len;
-        assumption\<close>)?\<close>)
+  apply (all \<open>(solves \<open>rule cdcl_step_rules; assumption\<close>)?\<close>)
+  apply (all \<open>(solves \<open>rotate_tac -1, erule notE, rule cdcl_step_rules; assumption\<close>)?\<close>)
   done
 
 lemma cdcl_rec_spec:

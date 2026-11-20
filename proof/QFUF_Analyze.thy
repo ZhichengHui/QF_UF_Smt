@@ -35,15 +35,6 @@ lemma flags_le_refl:
   \<open>flags_le cp cn cp cn\<close>
   unfolding flags_le_def by simp
 
-lemma flags_le_trans:
-  \<open>flags_le cp cn cp' cn' \<Longrightarrow> flags_le cp' cn' cp'' cn'' \<Longrightarrow> flags_le cp cn cp'' cn''\<close>
-  unfolding flags_le_def by auto
-
-lemma lits_ok_mono:
-  assumes \<open>lits_ok p cp cn\<close> \<open>flags_le cp cn cp' cn'\<close>
-  shows \<open>lits_ok p cp' cn'\<close>
-  using assms unfolding lits_ok_def flags_le_def lits_true_def by metis
-
 lemma lit_true_vals:
   \<open>unat (Lit_atom l) < length (Problem_atoms p) \<Longrightarrow>
    lit_true I p l = (if Lit_pos l then atom_vals I p ! unat (Lit_atom l) else \<not> atom_vals I p ! unat (Lit_atom l))\<close>
@@ -149,18 +140,6 @@ proof -
         by (intro bexI[of _ \<open>make_Lit (word_of_nat k) False\<close>]) (auto simp add: lit_true_vals)
     qed
   qed
-qed
-
-lemma flag_lits_card:
-  \<open>card (flag_lits cp cn i) \<le> 2 * i\<close>
-proof -
-  have \<open>{make_Lit (word_of_nat j) True | j. j < i \<and> cp ! j} \<subseteq> (\<lambda>j. make_Lit (word_of_nat j) True) ` {..<i}\<close>
-       \<open>{make_Lit (word_of_nat j) False | j. j < i \<and> cn ! j} \<subseteq> (\<lambda>j. make_Lit (word_of_nat j) False) ` {..<i}\<close>
-    by auto
-  then have \<open>card {make_Lit (word_of_nat j) True | j. j < i \<and> cp ! j} \<le> i\<close>
-            \<open>card {make_Lit (word_of_nat j) False | j. j < i \<and> cn ! j} \<le> i\<close>
-    by (metis (no_types, lifting) card_image_le card_lessThan finite_lessThan le_trans card_mono finite_imageI)+
-  then show ?thesis unfolding flag_lits_def using card_Un_le by (metis (no_types, lifting) le_trans mult_2 add_mono)
 qed
 
 text \<open>The tautology on an atom of \<open>p\<close> holds in every model.\<close>

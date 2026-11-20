@@ -390,11 +390,9 @@ lemma watch_pass_spec:
       in wp_raw_for_loop_framedI'\<close>)
     apply (crush_base specs add: false_code_spec watch_visit_spec units_at_spec
         contracts add: trivial_contract_def watch_visit_contract_def units_at_contract_def)
-    subgoal by (meson ext_ok_none)
-    subgoal by (rule ext_ok_trans; assumption?) simp
-    subgoal by (drule ext_ok_len(2)) simp
-    subgoal by (drule ext_ok_len(1)) simp
-    subgoal by (erule idx_lt_len) (simp_all add: sizes_ok_def)
+    apply (all \<open>solves \<open>(rule ext_ok_trans; assumption?), simp_all\<close> | solves \<open>drule ext_ok_len(1), simp\<close> |
+        solves \<open>drule ext_ok_len(2), simp\<close> | solves \<open>erule idx_lt_len; simp add: sizes_ok_def\<close> |
+        solves \<open>meson ext_ok_none\<close>\<close>)
     done
   done
 
