@@ -1281,11 +1281,12 @@ fn log_adj(n: usize, xs: &[usize], ys: &[usize]) -> (Vec<usize>, Vec<usize>) {
     let mut ah = vec![cap(); n];
     let mut an = Vec::new();
     for i in 0..xs.len() {
-        let s = sat_add(i, i);
+        let s = an.len();
         an.push(get_or(&ah, xs[i], cap()));
         set_at(&mut ah, xs[i], s);
+        let s1 = an.len();
         an.push(get_or(&ah, get_or(ys, i, n), cap()));
-        set_at(&mut ah, get_or(ys, i, n), sat_add(s, 1));
+        set_at(&mut ah, get_or(ys, i, n), s1);
     }
     (ah, an)
 }
@@ -1366,6 +1367,8 @@ fn walk(p: &Problem, xs: &[usize], ys: &[usize], ls: &[usize], pv: &[usize], pe:
                 }
             }
             x = get_or(pv, x, n);
+        } else {
+            break;
         }
     }
 }
