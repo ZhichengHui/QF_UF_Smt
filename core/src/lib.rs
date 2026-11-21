@@ -358,7 +358,7 @@ pub fn solve(p: &Problem) -> Answer {
     let mut nxt = Vec::new();
     let mut wl = Vec::new();
     watch_new(p, &Vec::new(), &vec![0; n], &mut head, &mut nxt, &mut wl);
-    let (r, _l, _j, _w) = cdcl(p, &sym_index(p), Vec::new(), vec![false; n], vec![false; n], &Vec::new(), vec![0; n], vec![0; n],
+    let (r, _l, _j, _w) = cdcl(p, Vec::new(), vec![false; n], vec![false; n], &Vec::new(), vec![0; n], vec![0; n],
                                vec![0; n], (head, nxt, wl, vec![0; n]), &rep, &xs, &ys, &ls, 0, 0);
     match r {
         Some(m) => Answer::Sat(m),
@@ -1580,59 +1580,6 @@ fn moved_rows(p: &Problem, old: &[usize], rep: &[usize]) -> Vec<bool> {
     rows
 }
 
-/// The terms grouped by function symbol: `perm` lists the terms of symbol 0, then those of
-/// symbol 1, and so on, and the terms of symbol `g` are `perm[start[g]..start[g + 1]]`. Only terms
-/// of the same symbol can be congruent, so `log_col` looks only at those; the index is not needed
-/// for soundness, which rests on `congruent` alone.
-fn sym_index(p: &Problem) -> (Vec<usize>, Vec<usize>) {
-    let n = p.terms.len();
-    let mut m = 0;
-    for i in 0..n {
-        if p.terms[i].fun >= m {
-            m = sat_add(p.terms[i].fun, 1);
-        }
-    }
-    let mut start = vec![0; sat_add(m, 1)];
-    for i in 0..n {
-        let g = sat_add(p.terms[i].fun, 1);
-        let x = sat_add(get_or(&start, g, 0), 1);
-        set_at(&mut start, g, x);
-    }
-    for g in 0..m {
-        let x = sat_add(get_or(&start, g, 0), get_or(&start, sat_add(g, 1), 0));
-        set_at(&mut start, sat_add(g, 1), x);
-    }
-    let mut pos = start.clone();
-    let mut perm = vec![0; n];
-    for i in 0..n {
-        let g = p.terms[i].fun;
-        let k = get_or(&pos, g, n);
-        set_at(&mut perm, k, i);
-        set_at(&mut pos, g, sat_add(k, 1));
-    }
-    (perm, start)
-}
-
-/// Merges the class of term `i` with that of every term `j` of its symbol (`sym_index` `perm`,
-/// `start`) that is congruent to it but in another class, and logs each merge as the edge
-/// `(i, j)` with label `p.atoms.len()`; returns whether it merged anything.
-fn log_col(p: &Problem, perm: &[usize], start: &[usize], rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>,
-           ls: &mut Vec<usize>, i: usize) -> bool {
-    let g = p.terms[i].fun;
-    let mut changed = false;
-    for k in get_or(start, g, 0)..get_or(start, sat_add(g, 1), 0) {
-        let j = get_or(perm, k, i);
-        if j < p.terms.len() && rep[i] != rep[j] && congruent(p, rep, i, j) {
-            merge(rep, i, j);
-            xs.push(i);
-            ys.push(j);
-            ls.push(p.atoms.len());
-            changed = true;
-        }
-    }
-    changed
-}
-
 /// The terms with arguments grouped by the class in `rep` of their first argument: the terms whose
 /// first argument has representative `c` are `bh[c]`, `bn[bh[c]]`, `bn[bn[bh[c]]]`, ... up to the
 /// first index `>= n` (`n` the number of terms), in increasing order. Two congruent terms have first arguments of one
@@ -1653,8 +1600,10 @@ fn buckets(p: &Problem, rep: &[usize]) -> (Vec<usize>, Vec<usize>) {
     (bh, bn)
 }
 
-/// `log_col` on the terms of the list of `buckets` `bh`, `bn` of the class of the first argument of
-/// term `i`, which has arguments.
+/// Merges the class of term `i`, which has arguments, with that of every term `j` of the list of
+/// `buckets` `bh`, `bn` of the class of its first argument that is congruent to it but in another
+/// class, and logs each merge as the edge `(i, j)` with label `p.atoms.len()`; returns whether it
+/// merged anything.
 fn log_bucket(p: &Problem, bh: &[usize], bn: &[usize], rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>,
               ls: &mut Vec<usize>, i: usize) -> bool {
     let n = p.terms.len();
@@ -1676,12 +1625,14 @@ fn log_bucket(p: &Problem, bh: &[usize], bn: &[usize], rep: &mut Vec<usize>, xs:
     changed
 }
 
-/// On every term `i` with `rows[i]`: `log_bucket` with the lists `bh`, `bn` of `buckets` if it has
-/// arguments, `log_col` otherwise; returns whether it merged anything. Each list holds the terms
+/// On every term `i` with `rows[i]` and arguments: `log_bucket` with the lists `bh`, `bn` of
+/// `buckets`; returns whether it merged anything. Rows without arguments are skipped: a term
+/// without arguments is never marked by `moved_rows`, and the constants of one symbol are merged
+/// by `root_log` already. Each list holds the terms
 /// whose first argument had one class when `buckets` ran; a term whose first argument changed its
 /// class since has a row in the next round, so a round that merges nothing still leaves no two
 /// congruent terms apart.
-fn log_moved(p: &Problem, perm: &[usize], start: &[usize], bh: &[usize], bn: &[usize], rows: &[bool], rep: &mut Vec<usize>,
+fn log_moved(p: &Problem, bh: &[usize], bn: &[usize], rows: &[bool], rep: &mut Vec<usize>,
              xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) -> bool {
     let mut changed = false;
     for i in 0..p.terms.len() {
@@ -1690,8 +1641,6 @@ fn log_moved(p: &Problem, perm: &[usize], start: &[usize], bh: &[usize], bn: &[u
                 if log_bucket(p, bh, bn, rep, xs, ys, ls, i) {
                     changed = true;
                 }
-            } else if log_col(p, perm, start, rep, xs, ys, ls, i) {
-                changed = true;
             }
         }
     }
@@ -1710,18 +1659,18 @@ fn copy_into(old: &mut Vec<usize>, rep: &[usize]) {
 /// One round of the incremental closure: `log_moved` on the terms with an argument whose
 /// representative changed since `old`, after copying `rep` into `old`, with the `buckets` of
 /// `rep`; returns whether it merged anything.
-fn round_moved(p: &Problem, perm: &[usize], start: &[usize], old: &mut Vec<usize>, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) -> bool {
+fn round_moved(p: &Problem, old: &mut Vec<usize>, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) -> bool {
     let rows = moved_rows(p, old, rep);
     copy_into(old, rep);
     let (bh, bn) = buckets(p, rep);
-    log_moved(p, perm, start, &bh, &bn, &rows, rep, xs, ys, ls)
+    log_moved(p, &bh, &bn, &rows, rep, xs, ys, ls)
 }
 
 /// Rounds of `round_moved` until one merges nothing (at most `n + 1` rounds). If `old` was
 /// closed, so is the result.
-fn close_moved(p: &Problem, perm: &[usize], start: &[usize], old: &mut Vec<usize>, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) {
+fn close_moved(p: &Problem, old: &mut Vec<usize>, rep: &mut Vec<usize>, xs: &mut Vec<usize>, ys: &mut Vec<usize>, ls: &mut Vec<usize>) {
     for _round in 0..p.terms.len() + 1 {
-        if !round_moved(p, perm, start, old, rep, xs, ys, ls) {
+        if !round_moved(p, old, rep, xs, ys, ls) {
             return;
         }
     }
@@ -1729,7 +1678,7 @@ fn close_moved(p: &Problem, perm: &[usize], start: &[usize], old: &mut Vec<usize
 
 /// `cc_propagate` on the partition `rep0` with log `xs0`, `ys0`, `ls0`, extended by the atoms set
 /// true in `t` and closed by `close_moved`; also returns the extended partition and log.
-fn cc_step(p: &Problem, perm: &[usize], start: &[usize], t: &[bool], f: &[bool], rep0: &[usize], xs0: &[usize], ys0: &[usize], ls0: &[usize])
+fn cc_step(p: &Problem, t: &[bool], f: &[bool], rep0: &[usize], xs0: &[usize], ys0: &[usize], ls0: &[usize])
            -> (usize, Vec<bool>, Vec<bool>, Vec<usize>, Vec<usize>, Vec<usize>, Vec<usize>) {
     let mut old = rep0.to_vec();
     let mut rep = rep0.to_vec();
@@ -1737,7 +1686,7 @@ fn cc_step(p: &Problem, perm: &[usize], start: &[usize], t: &[bool], f: &[bool],
     let mut ys = ys0.to_vec();
     let mut ls = ls0.to_vec();
     log_atoms(p, t, &mut rep, &mut xs, &mut ys, &mut ls);
-    close_moved(p, perm, start, &mut old, &mut rep, &mut xs, &mut ys, &mut ls);
+    close_moved(p, &mut old, &mut rep, &mut xs, &mut ys, &mut ls);
     let c = false_joined(p, f, &mut rep);
     let (t1, f1) = implied(p, t, f, &mut rep);
     (c, t1, f1, rep, xs, ys, ls)
@@ -2267,14 +2216,13 @@ fn watch_new(p: &Problem, l: &[Clause], lv: &[usize], head: &mut Vec<usize>, nxt
 /// The search with conflict analysis and backjumping: `search` on the partial assignment `t`, `f`
 /// at decision level `d`, with the records `lv`, `rs`, `ts` of the set atoms (see above) and the
 /// next time stamp `s`. Unit propagation (`watch_pass`) starts from the atoms `q` (those set since
-/// the last propagation), with the watch lists `wt` = (`head`, `nxt`, `wl`) (see above); the
-/// closure uses the symbol index `ix` (`sym_index`). A conflict (a falsified clause, or a closure
-/// conflict) is analysed (`on_conflict`). Returns the result, the learned clauses, a level `j` and
-/// the watch lists. Without a model: if `j >= d`, no completion of `t`, `f` is a model (the branch
+/// the last propagation), with the watch lists `wt` = (`head`, `nxt`, `wl`) (see above). A
+/// conflict (a falsified clause, or a closure conflict) is analysed (`on_conflict`). Returns the
+/// result, the learned clauses, a level `j` and the watch lists. Without a model: if `j >= d`, no completion of `t`, `f` is a model (the branch
 /// is refuted); if `j < d`, the search returns to level `j`, where the last learned clause
 /// propagates. The decision on atom `k` at level `d` handles the result of its branch: a jump to
 /// level `d` propagates the last learned clause; a refuted branch `k` true continues with `k` false.
-fn cdcl(p: &Problem, ix: &(Vec<usize>, Vec<usize>), l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>, q: &[usize], lv: Vec<usize>,
+fn cdcl(p: &Problem, l: Vec<Clause>, t: Vec<bool>, f: Vec<bool>, q: &[usize], lv: Vec<usize>,
         rs: Vec<usize>, ts: Vec<usize>, wt: (Vec<usize>, Vec<usize>, Vec<usize>, Vec<usize>), rep: &[usize], xs: &[usize], ys: &[usize],
         ls: &[usize], d: usize, s: usize) -> (Option<Model>, Vec<Clause>, usize, (Vec<usize>, Vec<usize>, Vec<usize>, Vec<usize>)) {
     let s1 = sat_add(s, 1);
@@ -2296,9 +2244,9 @@ fn cdcl(p: &Problem, ix: &(Vec<usize>, Vec<usize>), l: Vec<Clause>, t: Vec<bool>
     }
     if differs(&t, &t0) || differs(&f, &f0) {
         let s0 = sat_add(s, sat_add(t.len(), 1));
-        return cdcl(p, ix, l, t0, f0, &Vec::new(), lv0, rs0, ts0, (h, n, w, a), rep, xs, ys, ls, d, s0);
+        return cdcl(p, l, t0, f0, &Vec::new(), lv0, rs0, ts0, (h, n, w, a), rep, xs, ys, ls, d, s0);
     }
-    let (c, t2, f2, rep2, xs2, ys2, ls2) = cc_step(p, &ix.0, &ix.1, &t, &f, rep, xs, ys, ls);
+    let (c, t2, f2, rep2, xs2, ys2, ls2) = cc_step(p, &t, &f, rep, xs, ys, ls);
     if c < t.len() {
         let cl = conflict_clause(&explain_log(p, &t, &xs2, &ys2, &ls2, c), c);
         let (r, l1, j) = on_conflict(p, l, &t, &lv, &ts, &rs, &xs2, &ys2, &ls2, d, &cl);
@@ -2311,7 +2259,7 @@ fn cdcl(p: &Problem, ix: &(Vec<usize>, Vec<usize>), l: Vec<Clause>, t: Vec<bool>
         let rs2 = note_true(&t, &t2, &rs, 1);
         let ts2 = note_new(&t, &f, &t2, &f2, &ts, s);
         let q2 = new_atoms(&t2, &f2, &t, &f);
-        return cdcl(p, ix, l, t2, f2, &q2, lv2, rs2, ts2, (h, n, w, a), &rep2, &xs2, &ys2, &ls2, d, s1);
+        return cdcl(p, l, t2, f2, &q2, lv2, rs2, ts2, (h, n, w, a), &rep2, &xs2, &ys2, &ls2, d, s1);
     }
     let k = pick(&t, &f, &a);
     if k == t.len() {
@@ -2323,7 +2271,7 @@ fn cdcl(p: &Problem, ix: &(Vec<usize>, Vec<usize>), l: Vec<Clause>, t: Vec<bool>
     let d1 = sat_add(d, 1);
     let mut t1 = t.clone();
     t1[k] = true;
-    let (r, l1, j, wt1) = cdcl(p, ix, l, t1, f.clone(), &one(k), note(&lv, k, d1), rs.clone(), note(&ts, k, s), (h, n, w, a),
+    let (r, l1, j, wt1) = cdcl(p, l, t1, f.clone(), &one(k), note(&lv, k, d1), rs.clone(), note(&ts, k, s), (h, n, w, a),
                                rep, xs, ys, ls, d1, s1);
     if r.is_some() {
         return (r, l1, j, wt1);
@@ -2331,7 +2279,7 @@ fn cdcl(p: &Problem, ix: &(Vec<usize>, Vec<usize>), l: Vec<Clause>, t: Vec<bool>
     if j >= d1 {
         let mut f1 = f.clone();
         f1[k] = true;
-        return cdcl(p, ix, l1, t.clone(), f1, &one(k), note(&lv, k, d), rs.clone(), note(&ts, k, s), wt1, rep, xs, ys, ls, d, s1);
+        return cdcl(p, l1, t.clone(), f1, &one(k), note(&lv, k, d), rs.clone(), note(&ts, k, s), wt1, rep, xs, ys, ls, d, s1);
     }
     if j < d {
         return (None, l1, j, wt1);
@@ -2347,7 +2295,7 @@ fn cdcl(p: &Problem, ix: &(Vec<usize>, Vec<usize>), l: Vec<Clause>, t: Vec<bool>
             } else {
                 f3[u1.atom] = true;
             }
-            return cdcl(p, ix, l1, t3, f3, &one(u1.atom), note(&lv, u1.atom, d), note(&rs, u1.atom, ci), note(&ts, u1.atom, s),
+            return cdcl(p, l1, t3, f3, &one(u1.atom), note(&lv, u1.atom, d), note(&rs, u1.atom, ci), note(&ts, u1.atom, s),
                         wt1, rep, xs, ys, ls, d, s1);
         }
         if u1.pos {
