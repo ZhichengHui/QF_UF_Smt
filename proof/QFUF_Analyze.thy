@@ -14,12 +14,12 @@ subsection \<open>Pure facts\<close>
 
 text \<open>Some literal of the clause \<open>cp\<close>, \<open>cn\<close> holds in \<open>I\<close>.\<close>
 definition lits_true :: \<open>(nat \<Rightarrow> nat list \<Rightarrow> nat) \<Rightarrow> Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> bool\<close> where
-  \<open>lits_true I p cp cn \<equiv> \<exists>j < length (Problem_atoms p).
+  \<open>lits_true I p cp cn \<equiv> \<exists>j < length (Problem_atoms_l p).
      cp ! j \<and> atom_vals I p ! j \<or> cn ! j \<and> \<not> atom_vals I p ! j\<close>
 
 text \<open>The clause \<open>cp\<close>, \<open>cn\<close> over the atoms of \<open>p\<close> holds in every model of \<open>p\<close>.\<close>
 definition lits_ok :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> bool\<close> where
-  \<open>lits_ok p cp cn \<equiv> length cp = length (Problem_atoms p) \<and> length cn = length (Problem_atoms p) \<and>
+  \<open>lits_ok p cp cn \<equiv> length cp = length (Problem_atoms_l p) \<and> length cn = length (Problem_atoms_l p) \<and>
      (\<forall>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. problem_true I p \<longrightarrow> lits_true I p cp cn)\<close>
 
 text \<open>The literal \<open>l\<close> is among the flags \<open>cp\<close>, \<open>cn\<close>.\<close>
@@ -36,22 +36,22 @@ lemma flags_le_refl:
   unfolding flags_le_def by simp
 
 lemma lit_true_vals:
-  \<open>unat (Lit_atom l) < length (Problem_atoms p) \<Longrightarrow>
+  \<open>unat (Lit_atom l) < length (Problem_atoms_l p) \<Longrightarrow>
    lit_true I p l = (if Lit_pos l then atom_vals I p ! unat (Lit_atom l) else \<not> atom_vals I p ! unat (Lit_atom l))\<close>
   unfolding lit_true_def atom_vals_def by simp
 
 text \<open>A clause that holds in every model, all of whose literals are among the flags.\<close>
 lemma lits_ok_clause:
-  assumes c: \<open>clause_ok p c\<close> and len: \<open>length cp = length (Problem_atoms p)\<close> \<open>length cn = length (Problem_atoms p)\<close>
-      and inc: \<open>\<forall>l \<in> set (Clause_lits c). lit_in cp cn l\<close>
+  assumes c: \<open>clause_ok p c\<close> and len: \<open>length cp = length (Problem_atoms_l p)\<close> \<open>length cn = length (Problem_atoms_l p)\<close>
+      and inc: \<open>\<forall>l \<in> set (Clause_lits_l c). lit_in cp cn l\<close>
   shows \<open>lits_ok p cp cn\<close>
   unfolding lits_ok_def
 proof (intro conjI allI impI len)
   fix I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close>
   assume \<open>problem_true I p\<close>
-  then obtain l where l: \<open>l \<in> set (Clause_lits c)\<close> \<open>lit_true I p l\<close>
+  then obtain l where l: \<open>l \<in> set (Clause_lits_l c)\<close> \<open>lit_true I p l\<close>
     using c unfolding clause_ok_def clause_true_def by blast
-  have a: \<open>unat (Lit_atom l) < length (Problem_atoms p)\<close> using c l(1) unfolding clause_ok_def by blast
+  have a: \<open>unat (Lit_atom l) < length (Problem_atoms_l p)\<close> using c l(1) unfolding clause_ok_def by blast
   show \<open>lits_true I p cp cn\<close>
     using l inc a lit_true_vals[OF a, of I] unfolding lits_true_def lit_in_def
     by (cases \<open>Lit_pos l\<close>) auto
@@ -63,20 +63,20 @@ text \<open>Resolution on atom \<open>x\<close>, whose value under the assignmen
   another literal of the clause holds; otherwise the literal of \<open>x\<close> with sign \<open>b\<close> is false, so
   another literal of \<open>r\<close> holds.\<close>
 lemma lits_ok_resolve:
-  assumes ok: \<open>lits_ok p cp cn\<close> and r: \<open>clause_ok p r\<close> and x: \<open>x < length (Problem_atoms p)\<close>
+  assumes ok: \<open>lits_ok p cp cn\<close> and r: \<open>clause_ok p r\<close> and x: \<open>x < length (Problem_atoms_l p)\<close>
       and le: \<open>flags_le (if b then cp else cp[x := False]) (if b then cn[x := False] else cn) cp' cn'\<close>
-      and inc: \<open>\<forall>l \<in> set (Clause_lits r). \<not> (unat (Lit_atom l) = x \<and> Lit_pos l = b) \<longrightarrow> lit_in cp' cn' l\<close>
+      and inc: \<open>\<forall>l \<in> set (Clause_lits_l r). \<not> (unat (Lit_atom l) = x \<and> Lit_pos l = b) \<longrightarrow> lit_in cp' cn' l\<close>
   shows \<open>lits_ok p cp' cn'\<close>
   unfolding lits_ok_def
 proof (intro conjI allI impI)
-  show \<open>length cp' = length (Problem_atoms p)\<close> \<open>length cn' = length (Problem_atoms p)\<close>
+  show \<open>length cp' = length (Problem_atoms_l p)\<close> \<open>length cn' = length (Problem_atoms_l p)\<close>
     using ok le unfolding lits_ok_def flags_le_def by (auto split: if_splits)
   fix I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close>
   assume I: \<open>problem_true I p\<close>
   show \<open>lits_true I p cp' cn'\<close>
   proof (cases \<open>atom_vals I p ! x = b\<close>)
     case True
-    obtain j where j: \<open>j < length (Problem_atoms p)\<close> \<open>cp ! j \<and> atom_vals I p ! j \<or> cn ! j \<and> \<not> atom_vals I p ! j\<close>
+    obtain j where j: \<open>j < length (Problem_atoms_l p)\<close> \<open>cp ! j \<and> atom_vals I p ! j \<or> cn ! j \<and> \<not> atom_vals I p ! j\<close>
       using ok I unfolding lits_ok_def lits_true_def by blast
     have \<open>(if b then cp else cp[x := False]) ! j \<and> atom_vals I p ! j \<or>
           (if b then cn[x := False] else cn) ! j \<and> \<not> atom_vals I p ! j\<close>
@@ -85,9 +85,9 @@ proof (intro conjI allI impI)
       using j(1) ok le unfolding lits_true_def flags_le_def lits_ok_def by (auto split: if_splits)
   next
     case False
-    obtain l where l: \<open>l \<in> set (Clause_lits r)\<close> \<open>lit_true I p l\<close>
+    obtain l where l: \<open>l \<in> set (Clause_lits_l r)\<close> \<open>lit_true I p l\<close>
       using r I unfolding clause_ok_def clause_true_def by blast
-    have a: \<open>unat (Lit_atom l) < length (Problem_atoms p)\<close> using r l(1) unfolding clause_ok_def by blast
+    have a: \<open>unat (Lit_atom l) < length (Problem_atoms_l p)\<close> using r l(1) unfolding clause_ok_def by blast
     have \<open>\<not> (unat (Lit_atom l) = x \<and> Lit_pos l = b)\<close>
       using False l(2) lit_true_vals[OF a, of I] by (cases \<open>Lit_pos l\<close>) auto
     then have \<open>lit_in cp' cn' l\<close> using inc l(1) by blast
@@ -108,34 +108,34 @@ lemma flag_lits_Suc:
   unfolding flag_lits_def by (auto simp add: less_Suc_eq)
 
 lemma flag_lits_clause_ok:
-  assumes ok: \<open>lits_ok p cp cn\<close> and n: \<open>length (Problem_atoms p) < 2^63\<close>
-      and c: \<open>set (Clause_lits c) = flag_lits cp cn (length cp)\<close>
+  assumes ok: \<open>lits_ok p cp cn\<close> and n: \<open>length (Problem_atoms_l p) < 2^63\<close>
+      and c: \<open>set (Clause_lits_l c) = flag_lits cp cn (length cp)\<close>
   shows \<open>clause_ok p c\<close>
 proof -
-  have len: \<open>length cp = length (Problem_atoms p)\<close> \<open>length cn = length (Problem_atoms p)\<close>
+  have len: \<open>length cp = length (Problem_atoms_l p)\<close> \<open>length cn = length (Problem_atoms_l p)\<close>
     using ok unfolding lits_ok_def by simp_all
-  have j: \<open>unat (word_of_nat j :: 64 word) = j\<close> if \<open>j < length (Problem_atoms p)\<close> for j
+  have j: \<open>unat (word_of_nat j :: 64 word) = j\<close> if \<open>j < length (Problem_atoms_l p)\<close> for j
     using that n by (simp add: unat_of_nat_eq)
   show ?thesis
     unfolding clause_ok_def
   proof (intro conjI allI impI)
-    show \<open>\<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < length (Problem_atoms p)\<close>
+    show \<open>\<forall>l \<in> set (Clause_lits_l c). unat (Lit_atom l) < length (Problem_atoms_l p)\<close>
       using c len j unfolding flag_lits_def by auto
     fix I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close>
     assume \<open>problem_true I p\<close>
-    then obtain k where k: \<open>k < length (Problem_atoms p)\<close>
+    then obtain k where k: \<open>k < length (Problem_atoms_l p)\<close>
         \<open>cp ! k \<and> atom_vals I p ! k \<or> cn ! k \<and> \<not> atom_vals I p ! k\<close>
       using ok unfolding lits_ok_def lits_true_def by blast
     show \<open>clause_true I p c\<close>
     proof (cases \<open>cp ! k \<and> atom_vals I p ! k\<close>)
       case True
-      then have \<open>make_Lit (word_of_nat k) True \<in> set (Clause_lits c)\<close> using c k(1) len unfolding flag_lits_def by auto
+      then have \<open>make_Lit (word_of_nat k) True \<in> set (Clause_lits_l c)\<close> using c k(1) len unfolding flag_lits_def by auto
       then show ?thesis using True k(1) j[OF k(1)] unfolding clause_true_def
         by (intro bexI[of _ \<open>make_Lit (word_of_nat k) True\<close>]) (auto simp add: lit_true_vals)
     next
       case False
       then have kn: \<open>cn ! k \<and> \<not> atom_vals I p ! k\<close> using k(2) by blast
-      then have \<open>make_Lit (word_of_nat k) False \<in> set (Clause_lits c)\<close> using c k(1) len unfolding flag_lits_def by auto
+      then have \<open>make_Lit (word_of_nat k) False \<in> set (Clause_lits_l c)\<close> using c k(1) len unfolding flag_lits_def by auto
       then show ?thesis using kn k(1) j[OF k(1)] unfolding clause_true_def
         by (intro bexI[of _ \<open>make_Lit (word_of_nat k) False\<close>]) (auto simp add: lit_true_vals)
     qed
@@ -144,8 +144,8 @@ qed
 
 text \<open>The tautology on an atom of \<open>p\<close> holds in every model.\<close>
 lemma tautology_clause_ok:
-  assumes \<open>unat x < length (Problem_atoms p)\<close>
-      and \<open>Clause_lits c = [make_Lit x True, make_Lit x False]\<close>
+  assumes \<open>unat x < length (Problem_atoms_l p)\<close>
+      and \<open>Clause_lits_l c = [make_Lit x True, make_Lit x False]\<close>
   shows \<open>clause_ok p c\<close>
   using assms unfolding clause_ok_def clause_true_def lit_true_def by auto
 
@@ -213,7 +213,7 @@ subsection \<open>Reasons\<close>
 definition tautology_contract :: \<open>64 word \<Rightarrow> ('s, Clause, 'abort) function_contract\<close> where
   \<open>tautology_contract x \<equiv>
      make_function_contract can_alloc_reference
-       (\<lambda>r. can_alloc_reference \<star> \<langle>Clause_lits r = [make_Lit x True, make_Lit x False]\<rangle>)\<close>
+       (\<lambda>r. can_alloc_reference \<star> \<langle>Clause_lits_l r = [make_Lit x True, make_Lit x False]\<rangle>)\<close>
 
 lemma tautology_spec:
   shows \<open>\<Gamma>; tautology x \<Turnstile>\<^sub>F tautology_contract x\<close>
@@ -223,8 +223,8 @@ lemma tautology_spec:
 
 definition copy_clause_contract :: \<open>Clause \<Rightarrow> ('s, Clause, 'abort) function_contract\<close> where
   \<open>copy_clause_contract c \<equiv>
-     make_function_contract (can_alloc_reference \<star> \<langle>length (Clause_lits c) < 2^64\<rangle>)
-       (\<lambda>r. can_alloc_reference \<star> \<langle>Clause_lits r = Clause_lits c\<rangle>)\<close>
+     make_function_contract (can_alloc_reference \<star> \<langle>length (Clause_lits_l c) < 2^64\<rangle>)
+       (\<lambda>r. can_alloc_reference \<star> \<langle>Clause_lits_l r = Clause_lits_l c\<rangle>)\<close>
 
 lemma copy_clause_spec:
   shows \<open>\<Gamma>; copy_clause c \<Turnstile>\<^sub>F copy_clause_contract c\<close>
@@ -233,7 +233,7 @@ lemma copy_clause_spec:
   subgoal for lits_ref
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> (\<Squnion>g' ls. lits_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>ls \<star>
-                 \<langle>ls = take i (Clause_lits c)\<rangle>)\<close>
+                 \<langle>ls = take i (Clause_lits_l c)\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -244,14 +244,14 @@ lemma copy_clause_spec:
 
 text \<open>A clause that the search may resolve with: it holds in every model and has a length.\<close>
 definition clause_fits :: \<open>Problem \<Rightarrow> Clause \<Rightarrow> bool\<close> where
-  \<open>clause_fits p c \<equiv> clause_ok p c \<and> length (Clause_lits c) < 2^64\<close>
+  \<open>clause_fits p c \<equiv> clause_ok p c \<and> length (Clause_lits_l c) < 2^64\<close>
 
 lemma clause_fits_tautology:
-  \<open>unat x < length (Problem_atoms p) \<Longrightarrow> Clause_lits c = [make_Lit x True, make_Lit x False] \<Longrightarrow> clause_fits p c\<close>
+  \<open>unat x < length (Problem_atoms_l p) \<Longrightarrow> Clause_lits_l c = [make_Lit x True, make_Lit x False] \<Longrightarrow> clause_fits p c\<close>
   unfolding clause_fits_def using tautology_clause_ok by simp
 
 lemma clause_fits_copy:
-  \<open>clause_fits p c \<Longrightarrow> Clause_lits c' = Clause_lits c \<Longrightarrow> clause_fits p c'\<close>
+  \<open>clause_fits p c \<Longrightarrow> Clause_lits_l c' = Clause_lits_l c \<Longrightarrow> clause_fits p c'\<close>
   unfolding clause_fits_def clause_ok_def clause_true_def by simp
 
 lemma clauses_ok_fits:
@@ -261,7 +261,7 @@ lemma clauses_ok_fits:
 definition indexed_clause_contract :: \<open>Problem \<Rightarrow> Clause list \<Rightarrow> 64 word \<Rightarrow> ('s, Clause, 'abort) function_contract\<close> where
   \<open>indexed_clause_contract p l x \<equiv>
      make_function_contract
-       (can_alloc_reference \<star> \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> unat x < length (Problem_atoms p)\<rangle>)
+       (can_alloc_reference \<star> \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> unat x < length (Problem_atoms_l p)\<rangle>)
        (\<lambda>r. can_alloc_reference \<star> \<langle>clause_fits p r\<rangle>)\<close>
 
 lemma indexed_clause_spec:
@@ -283,8 +283,8 @@ lemma indexed_clause_spec:
 definition reason_contract :: \<open>Problem \<Rightarrow> Clause list \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> ('s, Clause, 'abort) function_contract\<close> where
   \<open>reason_contract p l t x \<equiv>
      make_function_contract
-       (can_alloc_reference \<star> \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms p) \<and>
-          unat x < length (Problem_atoms p)\<rangle>)
+       (can_alloc_reference \<star> \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms_l p) \<and>
+          unat x < length (Problem_atoms_l p)\<rangle>)
        (\<lambda>r. can_alloc_reference \<star> \<langle>clause_fits p r\<rangle>)\<close>
 
 lemma theory_reason_spec:
@@ -311,16 +311,16 @@ subsection \<open>The clause of the analysis\<close>
 text \<open>The flags \<open>cp\<close>, \<open>cn\<close> contain the literals of \<open>c\<close> before position \<open>i\<close> whose atoms are
   in bounds, except the literal of atom \<open>x\<close> with sign \<open>b\<close>.\<close>
 definition has_lits :: \<open>Clause \<Rightarrow> 64 word \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> bool\<close> where
-  \<open>has_lits c x b i cp cn \<equiv> \<forall>k < i. \<not> (Lit_atom (Clause_lits c ! k) = x \<and> Lit_pos (Clause_lits c ! k) = b) \<longrightarrow>
-     unat (Lit_atom (Clause_lits c ! k)) < length cp \<longrightarrow> unat (Lit_atom (Clause_lits c ! k)) < length cn \<longrightarrow>
-     lit_in cp cn (Clause_lits c ! k)\<close>
+  \<open>has_lits c x b i cp cn \<equiv> \<forall>k < i. \<not> (Lit_atom (Clause_lits_l c ! k) = x \<and> Lit_pos (Clause_lits_l c ! k) = b) \<longrightarrow>
+     unat (Lit_atom (Clause_lits_l c ! k)) < length cp \<longrightarrow> unat (Lit_atom (Clause_lits_l c ! k)) < length cn \<longrightarrow>
+     lit_in cp cn (Clause_lits_l c ! k)\<close>
 
 definition add_lits_contract :: \<open>Clause \<Rightarrow> 64 word \<Rightarrow> bool \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow>
       ('s, bool list \<times> bool list \<times> tnil, 'abort) function_contract\<close> where
   \<open>add_lits_contract c x b cp cn \<equiv>
-     let pre = can_alloc_reference \<star> \<langle>length (Clause_lits c) < 2^64 \<and> length cp < 2^64 \<and> length cn < 2^64\<rangle> in
+     let pre = can_alloc_reference \<star> \<langle>length (Clause_lits_l c) < 2^64 \<and> length cp < 2^64 \<and> length cn < 2^64\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>flags_le cp cn (fst r) (fst (snd r)) \<and> has_lits c x b (length (Clause_lits c)) (fst r) (fst (snd r))\<rangle> in
+        \<langle>flags_le cp cn (fst r) (fst (snd r)) \<and> has_lits c x b (length (Clause_lits_l c)) (fst r) (fst (snd r))\<rangle> in
      make_function_contract pre post\<close>
 
 lemma has_lits_0:
@@ -329,19 +329,19 @@ lemma has_lits_0:
 
 lemma has_lits_skip:
   assumes \<open>has_lits c x b i ps ns\<close>
-      and \<open>Lit_atom (Clause_lits c ! i) = x \<and> Lit_pos (Clause_lits c ! i) = b \<or>
-           \<not> unat (Lit_atom (Clause_lits c ! i)) < length ps \<or> \<not> unat (Lit_atom (Clause_lits c ! i)) < length ns\<close>
+      and \<open>Lit_atom (Clause_lits_l c ! i) = x \<and> Lit_pos (Clause_lits_l c ! i) = b \<or>
+           \<not> unat (Lit_atom (Clause_lits_l c ! i)) < length ps \<or> \<not> unat (Lit_atom (Clause_lits_l c ! i)) < length ns\<close>
   shows \<open>has_lits c x b (Suc i) ps ns\<close>
   using assms unfolding has_lits_def by (auto simp add: less_Suc_eq)
 
 lemma has_lits_pos:
-  assumes \<open>has_lits c x b i ps ns\<close> \<open>Lit_pos (Clause_lits c ! i)\<close> \<open>unat (Lit_atom (Clause_lits c ! i)) < length ps\<close>
-  shows \<open>has_lits c x b (Suc i) (ps[unat (Lit_atom (Clause_lits c ! i)) := True]) ns\<close>
+  assumes \<open>has_lits c x b i ps ns\<close> \<open>Lit_pos (Clause_lits_l c ! i)\<close> \<open>unat (Lit_atom (Clause_lits_l c ! i)) < length ps\<close>
+  shows \<open>has_lits c x b (Suc i) (ps[unat (Lit_atom (Clause_lits_l c ! i)) := True]) ns\<close>
   using assms unfolding has_lits_def lit_in_def by (auto simp add: less_Suc_eq nth_list_update)
 
 lemma has_lits_neg:
-  assumes \<open>has_lits c x b i ps ns\<close> \<open>\<not> Lit_pos (Clause_lits c ! i)\<close> \<open>unat (Lit_atom (Clause_lits c ! i)) < length ns\<close>
-  shows \<open>has_lits c x b (Suc i) ps (ns[unat (Lit_atom (Clause_lits c ! i)) := True])\<close>
+  assumes \<open>has_lits c x b i ps ns\<close> \<open>\<not> Lit_pos (Clause_lits_l c ! i)\<close> \<open>unat (Lit_atom (Clause_lits_l c ! i)) < length ns\<close>
+  shows \<open>has_lits c x b (Suc i) ps (ns[unat (Lit_atom (Clause_lits_l c ! i)) := True])\<close>
   using assms unfolding has_lits_def lit_in_def by (auto simp add: less_Suc_eq nth_list_update)
 
 lemma nth_update_true:
@@ -373,37 +373,37 @@ lemma add_lits_spec:
 
 text \<open>Resolution in the form of the analysis' step (\<open>lits_ok_resolve\<close>).\<close>
 lemma lits_ok_resolve':
-  assumes ok: \<open>lits_ok p cp cn\<close> and r: \<open>clause_fits p r\<close> and x: \<open>unat x < length (Problem_atoms p)\<close>
+  assumes ok: \<open>lits_ok p cp cn\<close> and r: \<open>clause_fits p r\<close> and x: \<open>unat x < length (Problem_atoms_l p)\<close>
       and le: \<open>flags_le (if b then cp else cp[unat x := False]) (if b then cn[unat x := False] else cn) cp' cn'\<close>
-      and h: \<open>has_lits r x b (length (Clause_lits r)) cp' cn'\<close>
+      and h: \<open>has_lits r x b (length (Clause_lits_l r)) cp' cn'\<close>
   shows \<open>lits_ok p cp' cn'\<close>
 proof (rule lits_ok_resolve[OF ok _ x le])
   show \<open>clause_ok p r\<close> using r unfolding clause_fits_def by simp
-  have len: \<open>length cp' = length (Problem_atoms p)\<close> \<open>length cn' = length (Problem_atoms p)\<close>
+  have len: \<open>length cp' = length (Problem_atoms_l p)\<close> \<open>length cn' = length (Problem_atoms_l p)\<close>
     using ok le unfolding lits_ok_def flags_le_def by (auto split: if_splits)
-  show \<open>\<forall>l \<in> set (Clause_lits r). \<not> (unat (Lit_atom l) = unat x \<and> Lit_pos l = b) \<longrightarrow> lit_in cp' cn' l\<close>
+  show \<open>\<forall>l \<in> set (Clause_lits_l r). \<not> (unat (Lit_atom l) = unat x \<and> Lit_pos l = b) \<longrightarrow> lit_in cp' cn' l\<close>
   proof (intro ballI impI)
-    fix l assume l: \<open>l \<in> set (Clause_lits r)\<close> \<open>\<not> (unat (Lit_atom l) = unat x \<and> Lit_pos l = b)\<close>
-    then obtain k where k: \<open>k < length (Clause_lits r)\<close> \<open>l = Clause_lits r ! k\<close> by (auto simp add: in_set_conv_nth)
-    have a: \<open>unat (Lit_atom l) < length (Problem_atoms p)\<close> using r l(1) unfolding clause_fits_def clause_ok_def by blast
+    fix l assume l: \<open>l \<in> set (Clause_lits_l r)\<close> \<open>\<not> (unat (Lit_atom l) = unat x \<and> Lit_pos l = b)\<close>
+    then obtain k where k: \<open>k < length (Clause_lits_l r)\<close> \<open>l = Clause_lits_l r ! k\<close> by (auto simp add: in_set_conv_nth)
+    have a: \<open>unat (Lit_atom l) < length (Problem_atoms_l p)\<close> using r l(1) unfolding clause_fits_def clause_ok_def by blast
     show \<open>lit_in cp' cn' l\<close> using h k l(2) a len unfolding has_lits_def by auto
   qed
 qed
 
 text \<open>The first clause of the analysis: all literals of a clause that holds in every model.\<close>
 lemma lits_ok_start:
-  assumes c: \<open>clause_fits p c\<close> and len: \<open>length cp = length (Problem_atoms p)\<close> \<open>length cn = length (Problem_atoms p)\<close>
-      and n: \<open>length (Problem_atoms p) < 2^63\<close>
-      and h: \<open>has_lits c (word_of_nat (length (Problem_atoms p))) True (length (Clause_lits c)) cp cn\<close>
+  assumes c: \<open>clause_fits p c\<close> and len: \<open>length cp = length (Problem_atoms_l p)\<close> \<open>length cn = length (Problem_atoms_l p)\<close>
+      and n: \<open>length (Problem_atoms_l p) < 2^63\<close>
+      and h: \<open>has_lits c (word_of_nat (length (Problem_atoms_l p))) True (length (Clause_lits_l c)) cp cn\<close>
   shows \<open>lits_ok p cp cn\<close>
 proof (rule lits_ok_clause[OF _ len])
   show co: \<open>clause_ok p c\<close> using c unfolding clause_fits_def by simp
-  show \<open>\<forall>l \<in> set (Clause_lits c). lit_in cp cn l\<close>
+  show \<open>\<forall>l \<in> set (Clause_lits_l c). lit_in cp cn l\<close>
   proof
-    fix l assume l: \<open>l \<in> set (Clause_lits c)\<close>
-    then obtain k where k: \<open>k < length (Clause_lits c)\<close> \<open>l = Clause_lits c ! k\<close> by (auto simp add: in_set_conv_nth)
-    have a: \<open>unat (Lit_atom l) < length (Problem_atoms p)\<close> using co l unfolding clause_ok_def by blast
-    then have \<open>Lit_atom l \<noteq> word_of_nat (length (Problem_atoms p))\<close>
+    fix l assume l: \<open>l \<in> set (Clause_lits_l c)\<close>
+    then obtain k where k: \<open>k < length (Clause_lits_l c)\<close> \<open>l = Clause_lits_l c ! k\<close> by (auto simp add: in_set_conv_nth)
+    have a: \<open>unat (Lit_atom l) < length (Problem_atoms_l p)\<close> using co l unfolding clause_ok_def by blast
+    then have \<open>Lit_atom l \<noteq> word_of_nat (length (Problem_atoms_l p))\<close>
       using n by (auto simp add: unat_of_nat_eq)
     then show \<open>lit_in cp cn l\<close> using h k a len unfolding has_lits_def by auto
   qed
@@ -475,13 +475,13 @@ text \<open>\<open>lits_ok_resolve'\<close> for the two values of the resolved a
   \<open>crush_base\<close> leaves.\<close>
 lemma resolve_step_ok:
   assumes \<open>lits_ok p cp cn\<close> \<open>clause_fits p r\<close> \<open>\<not> unat (word_of_nat (length cp) :: 64 word) \<le> unat x\<close>
-  shows \<open>flags_le (cp[unat x := False]) cn a aa \<Longrightarrow> has_lits r x False (length (Clause_lits r)) a aa \<Longrightarrow> lits_ok p a aa\<close>
-    \<open>flags_le cp (cn[unat x := False]) a aa \<Longrightarrow> has_lits r x True (length (Clause_lits r)) a aa \<Longrightarrow> lits_ok p a aa\<close>
+  shows \<open>flags_le (cp[unat x := False]) cn a aa \<Longrightarrow> has_lits r x False (length (Clause_lits_l r)) a aa \<Longrightarrow> lits_ok p a aa\<close>
+    \<open>flags_le cp (cn[unat x := False]) a aa \<Longrightarrow> has_lits r x True (length (Clause_lits_l r)) a aa \<Longrightarrow> lits_ok p a aa\<close>
 proof -
-  have \<open>unat x < length (Problem_atoms p)\<close>
+  have \<open>unat x < length (Problem_atoms_l p)\<close>
     using assms(1,3) unat_lt_len unfolding lits_ok_def by (metis not_le)
-  then show \<open>flags_le (cp[unat x := False]) cn a aa \<Longrightarrow> has_lits r x False (length (Clause_lits r)) a aa \<Longrightarrow> lits_ok p a aa\<close>
-    \<open>flags_le cp (cn[unat x := False]) a aa \<Longrightarrow> has_lits r x True (length (Clause_lits r)) a aa \<Longrightarrow> lits_ok p a aa\<close>
+  then show \<open>flags_le (cp[unat x := False]) cn a aa \<Longrightarrow> has_lits r x False (length (Clause_lits_l r)) a aa \<Longrightarrow> lits_ok p a aa\<close>
+    \<open>flags_le cp (cn[unat x := False]) a aa \<Longrightarrow> has_lits r x True (length (Clause_lits_l r)) a aa \<Longrightarrow> lits_ok p a aa\<close>
     using lits_ok_resolve'[OF assms(1,2), of x False a aa] lits_ok_resolve'[OF assms(1,2), of x True a aa] by simp_all
 qed
 
@@ -489,7 +489,7 @@ definition resolve_step_contract :: \<open>Problem \<Rightarrow> Clause list \<R
       ('s, bool \<times> bool list \<times> bool list \<times> tnil, 'abort) function_contract\<close> where
   \<open>resolve_step_contract p l t cp cn \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms p) \<and> lits_ok p cp cn\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms_l p) \<and> lits_ok p cp cn\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star> \<langle>lits_ok p (fst (snd r)) (fst (snd (snd r)))\<rangle> in
      make_function_contract pre post\<close>
 
@@ -507,7 +507,7 @@ definition lits_clause_contract :: \<open>bool list \<Rightarrow> bool list \<Ri
   \<open>lits_clause_contract cp cn \<equiv>
      let pre = can_alloc_reference \<star> \<langle>length cn = length cp \<and> length cp < 2^63\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>set (Clause_lits r) = flag_lits cp cn (length cp) \<and> length (Clause_lits r) \<le> 2 * length cp\<rangle> in
+        \<langle>set (Clause_lits_l r) = flag_lits cp cn (length cp) \<and> length (Clause_lits_l r) \<le> 2 * length cp\<rangle> in
      make_function_contract pre post\<close>
 
 lemma lits_clause_spec:
@@ -533,8 +533,8 @@ lemma lits_clause_spec:
 subsection \<open>The analysis and the conflict\<close>
 
 lemma flag_lits_fits:
-  assumes \<open>lits_ok p cp cn\<close> \<open>length (Problem_atoms p) < 9223372036854775808\<close>
-      and \<open>set (Clause_lits c) = flag_lits cp cn (length cp)\<close> \<open>length (Clause_lits c) \<le> 2 * length cp\<close>
+  assumes \<open>lits_ok p cp cn\<close> \<open>length (Problem_atoms_l p) < 9223372036854775808\<close>
+      and \<open>set (Clause_lits_l c) = flag_lits cp cn (length cp)\<close> \<open>length (Clause_lits_l c) \<le> 2 * length cp\<close>
   shows \<open>clause_fits p c\<close>
   using assms flag_lits_clause_ok[of p cp cn c] unfolding clause_fits_def lits_ok_def by simp
 
@@ -542,7 +542,7 @@ definition analyze_contract :: \<open>Problem \<Rightarrow> Clause list \<Righta
       ('s, Clause \<times> bool \<times> 64 word \<times> tnil, 'abort) function_contract\<close> where
   \<open>analyze_contract p l t c \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms p) \<and> clause_fits p c\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms_l p) \<and> clause_fits p c\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star> \<langle>clause_fits p (fst r)\<rangle> in
      make_function_contract pre post\<close>
 
@@ -573,7 +573,7 @@ definition on_conflict_contract :: \<open>Problem \<Rightarrow> Clause list \<Ri
       ('s, Model option \<times> Clause list \<times> 64 word \<times> tnil, 'abort) function_contract\<close> where
   \<open>on_conflict_contract p l t c \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms p) \<and> clause_fits p c\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms_l p) \<and> clause_fits p c\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star> \<langle>fst r = None \<and> clauses_ok p (fst (snd r))\<rangle> in
      make_function_contract pre post\<close>
 

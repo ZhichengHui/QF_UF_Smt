@@ -259,8 +259,8 @@ text \<open>What the functions of the elimination need of the assertions \<open>
 definition ea_pre :: \<open>SmtProblem \<Rightarrow> SmtTerm list \<Rightarrow> bool\<close> where
   \<open>ea_pre p a \<equiv>
      argss_ok a \<and> length a < 2 ^ 64 \<and> Suc (size_list size a) \<le> urust_fuel \<and>
-     length (SmtProblem_defs p) < 2 ^ 64 \<and>
-     (\<forall>d \<in> set (SmtProblem_defs p). args_ok (SmtDef_body d) \<and> Suc (size (SmtDef_body d)) \<le> urust_fuel)\<close>
+     length (SmtProblem_defs_l p) < 2 ^ 64 \<and>
+     (\<forall>d \<in> set (SmtProblem_defs_l p). args_ok (SmtDef_body d) \<and> Suc (size (SmtDef_body d)) \<le> urust_fuel)\<close>
 
 definition occ_all_contract :: \<open>SmtProblem \<Rightarrow> SmtTerm list \<Rightarrow> 64 word \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
   [crush_contracts]: \<open>occ_all_contract p a c \<equiv>
@@ -282,7 +282,7 @@ lemma occ_all_spec [crush_specs]:
   subgoal for n0 n_ref
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> (\<Squnion>gn n. n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star>
-                 \<langle>unat n = sat (occs_m c a + sum_list (map (\<lambda>d. occ_m c (SmtDef_body d)) (take i (SmtProblem_defs p))))\<rangle>)\<close>
+                 \<langle>unat n = sat (occs_m c a + sum_list (map (\<lambda>d. occ_m c (SmtDef_body d)) (take i (SmtProblem_defs_l p))))\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -305,15 +305,15 @@ proof
 qed simp
 
 lemma wargs0:
-  \<open>\<forall>f \<in> set fs. length (SmtFun_args f) < 2 ^ 63 \<Longrightarrow> j < length fs \<Longrightarrow>
-   ((word_of_nat (length (SmtFun_args (fs ! j))) :: 64 word) = 0) = (SmtFun_args (fs ! j) = [])\<close>
+  \<open>\<forall>f \<in> set fs. length (SmtFun_args_l f) < 2 ^ 63 \<Longrightarrow> j < length fs \<Longrightarrow>
+   ((word_of_nat (length (SmtFun_args_l (fs ! j))) :: 64 word) = 0) = (SmtFun_args_l (fs ! j) = [])\<close>
   by (rule wlen0) (use nth_mem in fastforce)
 
 definition elim_partner_contract :: \<open>SmtProblem \<Rightarrow> SmtTerm list \<Rightarrow> 64 word \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
   [crush_contracts]: \<open>elim_partner_contract p a c \<equiv>
      make_function_contract
-       (can_alloc_reference \<star> \<langle>ea_pre p a \<and> unat c < length (SmtProblem_funs p) \<and> length (SmtProblem_funs p) < 2 ^ 63 \<and>
-          (\<forall>f \<in> set (SmtProblem_funs p). length (SmtFun_args f) < 2 ^ 63)\<rangle>)
+       (can_alloc_reference \<star> \<langle>ea_pre p a \<and> unat c < length (SmtProblem_funs_l p) \<and> length (SmtProblem_funs_l p) < 2 ^ 63 \<and>
+          (\<forall>f \<in> set (SmtProblem_funs_l p). length (SmtFun_args_l f) < 2 ^ 63)\<rangle>)
        (\<lambda>r. can_alloc_reference \<star> \<langle>r = elim_partner_m p a c\<rangle>)\<close>
 
 lemma elim_partner_spec [crush_specs]:
@@ -397,8 +397,8 @@ text \<open>What \<^verbatim>\<open>eliminate\<close> needs: the representation 
   over the assertions and the bodies of the definitions.\<close>
 definition elim_pre :: \<open>SmtProblem \<Rightarrow> bool\<close> where
   \<open>elim_pre p \<equiv>
-     smt_repr_ok p \<and> Suc (size_list size (SmtProblem_asserts p)) \<le> urust_fuel \<and>
-     (\<forall>d \<in> set (SmtProblem_defs p). Suc (size (SmtDef_body d)) \<le> urust_fuel)\<close>
+     smt_repr_ok p \<and> Suc (size_list size (SmtProblem_asserts_l p)) \<le> urust_fuel \<and>
+     (\<forall>d \<in> set (SmtProblem_defs_l p). Suc (size (SmtDef_body d)) \<le> urust_fuel)\<close>
 
 definition eliminate_contract :: \<open>SmtProblem \<Rightarrow> ('s, SmtTerm list \<times> 64 word list \<times> 64 word list \<times> tnil, 'abort) function_contract\<close> where
   [crush_contracts]: \<open>eliminate_contract p \<equiv>
@@ -411,8 +411,8 @@ lemma elim_pre_ea:
   shows \<open>ea_pre p a\<close>
 proof -
   have R: \<open>smt_repr_ok p\<close> using P by (simp add: elim_pre_def)
-  have \<open>smt_repr_ok (wa p a)\<close> \<open>size_list size a = size_list size (SmtProblem_asserts p)\<close>
-    \<open>length a = length (SmtProblem_asserts p)\<close>
+  have \<open>smt_repr_ok (wa p a)\<close> \<open>size_list size a = size_list size (SmtProblem_asserts_l p)\<close>
+    \<open>length a = length (SmtProblem_asserts_l p)\<close>
     using I R by (simp_all add: elim_inv_def)
   then show ?thesis
     using P reprs_argss_ok repr_args_ok
@@ -424,16 +424,16 @@ lemma elim_step_foldl:
   by simp
 
 lemma elim_loop_facts:
-  assumes P: \<open>elim_pre p\<close> and I: \<open>i < unat (word_of_nat (length (SmtProblem_funs p)) :: 64 word)\<close>
+  assumes P: \<open>elim_pre p\<close> and I: \<open>i < unat (word_of_nat (length (SmtProblem_funs_l p)) :: 64 word)\<close>
     and V: \<open>elim_inv p (a, cs, gs)\<close>
-  shows \<open>ea_pre p a \<and> unat (word_of_nat i :: 64 word) = i \<and> i < length (SmtProblem_funs p) \<and>
-         length (SmtProblem_funs p) < 2 ^ 63 \<and> (\<forall>f \<in> set (SmtProblem_funs p). length (SmtFun_args f) < 2 ^ 63) \<and>
+  shows \<open>ea_pre p a \<and> unat (word_of_nat i :: 64 word) = i \<and> i < length (SmtProblem_funs_l p) \<and>
+         length (SmtProblem_funs_l p) < 2 ^ 63 \<and> (\<forall>f \<in> set (SmtProblem_funs_l p). length (SmtFun_args_l f) < 2 ^ 63) \<and>
          length a < 2 ^ 64 \<and> argss_ok a \<and> Suc (size_list size a) \<le> urust_fuel \<and>
          elim_inv p (elim_step_m p (a, cs, gs) i)\<close>
 proof -
   have R: \<open>smt_repr_ok p\<close> using P by (simp add: elim_pre_def)
-  then have L: \<open>length (SmtProblem_funs p) < 2 ^ 63\<close> by (simp add: smt_repr_ok_def)
-  then have i: \<open>i < length (SmtProblem_funs p)\<close> using I by (simp add: unat_of_nat_eq)
+  then have L: \<open>length (SmtProblem_funs_l p) < 2 ^ 63\<close> by (simp add: smt_repr_ok_def)
+  then have i: \<open>i < length (SmtProblem_funs_l p)\<close> using I by (simp add: unat_of_nat_eq)
   note V' = V
   have E: \<open>ea_pre p a\<close> using elim_pre_ea[OF P V'] .
   show ?thesis
@@ -448,7 +448,7 @@ lemma eliminate_spec [crush_specs]:
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> (\<Squnion>ga a. a_ref \<mapsto>\<langle>\<top>\<rangle> ga\<down>a \<star>
                  (\<Squnion>gc cs. cs_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>cs \<star> (\<Squnion>gg gs. gs_ref \<mapsto>\<langle>\<top>\<rangle> gg\<down>gs \<star>
-                 \<langle>foldl (elim_step_m p) (SmtProblem_asserts p, [], []) [0..<i] = (a, cs, gs) \<and>
+                 \<langle>foldl (elim_step_m p) (SmtProblem_asserts_l p, [], []) [0..<i] = (a, cs, gs) \<and>
                   elim_inv p (a, cs, gs)\<rangle>)))\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -489,7 +489,7 @@ lemma length_foldl_fix_m: \<open>length (foldl (fix_m cs gs) fs ks) = length fs\
 definition restore_contract :: \<open>SmtModel \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow> ('s, SmtModel, 'abort) function_contract\<close> where
   [crush_contracts]: \<open>restore_contract m cs gs \<equiv>
      make_function_contract
-       (can_alloc_reference \<star> \<langle>length cs < 2 ^ 64 \<and> length gs < 2 ^ 64 \<and> length (SmtModel_funs m) < 2 ^ 64\<rangle>)
+       (can_alloc_reference \<star> \<langle>length cs < 2 ^ 64 \<and> length gs < 2 ^ 64 \<and> length (SmtModel_funs_l m) < 2 ^ 64\<rangle>)
        (\<lambda>r. can_alloc_reference \<star> \<langle>r = restore_m m cs gs\<rangle>)\<close>
 
 lemma restore_spec [crush_specs]:
@@ -499,7 +499,7 @@ lemma restore_spec [crush_specs]:
   subgoal for funs_ref
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gf fs. funs_ref \<mapsto>\<langle>\<top>\<rangle> gf\<down>fs \<star>
-                 \<langle>fs = foldl (fix_m cs gs) (SmtModel_funs m) [0..<k]\<rangle>)\<close>
+                 \<langle>fs = foldl (fix_m cs gs) (SmtModel_funs_l m) [0..<k]\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -513,13 +513,13 @@ lemma restore_spec [crush_specs]:
 end
 
 lemma elim_lengths:
-  \<open>k \<le> length (SmtProblem_funs p) \<Longrightarrow>
-   length (fst (snd (foldl (elim_step_m p) (SmtProblem_asserts p, [], []) [0..<k]))) \<le> k \<and>
-   length (snd (snd (foldl (elim_step_m p) (SmtProblem_asserts p, [], []) [0..<k]))) \<le> k\<close>
+  \<open>k \<le> length (SmtProblem_funs_l p) \<Longrightarrow>
+   length (fst (snd (foldl (elim_step_m p) (SmtProblem_asserts_l p, [], []) [0..<k]))) \<le> k \<and>
+   length (snd (snd (foldl (elim_step_m p) (SmtProblem_asserts_l p, [], []) [0..<k]))) \<le> k\<close>
   by (induction k) (auto simp: elim_step_m_def Let_def split: prod.splits)
 
 lemma eliminate_lengths:
-  \<open>eliminate_m p = (a, cs, gs) \<Longrightarrow> length cs \<le> length (SmtProblem_funs p) \<and> length gs \<le> length (SmtProblem_funs p)\<close>
+  \<open>eliminate_m p = (a, cs, gs) \<Longrightarrow> length cs \<le> length (SmtProblem_funs_l p) \<and> length gs \<le> length (SmtProblem_funs_l p)\<close>
   using elim_lengths[OF order.refl, of p] by (simp add: eliminate_m_def)
 
 end

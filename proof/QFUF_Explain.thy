@@ -20,7 +20,7 @@ definition scan_row_in_contract :: \<open>Problem \<Rightarrow> bool list \<Righ
       64 word list \<Rightarrow> 64 word \<Rightarrow> (nat \<times> nat) set \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>scan_row_in_contract p rows rep g rs i E \<equiv>
      let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star>
-        \<langle>cc_inv p E rs \<and> unat i < length (Problem_terms p) \<and> length rows = length (Problem_terms p)\<rangle> in
+        \<langle>cc_inv p E rs \<and> unat i < length (Problem_terms_l p) \<and> length rows = length (Problem_terms_l p)\<rangle> in
      let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p E rs'\<rangle>) in
      make_function_contract pre post\<close>
 
@@ -48,7 +48,7 @@ definition scan_rows_contract :: \<open>Problem \<Rightarrow> bool list \<Righta
       64 word list \<Rightarrow> (nat \<times> nat) set \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>scan_rows_contract p rows rep g rs E \<equiv>
      let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star>
-        \<langle>cc_inv p E rs \<and> length rows = length (Problem_terms p)\<rangle> in
+        \<langle>cc_inv p E rs \<and> length rows = length (Problem_terms_l p)\<rangle> in
      let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p E rs'\<rangle>) in
      make_function_contract pre post\<close>
 
@@ -74,7 +74,7 @@ definition close_rows_contract :: \<open>Problem \<Rightarrow> bool list \<Right
       64 word list \<Rightarrow> (nat \<times> nat) set \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
   \<open>close_rows_contract p rows rep g rs E \<equiv>
      let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star>
-        \<langle>cc_inv p E rs \<and> length rows = length (Problem_terms p)\<rangle> in
+        \<langle>cc_inv p E rs \<and> length rows = length (Problem_terms_l p)\<rangle> in
      let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p E rs'\<rangle>) in
      make_function_contract pre post\<close>
 
@@ -111,9 +111,9 @@ definition joined_contract :: \<open>Problem \<Rightarrow> 64 word \<Rightarrow>
       (nat \<times> nat) set \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>joined_contract p k rep E \<equiv>
      let pre = can_alloc_reference \<star> (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p E rs\<rangle>) \<star>
-        \<langle>unat k < length (Problem_atoms p)\<rangle> in
+        \<langle>unat k < length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs) \<star>
-        \<langle>r \<longrightarrow> (unat (Atom_lhs (Problem_atoms p ! unat k)), unat (Atom_rhs (Problem_atoms p ! unat k))) \<in> cc p E\<rangle> in
+        \<langle>r \<longrightarrow> (unat (Atom_lhs (Problem_atoms_l p ! unat k)), unat (Atom_rhs (Problem_atoms_l p ! unat k))) \<in> cc p E\<rangle> in
      make_function_contract pre post\<close>
 
 lemma joined_spec:
@@ -126,18 +126,18 @@ lemma joined_spec:
 definition rows_join_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>rows_join_contract p e rows k \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length e = length (Problem_atoms p) \<and> length rows = length (Problem_terms p) \<and>
-         unat k < length (Problem_atoms p)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length e = length (Problem_atoms_l p) \<and> length rows = length (Problem_terms_l p) \<and>
+         unat k < length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>r \<longrightarrow> (unat (Atom_lhs (Problem_atoms p ! unat k)), unat (Atom_rhs (Problem_atoms p ! unat k)))
-                 \<in> cc p (asserted p e (length (Problem_atoms p)))\<rangle> in
+        \<langle>r \<longrightarrow> (unat (Atom_lhs (Problem_atoms_l p ! unat k)), unat (Atom_rhs (Problem_atoms_l p ! unat k)))
+                 \<in> cc p (asserted p e (length (Problem_atoms_l p)))\<rangle> in
      make_function_contract pre post\<close>
 
 lemma rows_join_spec:
   shows \<open>\<Gamma>; rows_join p e rows k \<Turnstile>\<^sub>F rows_join_contract p e rows k\<close>
   apply (crush_boot f: rows_join_def contract: rows_join_contract_def)
   apply (crush_base specs add: init_rep_spec assert_eqs_spec close_rows_spec
-      joined_spec[where E=\<open>asserted p e (length (Problem_atoms p))\<close>]
+      joined_spec[where E=\<open>asserted p e (length (Problem_atoms_l p))\<close>]
       contracts add: init_rep_contract_def assert_eqs_contract_def close_rows_contract_def joined_contract_def
       simp add: unat_of_nat_lt63 unat_of_nat_eq)
   apply (auto simp add: sizes_ok_def unat_of_nat_lt63 intro: cc_inv_init64 cc_inv_init cc_inv_length)
@@ -216,8 +216,8 @@ definition log_atoms_contract :: \<open>Problem \<Rightarrow> bool list \<Righta
       ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
   \<open>log_atoms_contract p t rep g rs xs gx xv ys gy yv ls gl lv \<equiv>
      let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> xs \<mapsto>\<langle>\<top>\<rangle> gx\<down>xv \<star> ys \<mapsto>\<langle>\<top>\<rangle> gy\<down>yv \<star> ls \<mapsto>\<langle>\<top>\<rangle> gl\<down>lv \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms p) \<and> length rs = length (Problem_terms p)\<rangle> in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms p)\<rangle>) \<star>
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms_l p) \<and> length rs = length (Problem_terms_l p)\<rangle> in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms_l p)\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) in
      make_function_contract pre post\<close>
 
@@ -226,7 +226,7 @@ lemma log_atoms_spec:
   apply (crush_boot f: log_atoms_def contract: log_atoms_contract_def)
   apply (crush_base simp add: sizes_ok_def)
   apply (ucincl_discharge\<open>
-    rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms p)\<rangle>) \<star>
+    rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms_l p)\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v)\<close>
       and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
       and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -243,8 +243,8 @@ definition log_row_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 word
       ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow> 64 word \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>log_row_contract p rep g rs xs gx xv ys gy yv ls gl lv i \<equiv>
      let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> xs \<mapsto>\<langle>\<top>\<rangle> gx\<down>xv \<star> ys \<mapsto>\<langle>\<top>\<rangle> gy\<down>yv \<star> ls \<mapsto>\<langle>\<top>\<rangle> gl\<down>lv \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms p) \<and> unat i < length (Problem_terms p)\<rangle> in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms p)\<rangle>) \<star>
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms_l p) \<and> unat i < length (Problem_terms_l p)\<rangle> in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms_l p)\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) in
      make_function_contract pre post\<close>
 
@@ -254,7 +254,7 @@ lemma log_row_spec:
   apply (crush_base simp add: sizes_ok_def)
   subgoal for changed_ref
     apply (ucincl_discharge\<open>
-      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c) \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms p)\<rangle>) \<star>
+      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c) \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms_l p)\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -273,8 +273,8 @@ definition log_scan_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 wor
       ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>log_scan_contract p rep g rs xs gx xv ys gy yv ls gl lv  \<equiv>
      let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> xs \<mapsto>\<langle>\<top>\<rangle> gx\<down>xv \<star> ys \<mapsto>\<langle>\<top>\<rangle> gy\<down>yv \<star> ls \<mapsto>\<langle>\<top>\<rangle> gl\<down>lv \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms p)\<rangle> in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms p)\<rangle>) \<star>
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms_l p)\<rangle> in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms_l p)\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) in
      make_function_contract pre post\<close>
 
@@ -284,7 +284,7 @@ lemma log_scan_spec:
   apply (crush_base simp add: sizes_ok_def)
   subgoal for changed_ref
     apply (ucincl_discharge\<open>
-      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c) \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms p)\<rangle>) \<star>
+      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c) \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms_l p)\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -302,8 +302,8 @@ definition log_close_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 wo
       ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
   \<open>log_close_contract p rep g rs xs gx xv ys gy yv ls gl lv  \<equiv>
      let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> xs \<mapsto>\<langle>\<top>\<rangle> gx\<down>xv \<star> ys \<mapsto>\<langle>\<top>\<rangle> gy\<down>yv \<star> ls \<mapsto>\<langle>\<top>\<rangle> gl\<down>lv \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms p)\<rangle> in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms p)\<rangle>) \<star>
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms_l p)\<rangle> in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms_l p)\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) in
      make_function_contract pre post\<close>
 
@@ -312,10 +312,10 @@ lemma log_close_spec:
   apply (crush_boot f: log_close_def contract: log_close_contract_def)
   apply (crush_base simp add: sizes_ok_def)
   apply (ucincl_discharge\<open>
-    rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms p)\<rangle>) \<star>
+    rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms_l p)\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v)\<close>
       and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
-      and \<tau>=\<open>\<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms p)\<rangle>) \<star>
+      and \<tau>=\<open>\<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>length rs' = length (Problem_terms_l p)\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v)\<close>
       and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
     in wp_raw_for_loop_framedI'\<close>)
@@ -328,7 +328,7 @@ definition merge_log_contract :: \<open>Problem \<Rightarrow> bool list \<Righta
       ('s, 64 word list \<times> 64 word list \<times> 64 word list \<times> tnil, 'abort) function_contract\<close> where
   \<open>merge_log_contract p t \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms p)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>_. can_alloc_reference in
      make_function_contract pre post\<close>
 
@@ -480,9 +480,9 @@ definition path_explain_log_contract :: \<open>Problem \<Rightarrow> 64 word lis
       ('s, bool list \<times> bool list \<times> tnil, 'abort) function_contract\<close> where
   \<open>path_explain_log_contract p xs ys ls k \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> unat k < length (Problem_atoms p)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> unat k < length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>length (fst r) = length (Problem_atoms p) \<and> length (fst (snd r)) = length (Problem_terms p)\<rangle> in
+        \<langle>length (fst r) = length (Problem_atoms_l p) \<and> length (fst (snd r)) = length (Problem_terms_l p)\<rangle> in
      make_function_contract pre post\<close>
 
 lemma path_explain_log_spec:
@@ -491,15 +491,15 @@ lemma path_explain_log_spec:
   apply (crush_base specs add: log_adj_spec contracts add: log_adj_contract_def inline: vec_push_def simp add: sizes_ok_def unat_of_nat_lt63)
   subgoal for e_ref rows_ref used_ref qa_ref qb_ref
     apply (ucincl_discharge\<open>
-      rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> (\<Squnion>g' v. e_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_atoms p)\<rangle>) \<star>
-        (\<Squnion>g' v. rows_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms p)\<rangle>) \<star> (\<Squnion>g' v. used_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star>
+      rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> (\<Squnion>g' v. e_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_atoms_l p)\<rangle>) \<star>
+        (\<Squnion>g' v. rows_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms_l p)\<rangle>) \<star> (\<Squnion>g' v. used_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star>
         (\<Squnion>g' v. qa_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. qb_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_raw_for_loop_framedI'\<close>)
     apply (crush_base specs add: get_or_spec bfs_spec
-        walk_spec[where ne=\<open>length (Problem_atoms p)\<close> and nr=\<open>length (Problem_terms p)\<close>]
+        walk_spec[where ne=\<open>length (Problem_atoms_l p)\<close> and nr=\<open>length (Problem_terms_l p)\<close>]
         contracts add: get_or_contract_def bfs_contract_def walk_contract_def
         simp add: sizes_ok_def unat_of_nat_lt63)
     done
@@ -510,9 +510,9 @@ definition path_explain_contract :: \<open>Problem \<Rightarrow> bool list \<Rig
       ('s, bool list \<times> bool list \<times> tnil, 'abort) function_contract\<close> where
   \<open>path_explain_contract p t k \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms p) \<and> unat k < length (Problem_atoms p)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms_l p) \<and> unat k < length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>length (fst r) = length (Problem_atoms p) \<and> length (fst (snd r)) = length (Problem_terms p)\<rangle> in
+        \<langle>length (fst r) = length (Problem_atoms_l p) \<and> length (fst (snd r)) = length (Problem_terms_l p)\<rangle> in
      make_function_contract pre post\<close>
 
 lemma path_explain_spec:
@@ -525,13 +525,13 @@ lemma path_explain_spec:
 definition explain_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> ('s, bool list, 'abort) function_contract\<close> where
   \<open>explain_contract p t k \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms p) \<and> unat k < length (Problem_atoms p) \<and>
-         (unat (Atom_lhs (Problem_atoms p ! unat k)), unat (Atom_rhs (Problem_atoms p ! unat k)))
-           \<in> cc p (asserted p t (length (Problem_atoms p)))\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms_l p) \<and> unat k < length (Problem_atoms_l p) \<and>
+         (unat (Atom_lhs (Problem_atoms_l p ! unat k)), unat (Atom_rhs (Problem_atoms_l p ! unat k)))
+           \<in> cc p (asserted p t (length (Problem_atoms_l p)))\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>length r = length (Problem_atoms p) \<and>
-         (unat (Atom_lhs (Problem_atoms p ! unat k)), unat (Atom_rhs (Problem_atoms p ! unat k)))
-           \<in> cc p (asserted p r (length (Problem_atoms p)))\<rangle> in
+        \<langle>length r = length (Problem_atoms_l p) \<and>
+         (unat (Atom_lhs (Problem_atoms_l p ! unat k)), unat (Atom_rhs (Problem_atoms_l p ! unat k)))
+           \<in> cc p (asserted p r (length (Problem_atoms_l p)))\<rangle> in
      make_function_contract pre post\<close>
 
 lemma explain_spec:
@@ -545,13 +545,13 @@ definition explain_log_contract :: \<open>Problem \<Rightarrow> bool list \<Righ
       64 word \<Rightarrow> ('s, bool list, 'abort) function_contract\<close> where
   \<open>explain_log_contract p t xs ys ls k \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms p) \<and> unat k < length (Problem_atoms p) \<and>
-         (unat (Atom_lhs (Problem_atoms p ! unat k)), unat (Atom_rhs (Problem_atoms p ! unat k)))
-           \<in> cc p (asserted p t (length (Problem_atoms p)))\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms_l p) \<and> unat k < length (Problem_atoms_l p) \<and>
+         (unat (Atom_lhs (Problem_atoms_l p ! unat k)), unat (Atom_rhs (Problem_atoms_l p ! unat k)))
+           \<in> cc p (asserted p t (length (Problem_atoms_l p)))\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>length r = length (Problem_atoms p) \<and>
-         (unat (Atom_lhs (Problem_atoms p ! unat k)), unat (Atom_rhs (Problem_atoms p ! unat k)))
-           \<in> cc p (asserted p r (length (Problem_atoms p)))\<rangle> in
+        \<langle>length r = length (Problem_atoms_l p) \<and>
+         (unat (Atom_lhs (Problem_atoms_l p ! unat k)), unat (Atom_rhs (Problem_atoms_l p ! unat k)))
+           \<in> cc p (asserted p r (length (Problem_atoms_l p)))\<rangle> in
      make_function_contract pre post\<close>
 
 lemma explain_log_spec:
@@ -575,7 +575,7 @@ definition conflict_clause_contract :: \<open>bool list \<Rightarrow> 64 word \<
   \<open>conflict_clause_contract e k \<equiv>
      let pre = can_alloc_reference \<star> \<langle>length e < 2^63\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>set (Clause_lits r) = conflict_lits e k (length e) \<and> length (Clause_lits r) \<le> length e + 1\<rangle> in
+        \<langle>set (Clause_lits_l r) = conflict_lits e k (length e) \<and> length (Clause_lits_l r) \<le> length e + 1\<rangle> in
      make_function_contract pre post\<close>
 
 lemma conflict_clause_spec:
@@ -596,21 +596,21 @@ lemma conflict_clause_spec:
   done
 
 lemma conflict_lits_clause_ok:
-  assumes wf: \<open>wf_problem p\<close> and k: \<open>unat k < length (Problem_atoms p)\<close>
-      and len: \<open>length e = length (Problem_atoms p)\<close> \<open>length e < 2^63\<close>
-      and cc: \<open>(unat (Atom_lhs (Problem_atoms p ! unat k)), unat (Atom_rhs (Problem_atoms p ! unat k)))
-                 \<in> cc p (asserted p e (length (Problem_atoms p)))\<close>
-      and c: \<open>set (Clause_lits c) = conflict_lits e k (length e)\<close>
+  assumes wf: \<open>wf_problem p\<close> and k: \<open>unat k < length (Problem_atoms_l p)\<close>
+      and len: \<open>length e = length (Problem_atoms_l p)\<close> \<open>length e < 2^63\<close>
+      and cc: \<open>(unat (Atom_lhs (Problem_atoms_l p ! unat k)), unat (Atom_rhs (Problem_atoms_l p ! unat k)))
+                 \<in> cc p (asserted p e (length (Problem_atoms_l p)))\<close>
+      and c: \<open>set (Clause_lits_l c) = conflict_lits e k (length e)\<close>
   shows \<open>clause_ok p c\<close>
 proof (rule conflict_clause_ok[OF wf k cc])
   have j: \<open>unat (word_of_nat j :: 64 word) = j\<close> if \<open>j < length e\<close> for j
     using that len(2) by (simp add: unat_of_nat_eq)
-  show \<open>\<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < length (Problem_atoms p)\<close>
+  show \<open>\<forall>l \<in> set (Clause_lits_l c). unat (Lit_atom l) < length (Problem_atoms_l p)\<close>
     using c k len j by (auto simp add: conflict_lits_def)
-  show \<open>\<exists>l \<in> set (Clause_lits c). unat (Lit_atom l) = unat k \<and> Lit_pos l\<close>
+  show \<open>\<exists>l \<in> set (Clause_lits_l c). unat (Lit_atom l) = unat k \<and> Lit_pos l\<close>
     using c by (auto simp add: conflict_lits_def)
-  show \<open>\<forall>j < length (Problem_atoms p). e ! j \<longrightarrow>
-          (\<exists>l \<in> set (Clause_lits c). unat (Lit_atom l) = j \<and> \<not> Lit_pos l)\<close>
+  show \<open>\<forall>j < length (Problem_atoms_l p). e ! j \<longrightarrow>
+          (\<exists>l \<in> set (Clause_lits_l c). unat (Lit_atom l) = j \<and> \<not> Lit_pos l)\<close>
     using c len j by (auto simp add: conflict_lits_def)
 qed
 

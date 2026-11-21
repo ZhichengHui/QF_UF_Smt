@@ -1,5 +1,5 @@
 theory QFUF_CoreSpec
-  imports "QFUF_Spec.QFUF_Spec"
+  imports QFUF_Rvec
 begin
 
 section \<open>The specification of the core solver\<close>
@@ -9,8 +9,8 @@ text \<open>
   the translation passes \<^verbatim>\<open>p\<close> by value.
 
   A problem is a CNF formula over equalities between ground terms of one uninterpreted sort. Term
-  \<open>i\<close> of \<^const>\<open>Problem_terms\<close> applies function symbol \<^const>\<open>Term_fun\<close> (a number; constants are
-  0-ary symbols) to the terms whose indices are listed in \<^const>\<open>Term_args\<close>. Atom \<open>k\<close> is the
+  \<open>i\<close> of \<^const>\<open>Problem_terms_l\<close> applies function symbol \<^const>\<open>Term_fun\<close> (a number; constants are
+  0-ary symbols) to the terms whose indices are listed in \<^const>\<open>Term_args_l\<close>. Atom \<open>k\<close> is the
   equality between the terms \<^const>\<open>Atom_lhs\<close> and \<^const>\<open>Atom_rhs\<close>. A literal is an atom index
   with a polarity, a clause is a disjunction of literals, and the problem is the conjunction of its
   clauses.
@@ -25,7 +25,7 @@ text \<open>An interpretation is a function \<open>I\<close>: \<open>I f vs\<clo
 function term_val :: \<open>(nat \<Rightarrow> 'd list \<Rightarrow> 'd) \<Rightarrow> Term list \<Rightarrow> nat \<Rightarrow> 'd\<close> where
   \<open>term_val I ts i =
      I (unat (Term_fun (ts ! i)))
-       (List.map (\<lambda>x. if unat x < i then term_val I ts (unat x) else undefined) (Term_args (ts ! i)))\<close>
+       (List.map (\<lambda>x. if unat x < i then term_val I ts (unat x) else undefined) (Term_args_l (ts ! i)))\<close>
   by auto
 termination
   by (relation \<open>measure (\<lambda>(_, _, i). i)\<close>) auto
@@ -37,16 +37,16 @@ text \<open>\<^const>\<open>term_val\<close> \<open>I ts i\<close> is the value 
 
 definition atom_true :: \<open>(nat \<Rightarrow> 'd list \<Rightarrow> 'd) \<Rightarrow> Problem \<Rightarrow> Atom \<Rightarrow> bool\<close> where
   \<open>atom_true I p at \<equiv>
-     term_val I (Problem_terms p) (unat (Atom_lhs at)) = term_val I (Problem_terms p) (unat (Atom_rhs at))\<close>
+     term_val I (Problem_terms_l p) (unat (Atom_lhs at)) = term_val I (Problem_terms_l p) (unat (Atom_rhs at))\<close>
 
 definition lit_true :: \<open>(nat \<Rightarrow> 'd list \<Rightarrow> 'd) \<Rightarrow> Problem \<Rightarrow> Lit \<Rightarrow> bool\<close> where
-  \<open>lit_true I p l \<equiv> atom_true I p (Problem_atoms p ! unat (Lit_atom l)) = Lit_pos l\<close>
+  \<open>lit_true I p l \<equiv> atom_true I p (Problem_atoms_l p ! unat (Lit_atom l)) = Lit_pos l\<close>
 
 definition clause_true :: \<open>(nat \<Rightarrow> 'd list \<Rightarrow> 'd) \<Rightarrow> Problem \<Rightarrow> Clause \<Rightarrow> bool\<close> where
-  \<open>clause_true I p c \<equiv> \<exists>l \<in> set (Clause_lits c). lit_true I p l\<close>
+  \<open>clause_true I p c \<equiv> \<exists>l \<in> set (Clause_lits_l c). lit_true I p l\<close>
 
 definition problem_true :: \<open>(nat \<Rightarrow> 'd list \<Rightarrow> 'd) \<Rightarrow> Problem \<Rightarrow> bool\<close> where
-  \<open>problem_true I p \<equiv> \<forall>c \<in> set (Problem_clauses p). clause_true I p c\<close>
+  \<open>problem_true I p \<equiv> \<forall>c \<in> set (Problem_clauses_l p). clause_true I p c\<close>
 
 text \<open>\<^const>\<open>atom_true\<close>: both sides of the atom have the same value. \<^const>\<open>lit_true\<close>: the
   atom's truth value equals the literal's polarity. \<^const>\<open>clause_true\<close>: some literal holds.
@@ -62,7 +62,7 @@ subsection \<open>Models\<close>
 
 definition model_interp :: \<open>Model \<Rightarrow> nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where
   \<open>model_interp m f vs \<equiv>
-     (case List.find (\<lambda>e. unat (Entry_fun e) = f \<and> List.map unat (Entry_args e) = vs) (Model_entries m) of
+     (case List.find (\<lambda>e. unat (Entry_fun e) = f \<and> List.map unat (Entry_args_l e) = vs) (Model_entries_l m) of
         Some e \<Rightarrow> unat (Entry_val e)
       | None \<Rightarrow> 0)\<close>
 
@@ -75,11 +75,11 @@ subsection \<open>Preconditions\<close>
 
 definition wf_problem :: \<open>Problem \<Rightarrow> bool\<close> where
   \<open>wf_problem p \<equiv>
-     (\<forall>i < length (Problem_terms p). \<forall>x \<in> set (Term_args (Problem_terms p ! i)). unat x < i) \<and>
-     (\<forall>at \<in> set (Problem_atoms p).
-        unat (Atom_lhs at) < length (Problem_terms p) \<and> unat (Atom_rhs at) < length (Problem_terms p)) \<and>
-     (\<forall>c \<in> set (Problem_clauses p). \<forall>l \<in> set (Clause_lits c).
-        unat (Lit_atom l) < length (Problem_atoms p))\<close>
+     (\<forall>i < length (Problem_terms_l p). \<forall>x \<in> set (Term_args_l (Problem_terms_l p ! i)). unat x < i) \<and>
+     (\<forall>at \<in> set (Problem_atoms_l p).
+        unat (Atom_lhs at) < length (Problem_terms_l p) \<and> unat (Atom_rhs at) < length (Problem_terms_l p)) \<and>
+     (\<forall>c \<in> set (Problem_clauses_l p). \<forall>l \<in> set (Clause_lits_l c).
+        unat (Lit_atom l) < length (Problem_atoms_l p))\<close>
 
 text \<open>\<^const>\<open>wf_problem\<close> has three parts:
   \<^item> Every argument index of term \<open>i\<close> is smaller than \<open>i\<close>. The terms then form a DAG in index
@@ -93,9 +93,9 @@ text \<open>\<^const>\<open>wf_problem\<close> has three parts:
 
 definition sizes_ok :: \<open>Problem \<Rightarrow> bool\<close> where
   \<open>sizes_ok p \<equiv>
-     length (Problem_terms p) < 2^63 \<and> (\<forall>t \<in> set (Problem_terms p). length (Term_args t) < 2^63) \<and>
-     length (Problem_atoms p) < 2^63 \<and>
-     length (Problem_clauses p) < 2^63 \<and> (\<forall>c \<in> set (Problem_clauses p). length (Clause_lits c) < 2^63)\<close>
+     length (Problem_terms_l p) < 2^63 \<and> (\<forall>t \<in> set (Problem_terms_l p). length (Term_args_l t) < 2^63) \<and>
+     length (Problem_atoms_l p) < 2^63 \<and>
+     length (Problem_clauses_l p) < 2^63 \<and> (\<forall>c \<in> set (Problem_clauses_l p). length (Clause_lits_l c) < 2^63)\<close>
 
 text \<open>\<^const>\<open>sizes_ok\<close>: every \<^verbatim>\<open>Vec\<close> in the problem has fewer than \<open>2^63\<close> elements. Rust ensures
   this for a \<^verbatim>\<open>Vec\<close> of non-zero-sized elements, because an allocation has at most

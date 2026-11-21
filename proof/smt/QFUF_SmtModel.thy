@@ -198,14 +198,14 @@ function (sequential) tr_term_m :: \<open>SmtProblem \<Rightarrow> enc_m list \<
 | \<open>tr_term_m p dm env n s (SmtTerm_Param k) = (s, env ! unat k)\<close>
 | \<open>tr_term_m p dm env n s (SmtTerm_Fun f args) =
      (let r = tr_args_m p dm env n s args; r2 = enc_terms_m (fst r) (snd r); r3 = add_term_m (fst r2) (unat f) (snd r2) in
-      if SmtFun_ret (SmtProblem_funs p ! unat f) = SmtSort_Bool
+      if SmtFun_ret (SmtProblem_funs_l p ! unat f) = SmtSort_Bool
       then (let r4 = add_atom_m (fst r3) (snd r3) 0 in (fst r4, ELit (snd r4) True))
       else (fst r3, ETerm (snd r3)))\<close>
 | \<open>tr_term_m p dm env n s (SmtTerm_Def d args) =
-     (if SmtDef_params (SmtProblem_defs p ! unat d) = [] then (s, dm ! unat d)
+     (if SmtDef_params_l (SmtProblem_defs_l p ! unat d) = [] then (s, dm ! unat d)
       else if unat d < n then
         (let r = tr_args_m p dm env n s args in
-         tr_term_m p dm (snd r) (unat d) (fst r) (SmtDef_body (SmtProblem_defs p ! unat d)))
+         tr_term_m p dm (snd r) (unat d) (fst r) (SmtDef_body (SmtProblem_defs_l p ! unat d)))
       else (s, ELit 0 True))\<close>
 | \<open>tr_term_m p dm env n s (SmtTerm_App op args) =
      (let r = tr_args_m p dm env n s args in enc_app_m (fst r) op (snd r))\<close>
@@ -222,7 +222,7 @@ text \<open>The state after the first lines of \<^verbatim>\<open>tr_problem\<cl
   \<open>TRUE = TRUE\<close> and \<open>TRUE = FALSE\<close>, and the clause \<open>\<not> (TRUE = FALSE)\<close>.\<close>
 definition tr_init_m :: \<open>SmtProblem \<Rightarrow> st\<close> where
   \<open>tr_init_m p \<equiv>
-     (let nf = length (SmtProblem_funs p);
+     (let nf = length (SmtProblem_funs_l p);
           s0 = St [] [] [] (nf + 2);
           s1 = fst (add_term_m s0 nf []); s2 = fst (add_term_m s1 (nf + 1) []);
           s3 = fst (add_atom_m s2 0 0); s4 = fst (add_atom_m s3 0 1)
@@ -230,20 +230,20 @@ definition tr_init_m :: \<open>SmtProblem \<Rightarrow> st\<close> where
 
 definition tr_defs_step :: \<open>SmtProblem \<Rightarrow> st \<times> enc_m list \<Rightarrow> nat \<Rightarrow> st \<times> enc_m list\<close> where
   \<open>tr_defs_step p \<equiv> \<lambda>(s, dm) d.
-     if SmtDef_params (SmtProblem_defs p ! d) = [] then
-       (let r = tr_term_m p dm [] d s (SmtDef_body (SmtProblem_defs p ! d)) in (fst r, dm @ [snd r]))
+     if SmtDef_params_l (SmtProblem_defs_l p ! d) = [] then
+       (let r = tr_term_m p dm [] d s (SmtDef_body (SmtProblem_defs_l p ! d)) in (fst r, dm @ [snd r]))
      else (s, dm @ [ELit 0 True])\<close>
 
 definition tr_defs_m :: \<open>SmtProblem \<Rightarrow> st \<times> enc_m list\<close> where
-  \<open>tr_defs_m p \<equiv> foldl (tr_defs_step p) (tr_init_m p, []) [0..<length (SmtProblem_defs p)]\<close>
+  \<open>tr_defs_m p \<equiv> foldl (tr_defs_step p) (tr_init_m p, []) [0..<length (SmtProblem_defs_l p)]\<close>
 
 definition tr_asserts_step :: \<open>SmtProblem \<Rightarrow> enc_m list \<Rightarrow> st \<Rightarrow> SmtTerm \<Rightarrow> st\<close> where
   \<open>tr_asserts_step p dm \<equiv> \<lambda>s t.
-     (let r = tr_term_m p dm [] (length (SmtProblem_defs p)) s t; l = enc_lit_m (snd r)
+     (let r = tr_term_m p dm [] (length (SmtProblem_defs_l p)) s t; l = enc_lit_m (snd r)
       in add_clause_m (fst r) [lit_m (fst l) (snd l)])\<close>
 
 definition tr_asserts_m :: \<open>SmtProblem \<Rightarrow> st \<times> enc_m list \<Rightarrow> st\<close> where
-  \<open>tr_asserts_m p sd \<equiv> foldl (tr_asserts_step p (snd sd)) (fst sd) (SmtProblem_asserts p)\<close>
+  \<open>tr_asserts_m p sd \<equiv> foldl (tr_asserts_step p (snd sd)) (fst sd) (SmtProblem_asserts_l p)\<close>
 
 definition tr_state_m :: \<open>SmtProblem \<Rightarrow> st\<close> where
   \<open>tr_state_m p \<equiv> tr_asserts_m p (tr_defs_m p)\<close>
@@ -255,14 +255,14 @@ subsection \<open>Models\<close>
 
 definition const_value_m :: \<open>Model \<Rightarrow> nat \<Rightarrow> nat\<close> where
   \<open>const_value_m m f \<equiv>
-     (case List.find (\<lambda>e. unat (Entry_fun e) = f \<and> Entry_args e = []) (Model_entries m) of
+     (case List.find (\<lambda>e. unat (Entry_fun e) = f \<and> Entry_args_l e = []) (Model_entries_l m) of
         Some e \<Rightarrow> unat (Entry_val e) | None \<Rightarrow> 0)\<close>
 
 definition dsize_step :: \<open>nat \<Rightarrow> 64 word \<Rightarrow> nat\<close> where
   \<open>dsize_step n x \<equiv> if n \<le> unat x then unat x + 1 else n\<close>
 
 definition domain_size_m :: \<open>Model \<Rightarrow> nat\<close> where
-  \<open>domain_size_m m \<equiv> foldl (\<lambda>n e. foldl dsize_step (dsize_step n (Entry_val e)) (Entry_args e)) 1 (Model_entries m)\<close>
+  \<open>domain_size_m m \<equiv> foldl (\<lambda>n e. foldl dsize_step (dsize_step n (Entry_val e)) (Entry_args_l e)) 1 (Model_entries_l m)\<close>
 
 definition value_of_m :: \<open>SmtSort \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> SmtValue\<close> where
   \<open>value_of_m srt v t \<equiv>
@@ -279,24 +279,24 @@ lemma value_of_m_simps [simp]:
 text \<open>The entry \<open>e\<close> passes the test of \<^verbatim>\<open>tr_interp\<close> for the symbol with signature \<open>sg\<close>.\<close>
 definition entry_ok_m :: \<open>SmtFun \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> Entry \<Rightarrow> bool\<close> where
   \<open>entry_ok_m sg f t u e \<equiv>
-     unat (Entry_fun e) = f \<and> length (Entry_args e) = length (SmtFun_args sg) \<and>
-     (\<forall>k < length (Entry_args e). SmtFun_args sg ! k = SmtSort_Bool \<longrightarrow>
-        unat (Entry_args e ! k) = t \<or> unat (Entry_args e ! k) = u)\<close>
+     unat (Entry_fun e) = f \<and> length (Entry_args_l e) = length (SmtFun_args_l sg) \<and>
+     (\<forall>k < length (Entry_args_l e). SmtFun_args_l sg ! k = SmtSort_Bool \<longrightarrow>
+        unat (Entry_args_l e ! k) = t \<or> unat (Entry_args_l e ! k) = u)\<close>
 
 definition tr_entry_m :: \<open>SmtFun \<Rightarrow> nat \<Rightarrow> Entry \<Rightarrow> SmtEntry\<close> where
   \<open>tr_entry_m sg t e \<equiv>
-     make_SmtEntry (map (\<lambda>k. value_of_m (SmtFun_args sg ! k) (unat (Entry_args e ! k)) t) [0..<length (Entry_args e)])
+     make_SmtEntry (map (\<lambda>k. value_of_m (SmtFun_args_l sg ! k) (unat (Entry_args_l e ! k)) t) [0..<length (Entry_args_l e)])
        (value_of_m (SmtFun_ret sg) (unat (Entry_val e)) t)\<close>
 
 definition tr_interp_m :: \<open>SmtProblem \<Rightarrow> Model \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> SmtInterp\<close> where
   \<open>tr_interp_m p m f t u \<equiv>
-     (let sg = SmtProblem_funs p ! f in
-      make_SmtInterp (map (tr_entry_m sg t) (filter (entry_ok_m sg f t u) (Model_entries m)))
+     (let sg = SmtProblem_funs_l p ! f in
+      make_SmtInterp (map (tr_entry_m sg t) (filter (entry_ok_m sg f t u) (Model_entries_l m)))
         (value_of_m (SmtFun_ret sg) 0 t))\<close>
 
 definition tr_model_m :: \<open>SmtProblem \<Rightarrow> Model \<Rightarrow> SmtModel\<close> where
   \<open>tr_model_m p m \<equiv>
-     (let nf = length (SmtProblem_funs p); t = const_value_m m nf; u = const_value_m m (nf + 1);
+     (let nf = length (SmtProblem_funs_l p); t = const_value_m m nf; u = const_value_m m (nf + 1);
           n = domain_size_m m
       in make_SmtModel (replicate (unat (SmtProblem_num_sorts p)) (word_of_nat n))
            (map (\<lambda>f. tr_interp_m p m f t u) [0..<nf]))\<close>
@@ -402,24 +402,24 @@ text \<open>The terms form a DAG in index order and use function symbols below t
 definition st_wf :: \<open>nat \<Rightarrow> st \<Rightarrow> bool\<close> where
   \<open>st_wf nf s \<equiv>
      (\<forall>i < length (st_terms s). unat (Term_fun (st_terms s ! i)) < st_next s \<and>
-        (\<forall>x \<in> set (Term_args (st_terms s ! i)). unat x < i)) \<and>
+        (\<forall>x \<in> set (Term_args_l (st_terms s ! i)). unat x < i)) \<and>
      (\<forall>at \<in> set (st_atoms s). unat (Atom_lhs at) < length (st_terms s) \<and> unat (Atom_rhs at) < length (st_terms s)) \<and>
-     (\<forall>c \<in> set (st_clauses s). \<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < length (st_atoms s)) \<and>
+     (\<forall>c \<in> set (st_clauses s). \<forall>l \<in> set (Clause_lits_l c). unat (Lit_atom l) < length (st_atoms s)) \<and>
      2 \<le> length (st_terms s) \<and> 1 \<le> length (st_atoms s) \<and> nf + 2 \<le> st_next s \<and> st_next s \<le> nf + length (st_terms s)\<close>
 
 lemma wf_extend:
   assumes \<open>st_wf nf s\<close> \<open>s' = St (st_terms s @ T) (st_atoms s @ A) (st_clauses s @ C) n'\<close>
-    \<open>\<forall>i < length T. unat (Term_fun (T ! i)) < n' \<and> (\<forall>x \<in> set (Term_args (T ! i)). unat x < length (st_terms s) + i)\<close>
+    \<open>\<forall>i < length T. unat (Term_fun (T ! i)) < n' \<and> (\<forall>x \<in> set (Term_args_l (T ! i)). unat x < length (st_terms s) + i)\<close>
     \<open>\<forall>at \<in> set A. unat (Atom_lhs at) < length (st_terms s) + length T \<and> unat (Atom_rhs at) < length (st_terms s) + length T\<close>
-    \<open>\<forall>c \<in> set C. \<forall>l \<in> set (Clause_lits c). unat (Lit_atom l) < length (st_atoms s) + length A\<close>
+    \<open>\<forall>c \<in> set C. \<forall>l \<in> set (Clause_lits_l c). unat (Lit_atom l) < length (st_atoms s) + length A\<close>
     \<open>st_next s \<le> n'\<close> \<open>n' \<le> nf + length (st_terms s) + length T\<close>
   shows \<open>st_wf nf s'\<close>
 proof -
   have t: \<open>\<forall>i < length (st_terms s'). unat (Term_fun (st_terms s' ! i)) < st_next s' \<and>
-        (\<forall>x \<in> set (Term_args (st_terms s' ! i)). unat x < i)\<close>
+        (\<forall>x \<in> set (Term_args_l (st_terms s' ! i)). unat x < i)\<close>
   proof (intro allI impI)
     fix i assume i: \<open>i < length (st_terms s')\<close>
-    show \<open>unat (Term_fun (st_terms s' ! i)) < st_next s' \<and> (\<forall>x \<in> set (Term_args (st_terms s' ! i)). unat x < i)\<close>
+    show \<open>unat (Term_fun (st_terms s' ! i)) < st_next s' \<and> (\<forall>x \<in> set (Term_args_l (st_terms s' ! i)). unat x < i)\<close>
     proof (cases \<open>i < length (st_terms s)\<close>)
       case True
       then show ?thesis using assms(1,2,6) by (auto simp: st_wf_def nth_append)
@@ -616,9 +616,9 @@ proof (induction k rule: less_induct)
   have tk: \<open>st_terms q ! k = st_terms s ! k\<close> using pre_nth_terms[OF assms(2) less.prems] .
   have f: \<open>I' (unat (Term_fun (st_terms s ! k))) = I (unat (Term_fun (st_terms s ! k)))\<close>
     using assms(1,3) less.prems by (simp add: st_wf_def agree_def)
-  have a: \<open>\<forall>x \<in> set (Term_args (st_terms s ! k)). unat x < k\<close> using assms(1) less.prems by (simp add: st_wf_def)
-  have \<open>map (\<lambda>x. if unat x < k then term_val I' (st_terms q) (unat x) else undefined) (Term_args (st_terms s ! k)) =
-        map (\<lambda>x. if unat x < k then term_val I (st_terms q) (unat x) else undefined) (Term_args (st_terms s ! k))\<close>
+  have a: \<open>\<forall>x \<in> set (Term_args_l (st_terms s ! k)). unat x < k\<close> using assms(1) less.prems by (simp add: st_wf_def)
+  have \<open>map (\<lambda>x. if unat x < k then term_val I' (st_terms q) (unat x) else undefined) (Term_args_l (st_terms s ! k)) =
+        map (\<lambda>x. if unat x < k then term_val I (st_terms q) (unat x) else undefined) (Term_args_l (st_terms s ! k))\<close>
     using less.IH a less.prems by (auto simp: tv_def)
   then show ?case unfolding tv_def by (subst (1 2) term_val.simps) (simp only: tk f)
 qed
@@ -871,7 +871,7 @@ proof -
     using pre_len[OF assms(4)] assms(5) s' by (auto simp: bnd_def)
   have ls: \<open>\<forall>l \<in> set ls. fst l < ?A \<and> fst l < 2 ^ 64\<close> using assms(2) b by (auto simp: lit_wf_def)
   have ba: \<open>?A < 2 ^ 64\<close> using b by simp
-  have cl: \<open>\<forall>c \<in> set ?NC. \<forall>x \<in> set (Clause_lits c). unat (Lit_atom x) < ?A + 1\<close>
+  have cl: \<open>\<forall>c \<in> set ?NC. \<forall>x \<in> set (Clause_lits_l c). unat (Lit_atom x) < ?A + 1\<close>
     using ls ba by (auto simp: andor_cl_m_def lit_m_def unat_wn)
   have w: \<open>st_wf nf s'\<close>
     using wf_extend[OF assms(1) s'] assms(1) b cl by (simp add: unat_wn) (auto simp: st_wf_def)
@@ -1181,9 +1181,9 @@ definition env_ok :: \<open>st \<Rightarrow> SmtSort list \<Rightarrow> enc_m li
   \<open>env_ok s ps env \<equiv> length env = length ps \<and> (\<forall>i < length ps. enc_wf s (env ! i) \<and> shape (ps ! i) (env ! i))\<close>
 
 definition dm_ok :: \<open>SmtProblem \<Rightarrow> st \<Rightarrow> nat \<Rightarrow> enc_m list \<Rightarrow> bool\<close> where
-  \<open>dm_ok p s n dm \<equiv> n \<le> length (SmtProblem_defs p) \<and> n \<le> length dm \<and>
+  \<open>dm_ok p s n dm \<equiv> n \<le> length (SmtProblem_defs_l p) \<and> n \<le> length dm \<and>
      (\<forall>d < n. enc_wf s (dm ! d) \<and>
-        (SmtDef_params (SmtProblem_defs p ! d) = [] \<longrightarrow> shape (SmtDef_ret (SmtProblem_defs p ! d)) (dm ! d)))\<close>
+        (SmtDef_params_l (SmtProblem_defs_l p ! d) = [] \<longrightarrow> shape (SmtDef_ret (SmtProblem_defs_l p ! d)) (dm ! d)))\<close>
 
 lemma env_ok_pre: \<open>pre s s' \<Longrightarrow> env_ok s ps env \<Longrightarrow> env_ok s' ps env\<close>
   by (auto simp: env_ok_def intro: enc_wf_pre)
@@ -1193,13 +1193,13 @@ lemma dm_ok_pre: \<open>pre s s' \<Longrightarrow> dm_ok p s n dm \<Longrightarr
 
 lemma tr_wb:
   shows \<open>tr_term_m p dm env n s t = (s', e) \<Longrightarrow> smt_wf p \<Longrightarrow> smt_fragment p \<Longrightarrow> smt_term_no_bv t \<Longrightarrow>
-     smt_tsort (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps t = Some so \<Longrightarrow>
-     env_ok s ps env \<Longrightarrow> dm_ok p s n dm \<Longrightarrow> st_wf (length (SmtProblem_funs p)) s \<Longrightarrow> pre s' q \<Longrightarrow> bnd q \<Longrightarrow>
-     st_wf (length (SmtProblem_funs p)) s' \<and> enc_wf s' e \<and> shape so e \<and> ext q s s'\<close>
+     smt_tsort (SmtProblem_funs_l p) (take n (SmtProblem_defs_l p)) ps t = Some so \<Longrightarrow>
+     env_ok s ps env \<Longrightarrow> dm_ok p s n dm \<Longrightarrow> st_wf (length (SmtProblem_funs_l p)) s \<Longrightarrow> pre s' q \<Longrightarrow> bnd q \<Longrightarrow>
+     st_wf (length (SmtProblem_funs_l p)) s' \<and> enc_wf s' e \<and> shape so e \<and> ext q s s'\<close>
     and \<open>tr_args_m p dm env n s ts = (s', es) \<Longrightarrow> smt_wf p \<Longrightarrow> smt_fragment p \<Longrightarrow> (\<forall>t \<in> set ts. smt_term_no_bv t) \<Longrightarrow>
-     map (smt_tsort (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps) ts = map Some ss \<Longrightarrow>
-     env_ok s ps env \<Longrightarrow> dm_ok p s n dm \<Longrightarrow> st_wf (length (SmtProblem_funs p)) s \<Longrightarrow> pre s' q \<Longrightarrow> bnd q \<Longrightarrow>
-     st_wf (length (SmtProblem_funs p)) s' \<and> (\<forall>i < length ts. enc_wf s' (es ! i) \<and> shape (ss ! i) (es ! i)) \<and> ext q s s'\<close>
+     map (smt_tsort (SmtProblem_funs_l p) (take n (SmtProblem_defs_l p)) ps) ts = map Some ss \<Longrightarrow>
+     env_ok s ps env \<Longrightarrow> dm_ok p s n dm \<Longrightarrow> st_wf (length (SmtProblem_funs_l p)) s \<Longrightarrow> pre s' q \<Longrightarrow> bnd q \<Longrightarrow>
+     st_wf (length (SmtProblem_funs_l p)) s' \<and> (\<forall>i < length ts. enc_wf s' (es ! i) \<and> shape (ss ! i) (es ! i)) \<and> ext q s s'\<close>
 proof (induction p dm env n s t and p dm env n s ts arbitrary: s' e ps so and s' es ps ss rule: tr_term_m_tr_args_m.induct)
   case (1 p dm env n s b s' e ps so)
   then show ?case by (auto simp: enc_wf_def shape_def st_wf_def ext_refl)
@@ -1211,8 +1211,8 @@ next
   then show ?case by (auto simp: env_ok_def ext_refl split: if_splits)
 next
   case (4 p dm env n s f args s' e ps so)
-  let ?fs = \<open>SmtProblem_funs p\<close> and ?nf = \<open>length (SmtProblem_funs p)\<close>
-  have ts: \<open>unat f < length ?fs\<close> \<open>map (smt_tsort ?fs (take n (SmtProblem_defs p)) ps) args = map Some (SmtFun_args (?fs ! unat f))\<close>
+  let ?fs = \<open>SmtProblem_funs_l p\<close> and ?nf = \<open>length (SmtProblem_funs_l p)\<close>
+  have ts: \<open>unat f < length ?fs\<close> \<open>map (smt_tsort ?fs (take n (SmtProblem_defs_l p)) ps) args = map Some (SmtFun_args_l (?fs ! unat f))\<close>
     \<open>so = SmtFun_ret (?fs ! unat f)\<close> using 4(6) by (auto split: if_splits)
   obtain s1 es1 where r1: \<open>tr_args_m p dm env n s args = (s1, es1)\<close> by (cases \<open>tr_args_m p dm env n s args\<close>)
   obtain s2 ts2 where r2: \<open>enc_terms_m s1 es1 = (s2, ts2)\<close> by (cases \<open>enc_terms_m s1 es1\<close>)
@@ -1227,7 +1227,7 @@ next
   have q3: \<open>pre s3 q\<close> using pre_trans[OF p4 4(10)] .
   have q2: \<open>pre s2 q\<close> using pre_trans[OF p3 q3] .
   have q1: \<open>pre s1 q\<close> using pre_trans[OF p2 q2] .
-  have A: \<open>st_wf ?nf s1 \<and> (\<forall>i < length args. enc_wf s1 (es1 ! i) \<and> shape (SmtFun_args (?fs ! unat f) ! i) (es1 ! i)) \<and> ext q s s1\<close>
+  have A: \<open>st_wf ?nf s1 \<and> (\<forall>i < length args. enc_wf s1 (es1 ! i) \<and> shape (SmtFun_args_l (?fs ! unat f) ! i) (es1 ! i)) \<and> ext q s s1\<close>
     using 4(1)[OF r1 4(3,4) _ ts(2) 4(7,8,9) q1 4(11)] 4(5) by simp
   have ew: \<open>\<forall>x \<in> set es1. enc_wf s1 x\<close> using A p1(2) by (auto simp: in_set_conv_nth)
   have B: \<open>st_wf ?nf s2 \<and> (\<forall>t \<in> set ts2. t < length (st_terms s2)) \<and> ext q s1 s2 \<and> pre s1 s2\<close>
@@ -1252,12 +1252,12 @@ next
   qed
 next
   case (5 p dm env n s d args s' e ps so)
-  let ?fs = \<open>SmtProblem_funs p\<close> and ?ds = \<open>SmtProblem_defs p\<close> and ?nf = \<open>length (SmtProblem_funs p)\<close>
-  have d: \<open>unat d < length (take n ?ds)\<close> \<open>map (smt_tsort ?fs (take n ?ds) ps) args = map Some (SmtDef_params (?ds ! unat d))\<close>
+  let ?fs = \<open>SmtProblem_funs_l p\<close> and ?ds = \<open>SmtProblem_defs_l p\<close> and ?nf = \<open>length (SmtProblem_funs_l p)\<close>
+  have d: \<open>unat d < length (take n ?ds)\<close> \<open>map (smt_tsort ?fs (take n ?ds) ps) args = map Some (SmtDef_params_l (?ds ! unat d))\<close>
     \<open>so = SmtDef_ret (?ds ! unat d)\<close> using 5(7) by (auto split: if_splits)
   have dn: \<open>unat d < n\<close> \<open>unat d < length ?ds\<close> using d(1) by auto
   show ?case
-  proof (cases \<open>SmtDef_params (?ds ! unat d) = []\<close>)
+  proof (cases \<open>SmtDef_params_l (?ds ! unat d) = []\<close>)
     case True
     then show ?thesis using 5(3) 5(9) 5(10) dn d(3) by (auto simp: dm_ok_def ext_refl)
   next
@@ -1268,12 +1268,12 @@ next
     have p1: \<open>pre s s1\<close> \<open>length es1 = length args\<close> using tr_pre(2)[OF r1] by simp_all
     have p2: \<open>pre s1 s'\<close> using tr_pre(1)[OF res] .
     have q1: \<open>pre s1 q\<close> using pre_trans[OF p2 5(11)] .
-    have A: \<open>st_wf ?nf s1 \<and> (\<forall>i < length args. enc_wf s1 (es1 ! i) \<and> shape (SmtDef_params (?ds ! unat d) ! i) (es1 ! i)) \<and> ext q s s1\<close>
+    have A: \<open>st_wf ?nf s1 \<and> (\<forall>i < length args. enc_wf s1 (es1 ! i) \<and> shape (SmtDef_params_l (?ds ! unat d) ! i) (es1 ! i)) \<and> ext q s s1\<close>
       using 5(1)[OF False dn(1) r1 5(4,5) _ d(2) 5(8,9,10) q1 5(12)] 5(6) by simp
-    have la: \<open>length args = length (SmtDef_params (?ds ! unat d))\<close> using d(2) by (metis length_map)
-    have env1: \<open>env_ok s1 (SmtDef_params (?ds ! unat d)) es1\<close> using A p1(2) la by (simp add: env_ok_def)
+    have la: \<open>length args = length (SmtDef_params_l (?ds ! unat d))\<close> using d(2) by (metis length_map)
+    have env1: \<open>env_ok s1 (SmtDef_params_l (?ds ! unat d)) es1\<close> using A p1(2) la by (simp add: env_ok_def)
     have dm1: \<open>dm_ok p s1 (unat d) dm\<close> using dm_ok_pre[OF p1(1) 5(9)] dn(1) by simp
-    have tb: \<open>smt_tsort ?fs (take (unat d) ?ds) (SmtDef_params (?ds ! unat d)) (SmtDef_body (?ds ! unat d)) = Some (SmtDef_ret (?ds ! unat d))\<close>
+    have tb: \<open>smt_tsort ?fs (take (unat d) ?ds) (SmtDef_params_l (?ds ! unat d)) (SmtDef_body (?ds ! unat d)) = Some (SmtDef_ret (?ds ! unat d))\<close>
       using 5(4) dn(2) by (simp add: smt_wf_def Let_def)
     have nb: \<open>smt_term_no_bv (SmtDef_body (?ds ! unat d))\<close> using 5(5) dn(2) by (simp add: smt_fragment_def)
     have B: \<open>st_wf ?nf s' \<and> enc_wf s' e \<and> shape (SmtDef_ret (?ds ! unat d)) e \<and> ext q s1 s'\<close>
@@ -1282,7 +1282,7 @@ next
   qed
 next
   case (6 p dm env n s op args s' e ps so)
-  let ?fs = \<open>SmtProblem_funs p\<close> and ?ds = \<open>SmtProblem_defs p\<close> and ?nf = \<open>length (SmtProblem_funs p)\<close>
+  let ?fs = \<open>SmtProblem_funs_l p\<close> and ?ds = \<open>SmtProblem_defs_l p\<close> and ?nf = \<open>length (SmtProblem_funs_l p)\<close>
   let ?ss = \<open>map (the \<circ> smt_tsort ?fs (take n ?ds) ps) args\<close>
   have o: \<open>None \<notin> set (map (smt_tsort ?fs (take n ?ds) ps) args)\<close> \<open>smt_op_sort op ?ss = Some so\<close>
     using 6(6) by (auto split: if_splits)
@@ -1303,7 +1303,7 @@ next
   then show ?case by (auto simp: ext_refl)
 next
   case (8 p dm env n s a rest s' es ps ss)
-  let ?fs = \<open>SmtProblem_funs p\<close> and ?ds = \<open>SmtProblem_defs p\<close> and ?nf = \<open>length (SmtProblem_funs p)\<close>
+  let ?fs = \<open>SmtProblem_funs_l p\<close> and ?ds = \<open>SmtProblem_defs_l p\<close> and ?nf = \<open>length (SmtProblem_funs_l p)\<close>
   obtain s1 e1 where r1: \<open>tr_term_m p dm env n s a = (s1, e1)\<close> by (cases \<open>tr_term_m p dm env n s a\<close>)
   obtain s2 es2 where r2: \<open>tr_args_m p dm env n s1 rest = (s2, es2)\<close> by (cases \<open>tr_args_m p dm env n s1 rest\<close>)
   have res: \<open>s' = s2\<close> \<open>es = e1 # es2\<close> using 8(3) r1 r2 by (simp_all add: Let_def)
@@ -1876,35 +1876,35 @@ text \<open>The declared symbols of \<open>p\<close> and their translations agre
   for values of the argument sorts, a symbol gives an element that stands for the value of the
   symbol (for a Boolean symbol: the element is TRUE exactly when the value is true).\<close>
 definition jrel :: \<open>SmtProblem \<Rightarrow> (nat \<Rightarrow> 'd list \<Rightarrow> 'd) \<Rightarrow> st \<Rightarrow> (sval \<Rightarrow> 'd \<Rightarrow> bool) \<Rightarrow> (nat \<Rightarrow> sval list \<Rightarrow> sval) \<Rightarrow> bool\<close> where
-  \<open>jrel p I q ru J \<equiv> \<forall>f < length (SmtProblem_funs p). \<forall>vs ds.
-     let sg = SmtProblem_funs p ! f in
-     length vs = length (SmtFun_args sg) \<and> length ds = length (SmtFun_args sg) \<and>
-     (\<forall>i < length (SmtFun_args sg). vrel I q ru (SmtFun_args sg ! i) (vs ! i) (ds ! i)) \<longrightarrow>
+  \<open>jrel p I q ru J \<equiv> \<forall>f < length (SmtProblem_funs_l p). \<forall>vs ds.
+     let sg = SmtProblem_funs_l p ! f in
+     length vs = length (SmtFun_args_l sg) \<and> length ds = length (SmtFun_args_l sg) \<and>
+     (\<forall>i < length (SmtFun_args_l sg). vrel I q ru (SmtFun_args_l sg ! i) (vs ! i) (ds ! i)) \<longrightarrow>
      (if SmtFun_ret sg = SmtSort_Bool then J f vs = VBool (I f ds = tv I q 0) else ru (J f vs) (I f ds))\<close>
 
 definition env_sem :: \<open>(nat \<Rightarrow> 'd list \<Rightarrow> 'd) \<Rightarrow> st \<Rightarrow> (sval \<Rightarrow> 'd \<Rightarrow> bool) \<Rightarrow> SmtSort list \<Rightarrow> sval list \<Rightarrow> enc_m list \<Rightarrow> bool\<close> where
   \<open>env_sem I q ru ps xs env \<equiv> length xs = length ps \<and> (\<forall>i < length ps. enc_ok I q ru (ps ! i) (xs ! i) (env ! i))\<close>
 
 definition dm_sem :: \<open>SmtProblem \<Rightarrow> (nat \<Rightarrow> 'd list \<Rightarrow> 'd) \<Rightarrow> st \<Rightarrow> (sval \<Rightarrow> 'd \<Rightarrow> bool) \<Rightarrow> (nat \<Rightarrow> sval list \<Rightarrow> sval) \<Rightarrow> nat \<Rightarrow> enc_m list \<Rightarrow> bool\<close> where
-  \<open>dm_sem p I q ru J n dm \<equiv> \<forall>d < n. SmtDef_params (SmtProblem_defs p ! d) = [] \<longrightarrow>
-     enc_ok I q ru (SmtDef_ret (SmtProblem_defs p ! d)) ((smt_def_sems J (SmtProblem_defs p) ! d) []) (dm ! d)\<close>
+  \<open>dm_sem p I q ru J n dm \<equiv> \<forall>d < n. SmtDef_params_l (SmtProblem_defs_l p ! d) = [] \<longrightarrow>
+     enc_ok I q ru (SmtDef_ret (SmtProblem_defs_l p ! d)) ((smt_def_sems J (SmtProblem_defs_l p) ! d) []) (dm ! d)\<close>
 
 lemma lv_atom0: \<open>lv I q 0 True \<Longrightarrow> lv I q 0 b = b\<close>
   by (auto simp: lv_def)
 
 lemma tr_sem:
   shows \<open>tr_term_m p dm env n s t = (s', e) \<Longrightarrow> smt_wf p \<Longrightarrow> smt_fragment p \<Longrightarrow> smt_term_no_bv t \<Longrightarrow>
-     smt_tsort (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps t = Some so \<Longrightarrow>
-     env_ok s ps env \<Longrightarrow> dm_ok p s n dm \<Longrightarrow> st_wf (length (SmtProblem_funs p)) s \<Longrightarrow> pre s' q \<Longrightarrow> bnd q \<Longrightarrow>
+     smt_tsort (SmtProblem_funs_l p) (take n (SmtProblem_defs_l p)) ps t = Some so \<Longrightarrow>
+     env_ok s ps env \<Longrightarrow> dm_ok p s n dm \<Longrightarrow> st_wf (length (SmtProblem_funs_l p)) s \<Longrightarrow> pre s' q \<Longrightarrow> bnd q \<Longrightarrow>
      ru_ok ru \<Longrightarrow> jrel p I q ru J \<Longrightarrow> lv I q 0 True \<Longrightarrow> env_sem I q ru ps xs env \<Longrightarrow> dm_sem p I q ru J n dm \<Longrightarrow>
      cls_true q I s' \<Longrightarrow>
-     enc_ok I q ru so (smt_eval J (smt_def_sems J (SmtProblem_defs p)) xs t) e\<close>
+     enc_ok I q ru so (smt_eval J (smt_def_sems J (SmtProblem_defs_l p)) xs t) e\<close>
     and \<open>tr_args_m p dm env n s ts = (s', es) \<Longrightarrow> smt_wf p \<Longrightarrow> smt_fragment p \<Longrightarrow> (\<forall>t \<in> set ts. smt_term_no_bv t) \<Longrightarrow>
-     map (smt_tsort (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps) ts = map Some ss \<Longrightarrow>
-     env_ok s ps env \<Longrightarrow> dm_ok p s n dm \<Longrightarrow> st_wf (length (SmtProblem_funs p)) s \<Longrightarrow> pre s' q \<Longrightarrow> bnd q \<Longrightarrow>
+     map (smt_tsort (SmtProblem_funs_l p) (take n (SmtProblem_defs_l p)) ps) ts = map Some ss \<Longrightarrow>
+     env_ok s ps env \<Longrightarrow> dm_ok p s n dm \<Longrightarrow> st_wf (length (SmtProblem_funs_l p)) s \<Longrightarrow> pre s' q \<Longrightarrow> bnd q \<Longrightarrow>
      ru_ok ru \<Longrightarrow> jrel p I q ru J \<Longrightarrow> lv I q 0 True \<Longrightarrow> env_sem I q ru ps xs env \<Longrightarrow> dm_sem p I q ru J n dm \<Longrightarrow>
      cls_true q I s' \<Longrightarrow>
-     \<forall>i < length ts. enc_ok I q ru (ss ! i) (smt_eval J (smt_def_sems J (SmtProblem_defs p)) xs (ts ! i)) (es ! i)\<close>
+     \<forall>i < length ts. enc_ok I q ru (ss ! i) (smt_eval J (smt_def_sems J (SmtProblem_defs_l p)) xs (ts ! i)) (es ! i)\<close>
 proof (induction p dm env n s t and p dm env n s ts arbitrary: s' e ps so xs and s' es ps ss xs rule: tr_term_m_tr_args_m.induct)
   case (1 p dm env n s b s' e ps so xs)
   then show ?case by (auto simp: enc_ok_def lv_atom0)
@@ -1916,11 +1916,11 @@ next
   then show ?case by (auto simp: env_sem_def split: if_splits)
 next
   case (4 p dm env n s f args s' e ps so xs)
-  let ?fs = \<open>SmtProblem_funs p\<close> and ?nf = \<open>length (SmtProblem_funs p)\<close> and ?dv = \<open>smt_def_sems J (SmtProblem_defs p)\<close>
-  let ?sg = \<open>SmtProblem_funs p ! unat f\<close> and ?vs = \<open>map (smt_eval J (smt_def_sems J (SmtProblem_defs p)) xs) args\<close>
-  have ts: \<open>unat f < length ?fs\<close> \<open>map (smt_tsort ?fs (take n (SmtProblem_defs p)) ps) args = map Some (SmtFun_args ?sg)\<close>
+  let ?fs = \<open>SmtProblem_funs_l p\<close> and ?nf = \<open>length (SmtProblem_funs_l p)\<close> and ?dv = \<open>smt_def_sems J (SmtProblem_defs_l p)\<close>
+  let ?sg = \<open>SmtProblem_funs_l p ! unat f\<close> and ?vs = \<open>map (smt_eval J (smt_def_sems J (SmtProblem_defs_l p)) xs) args\<close>
+  have ts: \<open>unat f < length ?fs\<close> \<open>map (smt_tsort ?fs (take n (SmtProblem_defs_l p)) ps) args = map Some (SmtFun_args_l ?sg)\<close>
     \<open>so = SmtFun_ret ?sg\<close> using 4(6) by (auto split: if_splits)
-  have la: \<open>length args = length (SmtFun_args ?sg)\<close> using ts(2) by (metis length_map)
+  have la: \<open>length args = length (SmtFun_args_l ?sg)\<close> using ts(2) by (metis length_map)
   obtain s1 es1 where r1: \<open>tr_args_m p dm env n s args = (s1, es1)\<close> by (cases \<open>tr_args_m p dm env n s args\<close>)
   obtain s2 ts2 where r2: \<open>enc_terms_m s1 es1 = (s2, ts2)\<close> by (cases \<open>enc_terms_m s1 es1\<close>)
   obtain s3 k where r3: \<open>add_term_m s2 (unat f) ts2 = (s3, k)\<close> by (cases \<open>add_term_m s2 (unat f) ts2\<close>)
@@ -1939,24 +1939,24 @@ next
   have c3: \<open>cls_true q I s3\<close> using cls_true_pre[OF p4 4(17)] .
   have c2: \<open>cls_true q I s2\<close> using cls_true_pre[OF p3 c3] .
   have c1: \<open>cls_true q I s1\<close> using cls_true_pre[OF p2 c2] .
-  have W1: \<open>st_wf ?nf s1 \<and> (\<forall>i < length args. enc_wf s1 (es1 ! i) \<and> shape (SmtFun_args ?sg ! i) (es1 ! i)) \<and> ext q s s1\<close>
+  have W1: \<open>st_wf ?nf s1 \<and> (\<forall>i < length args. enc_wf s1 (es1 ! i) \<and> shape (SmtFun_args_l ?sg ! i) (es1 ! i)) \<and> ext q s s1\<close>
     using tr_wb(2)[OF r1 4(3,4) _ ts(2) 4(7,8,9) q1 4(11)] 4(5) by simp
-  have A: \<open>\<forall>i < length args. enc_ok I q ru (SmtFun_args ?sg ! i) (?vs ! i) (es1 ! i)\<close>
+  have A: \<open>\<forall>i < length args. enc_ok I q ru (SmtFun_args_l ?sg ! i) (?vs ! i) (es1 ! i)\<close>
     using 4(1)[OF r1 4(3,4) _ ts(2) 4(7,8,9) q1 4(11,12,13,14,15,16) c1] 4(5) by simp
   have ew: \<open>\<forall>x \<in> set es1. enc_wf s1 x\<close> using W1 p1(2) by (auto simp: in_set_conv_nth)
   have W2: \<open>st_wf ?nf s2 \<and> (\<forall>t \<in> set ts2. t < length (st_terms s2)) \<and> ext q s1 s2 \<and> pre s1 s2\<close>
     using enc_terms_wb[OF conjunct1[OF W1] ew _ r2' q2 4(11)] by simp
   have E: \<open>\<exists>new. ts2 = [] @ new \<and> length new = length es1 \<and>
-      (\<forall>i < length es1. vrel I q ru (SmtFun_args ?sg ! i) (?vs ! i) (tv I q (new ! i)))\<close>
-    using enc_terms_sem[where ss=\<open>SmtFun_args ?sg\<close> and vs=\<open>?vs\<close> and ru=ru and I=I, OF conjunct1[OF W1] _ _ _ r2' q2 4(11) c2]
+      (\<forall>i < length es1. vrel I q ru (SmtFun_args_l ?sg ! i) (?vs ! i) (tv I q (new ! i)))\<close>
+    using enc_terms_sem[where ss=\<open>SmtFun_args_l ?sg\<close> and vs=\<open>?vs\<close> and ru=ru and I=I, OF conjunct1[OF W1] _ _ _ r2' q2 4(11) c2]
       W1 A p1(2) la by simp
-  then have E': \<open>length ts2 = length args\<close> \<open>\<forall>i < length args. vrel I q ru (SmtFun_args ?sg ! i) (?vs ! i) (tv I q (ts2 ! i))\<close>
+  then have E': \<open>length ts2 = length args\<close> \<open>\<forall>i < length args. vrel I q ru (SmtFun_args_l ?sg ! i) (?vs ! i) (tv I q (ts2 ! i))\<close>
     using p1(2) by auto
   have J: \<open>if SmtFun_ret ?sg = SmtSort_Bool then J (unat f) ?vs = VBool (I (unat f) (map (tv I q) ts2) = tv I q 0)
       else ru (J (unat f) ?vs) (I (unat f) (map (tv I q) ts2))\<close>
   proof -
-    have h: \<open>length ?vs = length (SmtFun_args ?sg) \<and> length (map (tv I q) ts2) = length (SmtFun_args ?sg) \<and>
-        (\<forall>i < length (SmtFun_args ?sg). vrel I q ru (SmtFun_args ?sg ! i) (?vs ! i) (map (tv I q) ts2 ! i))\<close>
+    have h: \<open>length ?vs = length (SmtFun_args_l ?sg) \<and> length (map (tv I q) ts2) = length (SmtFun_args_l ?sg) \<and>
+        (\<forall>i < length (SmtFun_args_l ?sg). vrel I q ru (SmtFun_args_l ?sg ! i) (?vs ! i) (map (tv I q) ts2 ! i))\<close>
       using E' la by (simp only: length_map nth_map) simp
     show ?thesis using 4(13)[unfolded jrel_def Let_def, rule_format, OF ts(1) h] .
   qed
@@ -1982,21 +1982,21 @@ next
   qed
 next
   case (5 p dm env n s d args s' e ps so xs)
-  let ?fs = \<open>SmtProblem_funs p\<close> and ?ds = \<open>SmtProblem_defs p\<close> and ?nf = \<open>length (SmtProblem_funs p)\<close>
-  let ?dv = \<open>smt_def_sems J (SmtProblem_defs p)\<close>
-  have d: \<open>unat d < length (take n ?ds)\<close> \<open>map (smt_tsort ?fs (take n ?ds) ps) args = map Some (SmtDef_params (?ds ! unat d))\<close>
+  let ?fs = \<open>SmtProblem_funs_l p\<close> and ?ds = \<open>SmtProblem_defs_l p\<close> and ?nf = \<open>length (SmtProblem_funs_l p)\<close>
+  let ?dv = \<open>smt_def_sems J (SmtProblem_defs_l p)\<close>
+  have d: \<open>unat d < length (take n ?ds)\<close> \<open>map (smt_tsort ?fs (take n ?ds) ps) args = map Some (SmtDef_params_l (?ds ! unat d))\<close>
     \<open>so = SmtDef_ret (?ds ! unat d)\<close> using 5(7) by (auto split: if_splits)
   have dn: \<open>unat d < n\<close> \<open>unat d < length ?ds\<close> using d(1) by auto
-  have la: \<open>length args = length (SmtDef_params (?ds ! unat d))\<close> using d(2) by (metis length_map)
-  have tb: \<open>smt_tsort ?fs (take (unat d) ?ds) (SmtDef_params (?ds ! unat d)) (SmtDef_body (?ds ! unat d)) = Some (SmtDef_ret (?ds ! unat d))\<close>
+  have la: \<open>length args = length (SmtDef_params_l (?ds ! unat d))\<close> using d(2) by (metis length_map)
+  have tb: \<open>smt_tsort ?fs (take (unat d) ?ds) (SmtDef_params_l (?ds ! unat d)) (SmtDef_body (?ds ! unat d)) = Some (SmtDef_ret (?ds ! unat d))\<close>
     using 5(4) dn(2) by (simp add: smt_wf_def Let_def)
   let ?xs' = \<open>map (smt_eval J ?dv xs) args\<close>
   have v: \<open>smt_eval J ?dv xs (SmtTerm_Def d args) = smt_eval J ?dv ?xs' (SmtDef_body (?ds ! unat d))\<close>
     using smt_def_sems_nth[OF dn(2), of J] tb
-      smt_eval_take[of ?fs \<open>unat d\<close> ?ds \<open>SmtDef_params (?ds ! unat d)\<close> \<open>SmtDef_body (?ds ! unat d)\<close> ?dv J ?xs']
+      smt_eval_take[of ?fs \<open>unat d\<close> ?ds \<open>SmtDef_params_l (?ds ! unat d)\<close> \<open>SmtDef_body (?ds ! unat d)\<close> ?dv J ?xs']
     by (simp add: smt_def_sems_length)
   show ?case
-  proof (cases \<open>SmtDef_params (?ds ! unat d) = []\<close>)
+  proof (cases \<open>SmtDef_params_l (?ds ! unat d) = []\<close>)
     case True
     then have a: \<open>args = []\<close> using la by simp
     have \<open>s' = s\<close> \<open>e = dm ! unat d\<close> using 5(3) True by simp_all
@@ -2014,12 +2014,12 @@ next
     have p2: \<open>pre s1 s'\<close> using tr_pre(1)[OF res] .
     have q1: \<open>pre s1 q\<close> using pre_trans[OF p2 5(11)] .
     have c1: \<open>cls_true q I s1\<close> using cls_true_pre[OF p2 5(18)] .
-    have W: \<open>st_wf ?nf s1 \<and> (\<forall>i < length args. enc_wf s1 (es1 ! i) \<and> shape (SmtDef_params (?ds ! unat d) ! i) (es1 ! i)) \<and> ext q s s1\<close>
+    have W: \<open>st_wf ?nf s1 \<and> (\<forall>i < length args. enc_wf s1 (es1 ! i) \<and> shape (SmtDef_params_l (?ds ! unat d) ! i) (es1 ! i)) \<and> ext q s s1\<close>
       using tr_wb(2)[OF r1 5(4,5) _ d(2) 5(8,9,10) q1 5(12)] 5(6) by simp
-    have A: \<open>\<forall>i < length args. enc_ok I q ru (SmtDef_params (?ds ! unat d) ! i) (?xs' ! i) (es1 ! i)\<close>
+    have A: \<open>\<forall>i < length args. enc_ok I q ru (SmtDef_params_l (?ds ! unat d) ! i) (?xs' ! i) (es1 ! i)\<close>
       using 5(1)[OF False dn(1) r1 5(4,5) _ d(2) 5(8,9,10) q1 5(12,13,14,15,16,17) c1] 5(6) by simp
-    have env1: \<open>env_ok s1 (SmtDef_params (?ds ! unat d)) es1\<close> using W p1(2) la by (simp add: env_ok_def)
-    have es1: \<open>env_sem I q ru (SmtDef_params (?ds ! unat d)) ?xs' es1\<close> using A la by (simp add: env_sem_def)
+    have env1: \<open>env_ok s1 (SmtDef_params_l (?ds ! unat d)) es1\<close> using W p1(2) la by (simp add: env_ok_def)
+    have es1: \<open>env_sem I q ru (SmtDef_params_l (?ds ! unat d)) ?xs' es1\<close> using A la by (simp add: env_sem_def)
     have dm1: \<open>dm_ok p s1 (unat d) dm\<close> using dm_ok_pre[OF p1(1) 5(9)] dn(1) by simp
     have dms: \<open>dm_sem p I q ru J (unat d) dm\<close> using 5(17) dn(1) by (simp add: dm_sem_def)
     have nb: \<open>smt_term_no_bv (SmtDef_body (?ds ! unat d))\<close> using 5(5) dn(2) by (simp add: smt_fragment_def)
@@ -2029,8 +2029,8 @@ next
   qed
 next
   case (6 p dm env n s op args s' e ps so xs)
-  let ?fs = \<open>SmtProblem_funs p\<close> and ?ds = \<open>SmtProblem_defs p\<close> and ?nf = \<open>length (SmtProblem_funs p)\<close>
-  let ?dv = \<open>smt_def_sems J (SmtProblem_defs p)\<close>
+  let ?fs = \<open>SmtProblem_funs_l p\<close> and ?ds = \<open>SmtProblem_defs_l p\<close> and ?nf = \<open>length (SmtProblem_funs_l p)\<close>
+  let ?dv = \<open>smt_def_sems J (SmtProblem_defs_l p)\<close>
   let ?ss = \<open>map (the \<circ> smt_tsort ?fs (take n ?ds) ps) args\<close> and ?vs = \<open>map (smt_eval J ?dv xs) args\<close>
   have o: \<open>None \<notin> set (map (smt_tsort ?fs (take n ?ds) ps) args)\<close> \<open>smt_op_sort op ?ss = Some so\<close>
     using 6(6) by (auto split: if_splits)
@@ -2056,7 +2056,7 @@ next
   then show ?case by simp
 next
   case (8 p dm env n s a rest s' es ps ss xs)
-  let ?fs = \<open>SmtProblem_funs p\<close> and ?ds = \<open>SmtProblem_defs p\<close> and ?nf = \<open>length (SmtProblem_funs p)\<close>
+  let ?fs = \<open>SmtProblem_funs_l p\<close> and ?ds = \<open>SmtProblem_defs_l p\<close> and ?nf = \<open>length (SmtProblem_funs_l p)\<close>
   obtain s1 e1 where r1: \<open>tr_term_m p dm env n s a = (s1, e1)\<close> by (cases \<open>tr_term_m p dm env n s a\<close>)
   obtain s2 es2 where r2: \<open>tr_args_m p dm env n s1 rest = (s2, es2)\<close> by (cases \<open>tr_args_m p dm env n s1 rest\<close>)
   have res: \<open>s' = s2\<close> \<open>es = e1 # es2\<close> using 8(3) r1 r2 by (simp_all add: Let_def)
@@ -2091,12 +2091,12 @@ lemma dm_sem_agree:
   using assms(4) enc_ok_agree[OF assms(1,2,3)] unfolding dm_sem_def dm_ok_def by auto
 
 lemma jrel_agree:
-  assumes \<open>st_wf (length (SmtProblem_funs p)) s\<close> \<open>pre s q\<close> \<open>agree (st_next s) I I'\<close>
+  assumes \<open>st_wf (length (SmtProblem_funs_l p)) s\<close> \<open>pre s q\<close> \<open>agree (st_next s) I I'\<close>
   shows \<open>jrel p I' q ru J = jrel p I q ru J\<close>
 proof -
   have l2: \<open>0 < length (st_terms s)\<close> \<open>1 < length (st_terms s)\<close> using assms(1) by (auto simp: st_wf_def)
   have t: \<open>tv I' q 0 = tv I q 0\<close> \<open>tv I' q 1 = tv I q 1\<close> using tv_agree[OF assms] l2 by simp_all
-  have f: \<open>f < length (SmtProblem_funs p) \<Longrightarrow> I' f = I f\<close> for f
+  have f: \<open>f < length (SmtProblem_funs_l p) \<Longrightarrow> I' f = I f\<close> for f
     using assms(1,3) by (auto simp: st_wf_def agree_def)
   show ?thesis unfolding jrel_def vrel_def using t f by (simp cong: conj_cong)
 qed
@@ -2112,8 +2112,8 @@ proof (induction ts arbitrary: s)
   then show ?case by (simp add: pre_refl)
 next
   case (Cons t ts)
-  obtain s1 e where r: \<open>tr_term_m p dm [] (length (SmtProblem_defs p)) s t = (s1, e)\<close>
-    by (cases \<open>tr_term_m p dm [] (length (SmtProblem_defs p)) s t\<close>)
+  obtain s1 e where r: \<open>tr_term_m p dm [] (length (SmtProblem_defs_l p)) s t = (s1, e)\<close>
+    by (cases \<open>tr_term_m p dm [] (length (SmtProblem_defs_l p)) s t\<close>)
   have \<open>tr_asserts_step p dm s t = add_clause_m s1 [lit_m (fst (enc_lit_m e)) (snd (enc_lit_m e))]\<close>
     using r by (simp add: tr_asserts_step_def Let_def)
   then have \<open>pre s (tr_asserts_step p dm s t)\<close> using pre_add_clause[OF tr_pre(1)[OF r]] by simp
@@ -2123,15 +2123,15 @@ qed
 lemma asserts_inv:
   fixes q :: st
   assumes \<open>smt_wf p\<close> \<open>smt_fragment p\<close>
-    \<open>\<forall>t \<in> set ts. smt_tsort (SmtProblem_funs p) (SmtProblem_defs p) [] t = Some SmtSort_Bool \<and> smt_term_no_bv t\<close>
-    \<open>st_wf (length (SmtProblem_funs p)) s\<close> \<open>dm_ok p s (length (SmtProblem_defs p)) dm\<close>
+    \<open>\<forall>t \<in> set ts. smt_tsort (SmtProblem_funs_l p) (SmtProblem_defs_l p) [] t = Some SmtSort_Bool \<and> smt_term_no_bv t\<close>
+    \<open>st_wf (length (SmtProblem_funs_l p)) s\<close> \<open>dm_ok p s (length (SmtProblem_defs_l p)) dm\<close>
     \<open>foldl (tr_asserts_step p dm) s ts = s'\<close> \<open>pre s' q\<close> \<open>bnd q\<close> \<open>st_atoms q ! 0 = make_Atom 0 0\<close>
-  shows \<open>st_wf (length (SmtProblem_funs p)) s' \<and>
-    (\<forall>(I :: nat \<Rightarrow> nat list \<Rightarrow> nat) ru J. ru_ok ru \<and> jrel p I q ru J \<and> dm_sem p I q ru J (length (SmtProblem_defs p)) dm \<and>
-       cls_true q I s' \<longrightarrow> (\<forall>t \<in> set ts. smt_eval J (smt_def_sems J (SmtProblem_defs p)) [] t = VBool True)) \<and>
+  shows \<open>st_wf (length (SmtProblem_funs_l p)) s' \<and>
+    (\<forall>(I :: nat \<Rightarrow> nat list \<Rightarrow> nat) ru J. ru_ok ru \<and> jrel p I q ru J \<and> dm_sem p I q ru J (length (SmtProblem_defs_l p)) dm \<and>
+       cls_true q I s' \<longrightarrow> (\<forall>t \<in> set ts. smt_eval J (smt_def_sems J (SmtProblem_defs_l p)) [] t = VBool True)) \<and>
     (\<forall>(I :: nat \<Rightarrow> nat list \<Rightarrow> nat) ru J. base q I \<and> cls_true q I s \<and> ru_ok ru \<and> jrel p I q ru J \<and>
-       dm_sem p I q ru J (length (SmtProblem_defs p)) dm \<and>
-       (\<forall>t \<in> set ts. smt_eval J (smt_def_sems J (SmtProblem_defs p)) [] t = VBool True) \<longrightarrow>
+       dm_sem p I q ru J (length (SmtProblem_defs_l p)) dm \<and>
+       (\<forall>t \<in> set ts. smt_eval J (smt_def_sems J (SmtProblem_defs_l p)) [] t = VBool True) \<longrightarrow>
        (\<exists>I'. agree (st_next s) I I' \<and> base q I' \<and> cls_true q I' s'))\<close>
   using assms(3-7)
 proof (induction ts arbitrary: s)
@@ -2139,8 +2139,8 @@ proof (induction ts arbitrary: s)
   then show ?case by (auto simp: agree_def)
 next
   case (Cons t ts)
-  let ?fs = \<open>SmtProblem_funs p\<close> and ?ds = \<open>SmtProblem_defs p\<close> and ?nf = \<open>length (SmtProblem_funs p)\<close>
-  let ?dv = \<open>\<lambda>J. smt_def_sems J (SmtProblem_defs p)\<close>
+  let ?fs = \<open>SmtProblem_funs_l p\<close> and ?ds = \<open>SmtProblem_defs_l p\<close> and ?nf = \<open>length (SmtProblem_funs_l p)\<close>
+  let ?dv = \<open>\<lambda>J. smt_def_sems J (SmtProblem_defs_l p)\<close>
   obtain s1 e where r: \<open>tr_term_m p dm [] (length ?ds) s t = (s1, e)\<close> by (cases \<open>tr_term_m p dm [] (length ?ds) s t\<close>)
   let ?s2 = \<open>add_clause_m s1 [lit_m (fst (enc_lit_m e)) (snd (enc_lit_m e))]\<close>
   have st: \<open>tr_asserts_step p dm s t = ?s2\<close> using r by (simp add: tr_asserts_step_def Let_def)
@@ -2208,10 +2208,10 @@ subsection \<open>The definitions\<close>
 
 lemma defs_inv:
   fixes q :: st
-  assumes \<open>smt_wf p\<close> \<open>smt_fragment p\<close> \<open>k \<le> length (SmtProblem_defs p)\<close>
+  assumes \<open>smt_wf p\<close> \<open>smt_fragment p\<close> \<open>k \<le> length (SmtProblem_defs_l p)\<close>
     \<open>foldl (tr_defs_step p) (tr_init_m p, []) [0..<k] = (s, dm)\<close> \<open>pre s q\<close> \<open>bnd q\<close>
-    \<open>st_atoms q ! 0 = make_Atom 0 0\<close> \<open>st_wf (length (SmtProblem_funs p)) (tr_init_m p)\<close>
-  shows \<open>st_wf (length (SmtProblem_funs p)) s \<and> dm_ok p s k dm \<and> length dm = k \<and> ext q (tr_init_m p) s \<and>
+    \<open>st_atoms q ! 0 = make_Atom 0 0\<close> \<open>st_wf (length (SmtProblem_funs_l p)) (tr_init_m p)\<close>
+  shows \<open>st_wf (length (SmtProblem_funs_l p)) s \<and> dm_ok p s k dm \<and> length dm = k \<and> ext q (tr_init_m p) s \<and>
     pre (tr_init_m p) s \<and>
     (\<forall>(I :: nat \<Rightarrow> nat list \<Rightarrow> nat) ru J. ru_ok ru \<and> jrel p I q ru J \<and> cls_true q I s \<longrightarrow> dm_sem p I q ru J k dm)\<close>
   using assms(3,4,5)
@@ -2220,13 +2220,13 @@ proof (induction k arbitrary: s dm)
   then show ?case using assms(8) by (auto simp: dm_ok_def dm_sem_def ext_refl pre_refl)
 next
   case (Suc k)
-  let ?fs = \<open>SmtProblem_funs p\<close> and ?ds = \<open>SmtProblem_defs p\<close> and ?nf = \<open>length (SmtProblem_funs p)\<close>
+  let ?fs = \<open>SmtProblem_funs_l p\<close> and ?ds = \<open>SmtProblem_defs_l p\<close> and ?nf = \<open>length (SmtProblem_funs_l p)\<close>
   obtain s0 dm0 where f0: \<open>foldl (tr_defs_step p) (tr_init_m p, []) [0..<k] = (s0, dm0)\<close>
     by (cases \<open>foldl (tr_defs_step p) (tr_init_m p, []) [0..<k]\<close>)
   have st: \<open>tr_defs_step p (s0, dm0) k = (s, dm)\<close> using Suc.prems(2) f0 by simp
   have kd: \<open>k < length ?ds\<close> using Suc.prems(1) by simp
   show ?case
-  proof (cases \<open>SmtDef_params (?ds ! k) = []\<close>)
+  proof (cases \<open>SmtDef_params_l (?ds ! k) = []\<close>)
     case True
     obtain s1 e where r: \<open>tr_term_m p dm0 [] k s0 (SmtDef_body (?ds ! k)) = (s1, e)\<close>
       by (cases \<open>tr_term_m p dm0 [] k s0 (SmtDef_body (?ds ! k))\<close>)
@@ -2236,7 +2236,7 @@ next
     have IH: \<open>st_wf ?nf s0 \<and> dm_ok p s0 k dm0 \<and> length dm0 = k \<and> ext q (tr_init_m p) s0 \<and> pre (tr_init_m p) s0 \<and>
       (\<forall>(I :: nat \<Rightarrow> nat list \<Rightarrow> nat) ru J. ru_ok ru \<and> jrel p I q ru J \<and> cls_true q I s0 \<longrightarrow> dm_sem p I q ru J k dm0)\<close>
       using Suc.IH[OF _ f0 q0] kd by simp
-    have tb0: \<open>smt_tsort ?fs (take k ?ds) (SmtDef_params (?ds ! k)) (SmtDef_body (?ds ! k)) = Some (SmtDef_ret (?ds ! k))\<close>
+    have tb0: \<open>smt_tsort ?fs (take k ?ds) (SmtDef_params_l (?ds ! k)) (SmtDef_body (?ds ! k)) = Some (SmtDef_ret (?ds ! k))\<close>
       using assms(1) kd by (simp add: smt_wf_def Let_def)
     then have tb: \<open>smt_tsort ?fs (take k ?ds) [] (SmtDef_body (?ds ! k)) = Some (SmtDef_ret (?ds ! k))\<close>
       using True by simp
@@ -2278,8 +2278,8 @@ qed
 subsection \<open>The whole translation\<close>
 
 lemma init_eq:
-  \<open>tr_init_m p = St [make_Term (word_of_nat (length (SmtProblem_funs p))) [], make_Term (word_of_nat (length (SmtProblem_funs p) + 1)) []]
-      [make_Atom 0 0, make_Atom 0 1] [make_Clause [lit_m 1 False]] (length (SmtProblem_funs p) + 2)\<close>
+  \<open>tr_init_m p = St [make_Term (word_of_nat (length (SmtProblem_funs_l p))) [], make_Term (word_of_nat (length (SmtProblem_funs_l p) + 1)) []]
+      [make_Atom 0 0, make_Atom 0 1] [make_Clause [lit_m 1 False]] (length (SmtProblem_funs_l p) + 2)\<close>
   by (simp add: tr_init_m_def add_term_m_def add_atom_m_def add_clause_m_def Let_def)
 
 lemma pre_defs: \<open>pre (fst sdm) (fst (foldl (tr_defs_step p) sdm ks))\<close>
@@ -2290,10 +2290,10 @@ next
   case (Cons k ks)
   obtain s dm where sdm: \<open>sdm = (s, dm)\<close> by (cases sdm)
   have \<open>pre s (fst (tr_defs_step p (s, dm) k))\<close>
-  proof (cases \<open>SmtDef_params (SmtProblem_defs p ! k) = []\<close>)
+  proof (cases \<open>SmtDef_params_l (SmtProblem_defs_l p ! k) = []\<close>)
     case True
-    obtain s1 e where r: \<open>tr_term_m p dm [] k s (SmtDef_body (SmtProblem_defs p ! k)) = (s1, e)\<close>
-      by (cases \<open>tr_term_m p dm [] k s (SmtDef_body (SmtProblem_defs p ! k))\<close>)
+    obtain s1 e where r: \<open>tr_term_m p dm [] k s (SmtDef_body (SmtProblem_defs_l p ! k)) = (s1, e)\<close>
+      by (cases \<open>tr_term_m p dm [] k s (SmtDef_body (SmtProblem_defs_l p ! k))\<close>)
     then show ?thesis using True tr_pre(1)[OF r] by (simp add: tr_defs_step_def)
   next
     case False
@@ -2305,12 +2305,12 @@ qed
 text \<open>The translation does not overflow: the next unused function symbol, the number of terms
   and the number of atoms stay below \<open>2^64\<close>.\<close>
 definition tr_bounded :: \<open>SmtProblem \<Rightarrow> bool\<close> where
-  \<open>tr_bounded p \<equiv> length (SmtProblem_funs p) + length (Problem_terms (tr_problem_m p)) < 2 ^ 64 \<and>
-     length (Problem_atoms (tr_problem_m p)) < 2 ^ 64\<close>
+  \<open>tr_bounded p \<equiv> length (SmtProblem_funs_l p) + length (Problem_terms_l (tr_problem_m p)) < 2 ^ 64 \<and>
+     length (Problem_atoms_l (tr_problem_m p)) < 2 ^ 64\<close>
 
 lemma tr_main:
   assumes \<open>smt_wf p\<close> \<open>smt_fragment p\<close> \<open>tr_bounded p\<close>
-  shows \<open>st_wf (length (SmtProblem_funs p)) (tr_state_m p)\<close>
+  shows \<open>st_wf (length (SmtProblem_funs_l p)) (tr_state_m p)\<close>
     and \<open>pre (tr_init_m p) (tr_state_m p)\<close> and \<open>bnd (tr_state_m p)\<close>
     and \<open>\<And>(I :: nat \<Rightarrow> nat list \<Rightarrow> nat) ru J. ru_ok ru \<Longrightarrow> jrel p I (tr_state_m p) ru J \<Longrightarrow>
            cls_true (tr_state_m p) I (tr_state_m p) \<Longrightarrow> smt_satisfies p J\<close>
@@ -2318,14 +2318,14 @@ lemma tr_main:
            ru_ok ru \<Longrightarrow> jrel p I (tr_state_m p) ru J \<Longrightarrow> smt_satisfies p J \<Longrightarrow>
            \<exists>I'. agree (st_next (tr_init_m p)) I I' \<and> cls_true (tr_state_m p) I' (tr_state_m p)\<close>
 proof -
-  let ?fs = \<open>SmtProblem_funs p\<close> and ?ds = \<open>SmtProblem_defs p\<close> and ?nf = \<open>length (SmtProblem_funs p)\<close>
+  let ?fs = \<open>SmtProblem_funs_l p\<close> and ?ds = \<open>SmtProblem_defs_l p\<close> and ?nf = \<open>length (SmtProblem_funs_l p)\<close>
   let ?q = \<open>tr_state_m p\<close> and ?i = \<open>tr_init_m p\<close>
   obtain sd dm where D: \<open>tr_defs_m p = (sd, dm)\<close> by (cases \<open>tr_defs_m p\<close>)
   have D': \<open>foldl (tr_defs_step p) (?i, []) [0..<length ?ds] = (sd, dm)\<close> using D by (simp add: tr_defs_m_def)
-  have A: \<open>foldl (tr_asserts_step p dm) sd (SmtProblem_asserts p) = ?q\<close>
+  have A: \<open>foldl (tr_asserts_step p dm) sd (SmtProblem_asserts_l p) = ?q\<close>
     using D by (simp add: tr_state_m_def tr_asserts_m_def)
   have pid: \<open>pre ?i sd\<close> using pre_defs[of \<open>(?i, [])\<close> p \<open>[0..<length ?ds]\<close>] D' by simp
-  have pdq: \<open>pre sd ?q\<close> using pre_asserts[of sd p dm \<open>SmtProblem_asserts p\<close>] A by simp
+  have pdq: \<open>pre sd ?q\<close> using pre_asserts[of sd p dm \<open>SmtProblem_asserts_l p\<close>] A by simp
   show piq: \<open>pre ?i ?q\<close> using pre_trans[OF pid pdq] .
   have tp: \<open>tr_problem_m p = st_prob ?q\<close> by (simp add: tr_problem_m_def st_prob_def Let_def)
   have nx: \<open>st_next ?q \<le> ?nf + length (st_terms ?q)\<close> using piq by (simp add: pre_def init_eq)
@@ -2337,14 +2337,14 @@ proof -
   have DI: \<open>st_wf ?nf sd \<and> dm_ok p sd (length ?ds) dm \<and> length dm = length ?ds \<and> ext ?q ?i sd \<and> pre ?i sd \<and>
     (\<forall>(I :: nat \<Rightarrow> nat list \<Rightarrow> nat) ru J. ru_ok ru \<and> jrel p I ?q ru J \<and> cls_true ?q I sd \<longrightarrow> dm_sem p I ?q ru J (length ?ds) dm)\<close>
     using defs_inv[OF assms(1,2) order_refl D' pdq bq a0 wi] .
-  have tas: \<open>\<forall>t \<in> set (SmtProblem_asserts p). smt_tsort ?fs ?ds [] t = Some SmtSort_Bool \<and> smt_term_no_bv t\<close>
+  have tas: \<open>\<forall>t \<in> set (SmtProblem_asserts_l p). smt_tsort ?fs ?ds [] t = Some SmtSort_Bool \<and> smt_term_no_bv t\<close>
     using assms(1,2) by (simp add: smt_wf_def smt_fragment_def Let_def)
   have AI: \<open>st_wf ?nf ?q \<and>
     (\<forall>(I :: nat \<Rightarrow> nat list \<Rightarrow> nat) ru J. ru_ok ru \<and> jrel p I ?q ru J \<and> dm_sem p I ?q ru J (length ?ds) dm \<and>
-       cls_true ?q I ?q \<longrightarrow> (\<forall>t \<in> set (SmtProblem_asserts p). smt_eval J (smt_def_sems J ?ds) [] t = VBool True)) \<and>
+       cls_true ?q I ?q \<longrightarrow> (\<forall>t \<in> set (SmtProblem_asserts_l p). smt_eval J (smt_def_sems J ?ds) [] t = VBool True)) \<and>
     (\<forall>(I :: nat \<Rightarrow> nat list \<Rightarrow> nat) ru J. base ?q I \<and> cls_true ?q I sd \<and> ru_ok ru \<and> jrel p I ?q ru J \<and>
        dm_sem p I ?q ru J (length ?ds) dm \<and>
-       (\<forall>t \<in> set (SmtProblem_asserts p). smt_eval J (smt_def_sems J ?ds) [] t = VBool True) \<longrightarrow>
+       (\<forall>t \<in> set (SmtProblem_asserts_l p). smt_eval J (smt_def_sems J ?ds) [] t = VBool True) \<longrightarrow>
        (\<exists>I'. agree (st_next sd) I I' \<and> base ?q I' \<and> cls_true ?q I' ?q))\<close>
     using asserts_inv[OF assms(1,2) tas _ _ A pre_refl bq a0] DI by blast
   show \<open>st_wf ?nf ?q\<close> using AI by blast
@@ -2361,7 +2361,7 @@ proof -
       using DI h(1,2) unfolding ext_def by blast
     have j1: \<open>jrel p I1 ?q ru J\<close> using jrel_agree[OF wi piq I1(1)] h(4) by simp
     have d1: \<open>dm_sem p I1 ?q ru J (length ?ds) dm\<close> using DI h(3) j1 I1(3) by blast
-    have sa: \<open>\<forall>t \<in> set (SmtProblem_asserts p). smt_eval J (smt_def_sems J ?ds) [] t = VBool True\<close>
+    have sa: \<open>\<forall>t \<in> set (SmtProblem_asserts_l p). smt_eval J (smt_def_sems J ?ds) [] t = VBool True\<close>
       using h(5) by (simp add: smt_satisfies_def)
     have \<open>\<exists>I'. agree (st_next sd) I1 I' \<and> base ?q I' \<and> cls_true ?q I' ?q\<close>
       using AI I1(2,3) h(3) j1 d1 sa by blast
@@ -2382,9 +2382,9 @@ theorem tr_wf_problem:
 
 lemma tv01:
   assumes \<open>pre (tr_init_m p) q\<close> \<open>bnd q\<close>
-  shows \<open>tv I q 0 = I (length (SmtProblem_funs p)) []\<close> \<open>tv I q 1 = I (length (SmtProblem_funs p) + 1) []\<close>
+  shows \<open>tv I q 0 = I (length (SmtProblem_funs_l p)) []\<close> \<open>tv I q 1 = I (length (SmtProblem_funs_l p) + 1) []\<close>
 proof -
-  let ?nf = \<open>length (SmtProblem_funs p)\<close>
+  let ?nf = \<open>length (SmtProblem_funs_l p)\<close>
   have b: \<open>?nf + 2 < 2 ^ 64\<close> using pre_len[OF assms(1)] assms(2) by (simp add: bnd_def init_eq)
   show \<open>tv I q 0 = I ?nf []\<close>
     using tv_new[OF assms(1), of 0 ?nf \<open>[]\<close> I] b by (simp add: init_eq)
@@ -2425,30 +2425,30 @@ lemma decv_simps [simp]:
 text \<open>The interpretation of the declared symbols, TRUE and FALSE for an interpretation \<open>J\<close> of \<open>p\<close>.\<close>
 definition interp_of :: \<open>SmtProblem \<Rightarrow> (nat \<Rightarrow> sval list \<Rightarrow> sval) \<Rightarrow> nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where
   \<open>interp_of p J f ds \<equiv>
-     if f < length (SmtProblem_funs p)
-     then encv (J f (map (\<lambda>(s, d). decv s d) (zip (SmtFun_args (SmtProblem_funs p ! f)) ds)))
-     else if f = length (SmtProblem_funs p) then 0 else 1\<close>
+     if f < length (SmtProblem_funs_l p)
+     then encv (J f (map (\<lambda>(s, d). decv s d) (zip (SmtFun_args_l (SmtProblem_funs_l p ! f)) ds)))
+     else if f = length (SmtProblem_funs_l p) then 0 else 1\<close>
 
 theorem tr_complete:
   assumes \<open>smt_wf p\<close> \<open>smt_fragment p\<close> \<open>tr_bounded p\<close> \<open>smt_satisfiable p\<close>
   shows \<open>satisfiable (tr_problem_m p)\<close>
 proof -
   obtain J where J: \<open>smt_interp_ok p J\<close> \<open>smt_satisfies p J\<close> using assms(4) by (auto simp: smt_satisfiable_def)
-  let ?fs = \<open>SmtProblem_funs p\<close> and ?nf = \<open>length (SmtProblem_funs p)\<close>
+  let ?fs = \<open>SmtProblem_funs_l p\<close> and ?nf = \<open>length (SmtProblem_funs_l p)\<close>
   let ?I = \<open>interp_of p J\<close> and ?ru = \<open>\<lambda>v d. \<exists>e. v = VElem e \<and> d = e + 2\<close> and ?q = \<open>tr_state_m p\<close>
   note M = tr_main[OF assms(1,2,3)]
   have t0: \<open>tv ?I ?q 0 = 0\<close> \<open>tv ?I ?q 1 = 1\<close> using tv01[OF M(2,3), of ?I] by (simp_all add: interp_of_def)
   have bI: \<open>base ?q ?I\<close> using t0 by (simp add: base_def)
   have cI: \<open>cls_true ?q ?I (tr_init_m p)\<close> using cls_init[OF M(2,3), of ?I] t0 by simp
   have ru: \<open>ru_ok ?ru\<close> by (auto simp: ru_ok_def)
-  have fr: \<open>\<forall>f < ?nf. (\<forall>x \<in> set (SmtFun_args (?fs ! f)). smt_sort_no_bv x) \<and> smt_sort_no_bv (SmtFun_ret (?fs ! f))\<close>
+  have fr: \<open>\<forall>f < ?nf. (\<forall>x \<in> set (SmtFun_args_l (?fs ! f)). smt_sort_no_bv x) \<and> smt_sort_no_bv (SmtFun_ret (?fs ! f))\<close>
     using assms(2) nth_mem unfolding smt_fragment_def by blast
   have jr: \<open>jrel p ?I ?q ?ru J\<close>
     unfolding jrel_def Let_def
   proof (intro allI impI)
     fix f vs ds
     assume f: \<open>f < ?nf\<close>
-    let ?sa = \<open>SmtFun_args (?fs ! f)\<close> and ?r = \<open>SmtFun_ret (?fs ! f)\<close>
+    let ?sa = \<open>SmtFun_args_l (?fs ! f)\<close> and ?r = \<open>SmtFun_ret (?fs ! f)\<close>
     assume h: \<open>length vs = length ?sa \<and> length ds = length ?sa \<and> (\<forall>i < length ?sa. vrel ?I ?q ?ru (?sa ! i) (vs ! i) (ds ! i))\<close>
     have nb: \<open>\<forall>i < length ?sa. smt_sort_no_bv (?sa ! i)\<close> using fr f by simp
     have el: \<open>decv (?sa ! i) (ds ! i) = vs ! i \<and> smt_has_sort (?sa ! i) (vs ! i)\<close> if i: \<open>i < length ?sa\<close> for i
@@ -2480,21 +2480,21 @@ lemma model_interp_lt: \<open>model_interp m f ds < 2 ^ 64\<close>
   by (auto simp: model_interp_def split: option.splits intro: unat_lt2p[THEN less_le_trans])
 
 lemma tr_interp_val:
-  assumes \<open>t \<noteq> u\<close> \<open>f < length (SmtProblem_funs p)\<close>
-    \<open>length ds = length (SmtFun_args (SmtProblem_funs p ! f))\<close> \<open>length vs = length (SmtFun_args (SmtProblem_funs p ! f))\<close>
-    \<open>\<forall>k < length (SmtFun_args (SmtProblem_funs p ! f)). if SmtFun_args (SmtProblem_funs p ! f) ! k = SmtSort_Bool
+  assumes \<open>t \<noteq> u\<close> \<open>f < length (SmtProblem_funs_l p)\<close>
+    \<open>length ds = length (SmtFun_args_l (SmtProblem_funs_l p ! f))\<close> \<open>length vs = length (SmtFun_args_l (SmtProblem_funs_l p ! f))\<close>
+    \<open>\<forall>k < length (SmtFun_args_l (SmtProblem_funs_l p ! f)). if SmtFun_args_l (SmtProblem_funs_l p ! f) ! k = SmtSort_Bool
        then (\<exists>b. vs ! k = VBool b \<and> ds ! k = (if b then t else u)) else vs ! k = VElem (ds ! k)\<close>
   shows \<open>smt_interp_of (tr_interp_m p m f t u) vs =
-    smt_val_of (value_of_m (SmtFun_ret (SmtProblem_funs p ! f)) (model_interp m f ds) t)\<close>
+    smt_val_of (value_of_m (SmtFun_ret (SmtProblem_funs_l p ! f)) (model_interp m f ds) t)\<close>
 proof -
-  let ?sg = \<open>SmtProblem_funs p ! f\<close>
-  let ?sa = \<open>SmtFun_args ?sg\<close>
-  let ?P = \<open>\<lambda>e. unat (Entry_fun e) = f \<and> List.map unat (Entry_args e) = ds\<close>
-  let ?Q = \<open>\<lambda>e. List.map smt_val_of (SmtEntry_args e) = vs\<close>
-  have PF: \<open>\<forall>x \<in> set (Model_entries m). ?P x \<longrightarrow> entry_ok_m ?sg f t u x\<close>
+  let ?sg = \<open>SmtProblem_funs_l p ! f\<close>
+  let ?sa = \<open>SmtFun_args_l ?sg\<close>
+  let ?P = \<open>\<lambda>e. unat (Entry_fun e) = f \<and> List.map unat (Entry_args_l e) = ds\<close>
+  let ?Q = \<open>\<lambda>e. List.map smt_val_of (SmtEntry_args_l e) = vs\<close>
+  have PF: \<open>\<forall>x \<in> set (Model_entries_l m). ?P x \<longrightarrow> entry_ok_m ?sg f t u x\<close>
   proof (intro ballI impI)
     fix x assume \<open>?P x\<close>
-    then have x: \<open>unat (Entry_fun x) = f\<close> \<open>length (Entry_args x) = length ?sa\<close> \<open>\<forall>k < length ?sa. unat (Entry_args x ! k) = ds ! k\<close>
+    then have x: \<open>unat (Entry_fun x) = f\<close> \<open>length (Entry_args_l x) = length ?sa\<close> \<open>\<forall>k < length ?sa. unat (Entry_args_l x ! k) = ds ! k\<close>
       using assms(3) by (auto simp: list_eq_iff_nth_eq)
     then show \<open>entry_ok_m ?sg f t u x\<close> using assms(5) unfolding entry_ok_m_def by (metis (full_types))
   qed
@@ -2510,25 +2510,25 @@ proof -
     then have \<open>vs ! k = VElem (ds ! k)\<close> using assms(5) k by auto
     then show ?thesis using False by (cases \<open>?sa ! k\<close>) auto
   qed
-  have FQ: \<open>\<forall>x \<in> set (Model_entries m). entry_ok_m ?sg f t u x \<longrightarrow> ?Q (tr_entry_m ?sg t x) = ?P x\<close>
+  have FQ: \<open>\<forall>x \<in> set (Model_entries_l m). entry_ok_m ?sg f t u x \<longrightarrow> ?Q (tr_entry_m ?sg t x) = ?P x\<close>
   proof (intro ballI impI)
     fix x assume \<open>entry_ok_m ?sg f t u x\<close>
-    then have x: \<open>unat (Entry_fun x) = f\<close> \<open>length (Entry_args x) = length ?sa\<close>
-      \<open>\<forall>k < length ?sa. ?sa ! k = SmtSort_Bool \<longrightarrow> unat (Entry_args x ! k) = t \<or> unat (Entry_args x ! k) = u\<close>
+    then have x: \<open>unat (Entry_fun x) = f\<close> \<open>length (Entry_args_l x) = length ?sa\<close>
+      \<open>\<forall>k < length ?sa. ?sa ! k = SmtSort_Bool \<longrightarrow> unat (Entry_args_l x ! k) = t \<or> unat (Entry_args_l x ! k) = u\<close>
       by (auto simp: entry_ok_m_def)
-    have len: \<open>length (SmtEntry_args (tr_entry_m ?sg t x)) = length ?sa\<close> using x(2) by (simp add: tr_entry_m_def)
-    have nth: \<open>\<forall>k < length ?sa. SmtEntry_args (tr_entry_m ?sg t x) ! k = value_of_m (?sa ! k) (unat (Entry_args x ! k)) t\<close>
+    have len: \<open>length (SmtEntry_args_l (tr_entry_m ?sg t x)) = length ?sa\<close> using x(2) by (simp add: tr_entry_m_def)
+    have nth: \<open>\<forall>k < length ?sa. SmtEntry_args_l (tr_entry_m ?sg t x) ! k = value_of_m (?sa ! k) (unat (Entry_args_l x ! k)) t\<close>
       using x(2) by (simp add: tr_entry_m_def)
-    have \<open>?Q (tr_entry_m ?sg t x) = (\<forall>k < length ?sa. smt_val_of (SmtEntry_args (tr_entry_m ?sg t x) ! k) = vs ! k)\<close>
+    have \<open>?Q (tr_entry_m ?sg t x) = (\<forall>k < length ?sa. smt_val_of (SmtEntry_args_l (tr_entry_m ?sg t x) ! k) = vs ! k)\<close>
       using len assms(4) by (simp add: list_eq_iff_nth_eq)
-    also have \<open>\<dots> = (\<forall>k < length ?sa. smt_val_of (value_of_m (?sa ! k) (unat (Entry_args x ! k)) t) = vs ! k)\<close>
+    also have \<open>\<dots> = (\<forall>k < length ?sa. smt_val_of (value_of_m (?sa ! k) (unat (Entry_args_l x ! k)) t) = vs ! k)\<close>
       using nth by simp
-    also have \<open>\<dots> = (\<forall>k < length ?sa. unat (Entry_args x ! k) = ds ! k)\<close> using el x(3) by auto
+    also have \<open>\<dots> = (\<forall>k < length ?sa. unat (Entry_args_l x ! k) = ds ! k)\<close> using el x(3) by auto
     also have \<open>\<dots> = ?P x\<close> using x(1,2) assms(3) by (auto simp: list_eq_iff_nth_eq)
     finally show \<open>?Q (tr_entry_m ?sg t x) = ?P x\<close> .
   qed
-  have fd: \<open>List.find ?Q (map (tr_entry_m ?sg t) (filter (entry_ok_m ?sg f t u) (Model_entries m))) =
-      map_option (tr_entry_m ?sg t) (List.find ?P (Model_entries m))\<close>
+  have fd: \<open>List.find ?Q (map (tr_entry_m ?sg t) (filter (entry_ok_m ?sg f t u) (Model_entries_l m))) =
+      map_option (tr_entry_m ?sg t) (List.find ?P (Model_entries_l m))\<close>
     using find_map_filter[where P=\<open>?P\<close> and Q=\<open>?Q\<close> and F=\<open>entry_ok_m ?sg f t u\<close> and g=\<open>tr_entry_m ?sg t\<close>, OF PF FQ] .
   show ?thesis
     using fd by (auto simp: smt_interp_of_def tr_interp_m_def model_interp_def tr_entry_m_def Let_def split: option.splits)
@@ -2545,33 +2545,33 @@ next
 qed
 
 lemma domain_size_fold:
-  \<open>n \<le> foldl (\<lambda>n e. foldl dsize_step (dsize_step n (Entry_val e)) (Entry_args e)) n es \<and>
-   (\<forall>e \<in> set es. unat (Entry_val e) < foldl (\<lambda>n e. foldl dsize_step (dsize_step n (Entry_val e)) (Entry_args e)) n es \<and>
-      (\<forall>a \<in> set (Entry_args e). unat a < foldl (\<lambda>n e. foldl dsize_step (dsize_step n (Entry_val e)) (Entry_args e)) n es))\<close>
+  \<open>n \<le> foldl (\<lambda>n e. foldl dsize_step (dsize_step n (Entry_val e)) (Entry_args_l e)) n es \<and>
+   (\<forall>e \<in> set es. unat (Entry_val e) < foldl (\<lambda>n e. foldl dsize_step (dsize_step n (Entry_val e)) (Entry_args_l e)) n es \<and>
+      (\<forall>a \<in> set (Entry_args_l e). unat a < foldl (\<lambda>n e. foldl dsize_step (dsize_step n (Entry_val e)) (Entry_args_l e)) n es))\<close>
 proof (induction es arbitrary: n)
   case Nil
   then show ?case by simp
 next
   case (Cons e es)
-  let ?n = \<open>foldl dsize_step (dsize_step n (Entry_val e)) (Entry_args e)\<close>
+  let ?n = \<open>foldl dsize_step (dsize_step n (Entry_val e)) (Entry_args_l e)\<close>
   have \<open>n \<le> dsize_step n (Entry_val e)\<close> \<open>unat (Entry_val e) < dsize_step n (Entry_val e)\<close> by (auto simp: dsize_step_def)
-  then have h: \<open>n \<le> ?n\<close> \<open>unat (Entry_val e) < ?n\<close> \<open>\<forall>a \<in> set (Entry_args e). unat a < ?n\<close>
-    using dsize_fold[of \<open>dsize_step n (Entry_val e)\<close> \<open>Entry_args e\<close>] by auto
+  then have h: \<open>n \<le> ?n\<close> \<open>unat (Entry_val e) < ?n\<close> \<open>\<forall>a \<in> set (Entry_args_l e). unat a < ?n\<close>
+    using dsize_fold[of \<open>dsize_step n (Entry_val e)\<close> \<open>Entry_args_l e\<close>] by auto
   then show ?case using Cons.IH[of ?n] by (auto intro: le_trans less_le_trans)
 qed
 
 lemma domain_size_m:
   \<open>1 \<le> domain_size_m m\<close>
-  \<open>e \<in> set (Model_entries m) \<Longrightarrow> unat (Entry_val e) < domain_size_m m\<close>
-  \<open>e \<in> set (Model_entries m) \<Longrightarrow> a \<in> set (Entry_args e) \<Longrightarrow> unat a < domain_size_m m\<close>
-  using domain_size_fold[of 1 \<open>Model_entries m\<close>] by (auto simp: domain_size_m_def)
+  \<open>e \<in> set (Model_entries_l m) \<Longrightarrow> unat (Entry_val e) < domain_size_m m\<close>
+  \<open>e \<in> set (Model_entries_l m) \<Longrightarrow> a \<in> set (Entry_args_l e) \<Longrightarrow> unat a < domain_size_m m\<close>
+  using domain_size_fold[of 1 \<open>Model_entries_l m\<close>] by (auto simp: domain_size_m_def)
 
 theorem tr_model_correct:
   assumes \<open>smt_wf p\<close> \<open>smt_fragment p\<close> \<open>tr_bounded p\<close> \<open>problem_true (model_interp m) (tr_problem_m p)\<close>
     \<open>domain_size_m m < 2 ^ 64\<close>
   shows \<open>smt_is_model p (tr_model_m p m)\<close>
 proof -
-  let ?fs = \<open>SmtProblem_funs p\<close> and ?nf = \<open>length (SmtProblem_funs p)\<close> and ?q = \<open>tr_state_m p\<close>
+  let ?fs = \<open>SmtProblem_funs_l p\<close> and ?nf = \<open>length (SmtProblem_funs_l p)\<close> and ?q = \<open>tr_state_m p\<close>
   let ?I = \<open>model_interp m\<close> and ?J = \<open>smt_model_interp (tr_model_m p m)\<close> and ?ru = \<open>\<lambda>v d. v = VElem d\<close>
   let ?t = \<open>const_value_m m ?nf\<close> and ?u = \<open>const_value_m m (?nf + 1)\<close>
   note M = tr_main[OF assms(1,2,3)]
@@ -2586,7 +2586,7 @@ proof -
   proof (intro allI impI)
     fix f vs ds
     assume f: \<open>f < ?nf\<close>
-    let ?sa = \<open>SmtFun_args (?fs ! f)\<close> and ?r = \<open>SmtFun_ret (?fs ! f)\<close>
+    let ?sa = \<open>SmtFun_args_l (?fs ! f)\<close> and ?r = \<open>SmtFun_ret (?fs ! f)\<close>
     assume h: \<open>length vs = length ?sa \<and> length ds = length ?sa \<and> (\<forall>i < length ?sa. vrel ?I ?q ?ru (?sa ! i) (vs ! i) (ds ! i))\<close>
     have h': \<open>\<forall>k < length ?sa. if ?sa ! k = SmtSort_Bool
        then (\<exists>b. vs ! k = VBool b \<and> ds ! k = (if b then ?t else ?u)) else vs ! k = VElem (ds ! k)\<close>
@@ -2597,7 +2597,7 @@ proof -
       using v t0 model_interp_lt[of m f ds] by (cases ?r) (simp_all add: unat_wn)
   qed
   have S: \<open>smt_satisfies p ?J\<close> using M(4)[OF ru jr cq] .
-  have wf: \<open>\<forall>f \<in> set ?fs. (\<forall>s \<in> set (SmtFun_args f). smt_wf_sort (unat (SmtProblem_num_sorts p)) s \<and> smt_sort_no_bv s) \<and>
+  have wf: \<open>\<forall>f \<in> set ?fs. (\<forall>s \<in> set (SmtFun_args_l f). smt_wf_sort (unat (SmtProblem_num_sorts p)) s \<and> smt_sort_no_bv s) \<and>
       smt_wf_sort (unat (SmtProblem_num_sorts p)) (SmtFun_ret f) \<and> smt_sort_no_bv (SmtFun_ret f)\<close>
     using assms(1,2) unfolding smt_wf_def smt_fragment_def Let_def by blast
   let ?n = \<open>domain_size_m m\<close>
@@ -2609,33 +2609,33 @@ proof -
   have W: \<open>smt_model_wf p (tr_model_m p m)\<close>
     unfolding smt_model_wf_def Let_def
   proof (intro conjI allI impI ballI)
-    show \<open>length (SmtModel_domains (tr_model_m p m)) = unat (SmtProblem_num_sorts p)\<close> by (simp add: tr_model_m_def Let_def)
-    show \<open>0 < unat x\<close> if \<open>x \<in> set (SmtModel_domains (tr_model_m p m))\<close> for x
+    show \<open>length (SmtModel_domains_l (tr_model_m p m)) = unat (SmtProblem_num_sorts p)\<close> by (simp add: tr_model_m_def Let_def)
+    show \<open>0 < unat x\<close> if \<open>x \<in> set (SmtModel_domains_l (tr_model_m p m))\<close> for x
       using that n by (auto simp: tr_model_m_def Let_def)
-    show \<open>length (SmtModel_funs (tr_model_m p m)) = ?nf\<close> by (simp add: tr_model_m_def Let_def)
+    show \<open>length (SmtModel_funs_l (tr_model_m p m)) = ?nf\<close> by (simp add: tr_model_m_def Let_def)
     fix f assume f: \<open>f < ?nf\<close>
-    have ti: \<open>SmtModel_funs (tr_model_m p m) ! f = tr_interp_m p m f ?t ?u\<close> \<open>SmtModel_domains (tr_model_m p m) = ?dms\<close>
+    have ti: \<open>SmtModel_funs_l (tr_model_m p m) ! f = tr_interp_m p m f ?t ?u\<close> \<open>SmtModel_domains_l (tr_model_m p m) = ?dms\<close>
       using f by (simp_all add: tr_model_m_def Let_def)
-    have sf: \<open>(\<forall>s \<in> set (SmtFun_args (?fs ! f)). smt_wf_sort (unat (SmtProblem_num_sorts p)) s \<and> smt_sort_no_bv s) \<and>
+    have sf: \<open>(\<forall>s \<in> set (SmtFun_args_l (?fs ! f)). smt_wf_sort (unat (SmtProblem_num_sorts p)) s \<and> smt_sort_no_bv s) \<and>
       smt_wf_sort (unat (SmtProblem_num_sorts p)) (SmtFun_ret (?fs ! f)) \<and> smt_sort_no_bv (SmtFun_ret (?fs ! f))\<close>
       using bspec[OF wf nth_mem[OF f]] .
-    show \<open>smt_model_value_ok (SmtModel_domains (tr_model_m p m)) (SmtFun_ret (?fs ! f)) (SmtInterp_default (SmtModel_funs (tr_model_m p m) ! f))\<close>
+    show \<open>smt_model_value_ok (SmtModel_domains_l (tr_model_m p m)) (SmtFun_ret (?fs ! f)) (SmtInterp_default (SmtModel_funs_l (tr_model_m p m) ! f))\<close>
       using ti sf vok[of \<open>SmtFun_ret (?fs ! f)\<close> 0] n by (simp add: tr_interp_m_def Let_def)
-    fix e' assume e': \<open>e' \<in> set (SmtInterp_entries (SmtModel_funs (tr_model_m p m) ! f))\<close>
-    then obtain e where e: \<open>e \<in> set (Model_entries m)\<close> \<open>entry_ok_m (?fs ! f) f ?t ?u e\<close> \<open>e' = tr_entry_m (?fs ! f) ?t e\<close>
+    fix e' assume e': \<open>e' \<in> set (SmtInterp_entries_l (SmtModel_funs_l (tr_model_m p m) ! f))\<close>
+    then obtain e where e: \<open>e \<in> set (Model_entries_l m)\<close> \<open>entry_ok_m (?fs ! f) f ?t ?u e\<close> \<open>e' = tr_entry_m (?fs ! f) ?t e\<close>
       using ti by (auto simp: tr_interp_m_def Let_def)
-    have la: \<open>length (Entry_args e) = length (SmtFun_args (?fs ! f))\<close> using e(2) by (simp add: entry_ok_m_def)
-    show \<open>list_all2 (smt_model_value_ok (SmtModel_domains (tr_model_m p m))) (SmtFun_args (?fs ! f)) (SmtEntry_args e')\<close>
+    have la: \<open>length (Entry_args_l e) = length (SmtFun_args_l (?fs ! f))\<close> using e(2) by (simp add: entry_ok_m_def)
+    show \<open>list_all2 (smt_model_value_ok (SmtModel_domains_l (tr_model_m p m))) (SmtFun_args_l (?fs ! f)) (SmtEntry_args_l e')\<close>
       unfolding list_all2_conv_all_nth
     proof (intro conjI allI impI)
-      show \<open>length (SmtFun_args (?fs ! f)) = length (SmtEntry_args e')\<close> using e(3) la by (simp add: tr_entry_m_def)
-      fix k assume k: \<open>k < length (SmtFun_args (?fs ! f))\<close>
-      have \<open>unat (Entry_args e ! k) < ?n\<close> using domain_size_m(3)[OF e(1)] k la by simp
-      then show \<open>smt_model_value_ok (SmtModel_domains (tr_model_m p m)) (SmtFun_args (?fs ! f) ! k) (SmtEntry_args e' ! k)\<close>
-        using vok[of \<open>SmtFun_args (?fs ! f) ! k\<close> \<open>unat (Entry_args e ! k)\<close>] sf k la e(3) ti(2) unat_lt2p[of \<open>Entry_args e ! k\<close>]
+      show \<open>length (SmtFun_args_l (?fs ! f)) = length (SmtEntry_args_l e')\<close> using e(3) la by (simp add: tr_entry_m_def)
+      fix k assume k: \<open>k < length (SmtFun_args_l (?fs ! f))\<close>
+      have \<open>unat (Entry_args_l e ! k) < ?n\<close> using domain_size_m(3)[OF e(1)] k la by simp
+      then show \<open>smt_model_value_ok (SmtModel_domains_l (tr_model_m p m)) (SmtFun_args_l (?fs ! f) ! k) (SmtEntry_args_l e' ! k)\<close>
+        using vok[of \<open>SmtFun_args_l (?fs ! f) ! k\<close> \<open>unat (Entry_args_l e ! k)\<close>] sf k la e(3) ti(2) unat_lt2p[of \<open>Entry_args_l e ! k\<close>]
         by (simp add: tr_entry_m_def)
     qed
-    show \<open>smt_model_value_ok (SmtModel_domains (tr_model_m p m)) (SmtFun_ret (?fs ! f)) (SmtEntry_val e')\<close>
+    show \<open>smt_model_value_ok (SmtModel_domains_l (tr_model_m p m)) (SmtFun_ret (?fs ! f)) (SmtEntry_val e')\<close>
       using vok[of \<open>SmtFun_ret (?fs ! f)\<close> \<open>unat (Entry_val e)\<close>] sf domain_size_m(2)[OF e(1)] e(3) ti(2) unat_lt2p[of \<open>Entry_val e\<close>]
       by (simp add: tr_entry_m_def)
   qed

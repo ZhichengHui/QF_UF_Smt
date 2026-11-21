@@ -73,12 +73,12 @@ proof -
 qed
 
 lemma ext_ok_rep_for:
-  assumes ok: \<open>ext_ok p t f t1 f1\<close> and len: \<open>length t = length (Problem_atoms p)\<close> and r: \<open>rep_for p t rs\<close>
+  assumes ok: \<open>ext_ok p t f t1 f1\<close> and len: \<open>length t = length (Problem_atoms_l p)\<close> and r: \<open>rep_for p t rs\<close>
   shows \<open>rep_for p t1 rs\<close>
 proof (rule rep_for_mono[OF r])
   have \<open>\<forall>j < length t. t ! j \<longrightarrow> t1 ! j\<close>
     using ok unfolding ext_ok_def by blast
-  then show \<open>\<forall>j < length (Problem_atoms p). t ! j \<longrightarrow> t1 ! j\<close>
+  then show \<open>\<forall>j < length (Problem_atoms_l p). t ! j \<longrightarrow> t1 ! j\<close>
     using len by simp
 qed
 
@@ -206,8 +206,8 @@ definition clause_unit_at_contract :: \<open>Problem \<Rightarrow> Clause list \
       ('s, Lit, 'abort) function_contract\<close> where
   \<open>clause_unit_at_contract p l c t f \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms p) \<and>
-         length f = length (Problem_atoms p)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms_l p) \<and>
+         length f = length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star> \<langle>find_result p t f r\<rangle> in
      make_function_contract pre post\<close>
 
@@ -234,8 +234,8 @@ definition units_at_contract :: \<open>Problem \<Rightarrow> Clause list \<Right
   \<open>units_at_contract p l cs t gt tv f gf fv lv glv vlv rs grs vrs ts gts vts q gq vq \<equiv>
      let pre = can_alloc_reference \<star> t \<mapsto>\<langle>\<top>\<rangle> gt\<down>tv \<star> f \<mapsto>\<langle>\<top>\<rangle> gf\<down>fv \<star>
         lv \<mapsto>\<langle>\<top>\<rangle> glv\<down>vlv \<star> rs \<mapsto>\<langle>\<top>\<rangle> grs\<down>vrs \<star> ts \<mapsto>\<langle>\<top>\<rangle> gts\<down>vts \<star> q \<mapsto>\<langle>\<top>\<rangle> gq\<down>vq \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length tv = length (Problem_atoms p) \<and>
-         length fv = length (Problem_atoms p)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length tv = length (Problem_atoms_l p) \<and>
+         length fv = length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
         (\<Squnion>g1 tv' g2 fv'. t \<mapsto>\<langle>\<top>\<rangle> g1\<down>tv' \<star> f \<mapsto>\<langle>\<top>\<rangle> g2\<down>fv' \<star>
            \<langle>ext_ok p tv fv tv' fv' \<and> (r \<noteq> 0 \<longrightarrow> \<not> pext p tv fv)\<rangle>) \<star>
@@ -362,8 +362,8 @@ definition watch_pass_contract :: \<open>Problem \<Rightarrow> Clause list \<Rig
   \<open>watch_pass_contract p l t f head nxt wl \<equiv>
      let pre = can_alloc_reference \<star> (\<Squnion>g v. head \<mapsto>\<langle>\<top>\<rangle> g\<down>v) \<star> (\<Squnion>g v. nxt \<mapsto>\<langle>\<top>\<rangle> g\<down>v) \<star>
           (\<Squnion>g v. wl \<mapsto>\<langle>\<top>\<rangle> g\<down>v) \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms p) \<and>
-         length f = length (Problem_atoms p)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms_l p) \<and>
+         length f = length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g v. head \<mapsto>\<langle>\<top>\<rangle> g\<down>v) \<star> (\<Squnion>g v. nxt \<mapsto>\<langle>\<top>\<rangle> g\<down>v) \<star>
           (\<Squnion>g v. wl \<mapsto>\<langle>\<top>\<rangle> g\<down>v) \<star>
         \<langle>ext_ok p t f (fst (snd r)) (fst (snd (snd r))) \<and> (fst r \<noteq> 0 \<longrightarrow> \<not> pext p t f)\<rangle> in
@@ -405,7 +405,7 @@ lemma top_level_spec:
   subgoal for x_ref
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ _. can_alloc_reference \<star> (\<Squnion>g v. x_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>v \<star>
-          \<langle>v = word64_of_nat (length (Clause_lits c)) \<or> unat v < length (Clause_lits c)\<rangle>)\<close>
+          \<langle>v = word64_of_nat (length (Clause_lits_l c)) \<or> unat v < length (Clause_lits_l c)\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>

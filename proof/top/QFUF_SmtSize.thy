@@ -112,9 +112,9 @@ function (sequential) ncnt :: \<open>SmtProblem \<Rightarrow> nat \<Rightarrow> 
   where
   \<open>ncnt p n (SmtTerm_Fun f args) = 1 + ncnt_args p n args\<close>
 | \<open>ncnt p n (SmtTerm_Def d args) =
-     (if SmtDef_params (SmtProblem_defs p ! unat d) = [] then 1 + ncnt_args p n args
+     (if SmtDef_params_l (SmtProblem_defs_l p ! unat d) = [] then 1 + ncnt_args p n args
       else 1 + (ncnt_args p n args +
-             (if unat d < n then ncnt p (unat d) (SmtDef_body (SmtProblem_defs p ! unat d)) else 0)))\<close>
+             (if unat d < n then ncnt p (unat d) (SmtDef_body (SmtProblem_defs_l p ! unat d)) else 0)))\<close>
 | \<open>ncnt p n (SmtTerm_App op args) = 1 + ncnt_args p n args\<close>
 | \<open>ncnt p n _ = 1\<close>
 | \<open>ncnt_args p n [] = 0\<close>
@@ -130,40 +130,40 @@ text \<open>The value \<^verbatim>\<open>input_size\<close> computes, without sa
   the counts of the assertions.\<close>
 definition isize_m :: \<open>SmtProblem \<Rightarrow> nat\<close> where
   \<open>isize_m p \<equiv>
-     length (SmtProblem_funs p) + length (SmtProblem_defs p) + length (SmtProblem_asserts p) +
-     sum_list (map (\<lambda>d. if SmtDef_params (SmtProblem_defs p ! d) = []
-                         then ncnt p d (SmtDef_body (SmtProblem_defs p ! d)) else 0)
-                [0..<length (SmtProblem_defs p)]) +
-     sum_list (map (ncnt p (length (SmtProblem_defs p))) (SmtProblem_asserts p))\<close>
+     length (SmtProblem_funs_l p) + length (SmtProblem_defs_l p) + length (SmtProblem_asserts_l p) +
+     sum_list (map (\<lambda>d. if SmtDef_params_l (SmtProblem_defs_l p ! d) = []
+                         then ncnt p d (SmtDef_body (SmtProblem_defs_l p ! d)) else 0)
+                [0..<length (SmtProblem_defs_l p)]) +
+     sum_list (map (ncnt p (length (SmtProblem_defs_l p))) (SmtProblem_asserts_l p))\<close>
 
 text \<open>The definitions part of \<^const>\<open>isize_m\<close> for the first \<open>d\<close> definitions.\<close>
 definition idsum :: \<open>SmtProblem \<Rightarrow> nat \<Rightarrow> nat\<close> where
-  \<open>idsum p d \<equiv> sum_list (map (\<lambda>i. if SmtDef_params (SmtProblem_defs p ! i) = []
-                                   then ncnt p i (SmtDef_body (SmtProblem_defs p ! i)) else 0) [0..<d])\<close>
+  \<open>idsum p d \<equiv> sum_list (map (\<lambda>i. if SmtDef_params_l (SmtProblem_defs_l p ! i) = []
+                                   then ncnt p i (SmtDef_body (SmtProblem_defs_l p ! i)) else 0) [0..<d])\<close>
 
 lemma idsum_0: \<open>idsum p 0 = 0\<close>
   by (simp add: idsum_def)
 
 lemma idsum_Suc: \<open>idsum p (Suc d) = idsum p d +
-  (if SmtDef_params (SmtProblem_defs p ! d) = [] then ncnt p d (SmtDef_body (SmtProblem_defs p ! d)) else 0)\<close>
+  (if SmtDef_params_l (SmtProblem_defs_l p ! d) = [] then ncnt p d (SmtDef_body (SmtProblem_defs_l p ! d)) else 0)\<close>
   by (simp add: idsum_def)
 
-lemma isize_idsum: \<open>isize_m p = length (SmtProblem_funs p) + length (SmtProblem_defs p) +
-  length (SmtProblem_asserts p) + idsum p (length (SmtProblem_defs p)) +
-  sum_list (map (ncnt p (length (SmtProblem_defs p))) (SmtProblem_asserts p))\<close>
+lemma isize_idsum: \<open>isize_m p = length (SmtProblem_funs_l p) + length (SmtProblem_defs_l p) +
+  length (SmtProblem_asserts_l p) + idsum p (length (SmtProblem_defs_l p)) +
+  sum_list (map (ncnt p (length (SmtProblem_defs_l p))) (SmtProblem_asserts_l p))\<close>
   by (simp add: isize_m_def idsum_def)
 
 text \<open>\<^const>\<open>isize_m\<close> is the size of the specification.\<close>
 lemma ncnt_nodes:
-  \<open>n \<le> length (SmtProblem_defs p) \<Longrightarrow> ncnt p n t = smt_nodes (take n (SmtProblem_defs p)) t\<close>
-  \<open>n \<le> length (SmtProblem_defs p) \<Longrightarrow>
-     ncnt_args p n ts = sum_list (map (smt_nodes (take n (SmtProblem_defs p))) ts)\<close>
+  \<open>n \<le> length (SmtProblem_defs_l p) \<Longrightarrow> ncnt p n t = smt_nodes (take n (SmtProblem_defs_l p)) t\<close>
+  \<open>n \<le> length (SmtProblem_defs_l p) \<Longrightarrow>
+     ncnt_args p n ts = sum_list (map (smt_nodes (take n (SmtProblem_defs_l p))) ts)\<close>
 proof (induction p n t and p n ts rule: ncnt_ncnt_args.induct)
   case (2 p n d args)
   show ?case
   proof (cases \<open>unat d < n\<close>)
     case True
-    have t: \<open>take (unat d) (take n (SmtProblem_defs p)) = take (unat d) (SmtProblem_defs p)\<close>
+    have t: \<open>take (unat d) (take n (SmtProblem_defs_l p)) = take (unat d) (SmtProblem_defs_l p)\<close>
       using True by (simp add: min_def)
     show ?thesis using 2 True t by (auto simp: min_def)
   next
@@ -174,14 +174,14 @@ qed simp_all
 
 lemma isize_smt_size: \<open>isize_m p = smt_size p\<close>
 proof -
-  have d: \<open>map (\<lambda>d. if SmtDef_params (SmtProblem_defs p ! d) = [] then ncnt p d (SmtDef_body (SmtProblem_defs p ! d)) else 0)
-             [0..<length (SmtProblem_defs p)] =
-           map (\<lambda>d. if SmtDef_params (SmtProblem_defs p ! d) = [] then smt_nodes (take d (SmtProblem_defs p)) (SmtDef_body (SmtProblem_defs p ! d)) else 0)
-             [0..<length (SmtProblem_defs p)]\<close>
+  have d: \<open>map (\<lambda>d. if SmtDef_params_l (SmtProblem_defs_l p ! d) = [] then ncnt p d (SmtDef_body (SmtProblem_defs_l p ! d)) else 0)
+             [0..<length (SmtProblem_defs_l p)] =
+           map (\<lambda>d. if SmtDef_params_l (SmtProblem_defs_l p ! d) = [] then smt_nodes (take d (SmtProblem_defs_l p)) (SmtDef_body (SmtProblem_defs_l p ! d)) else 0)
+             [0..<length (SmtProblem_defs_l p)]\<close>
     by (rule map_cong) (simp_all add: ncnt_nodes(1))
-  have a: \<open>map (ncnt p (length (SmtProblem_defs p))) (SmtProblem_asserts p) =
-           map (smt_nodes (SmtProblem_defs p)) (SmtProblem_asserts p)\<close>
-    using ncnt_nodes(1)[of \<open>length (SmtProblem_defs p)\<close> p] by simp
+  have a: \<open>map (ncnt p (length (SmtProblem_defs_l p))) (SmtProblem_asserts_l p) =
+           map (smt_nodes (SmtProblem_defs_l p)) (SmtProblem_asserts_l p)\<close>
+    using ncnt_nodes(1)[of \<open>length (SmtProblem_defs_l p)\<close> p] by simp
   show ?thesis by (simp add: isize_m_def smt_size_def Let_def d a)
 qed
 
@@ -200,13 +200,13 @@ fun dok :: \<open>nat \<Rightarrow> nat \<Rightarrow> SmtTerm \<Rightarrow> bool
 text \<open>Every definition has fewer than \<open>2^64\<close> parameters (so that \<^verbatim>\<open>len\<close> reads their
   number exactly).\<close>
 definition params_ok :: \<open>SmtProblem \<Rightarrow> bool\<close> where
-  \<open>params_ok p \<equiv> \<forall>e \<in> set (SmtProblem_defs p). length (SmtDef_params e) < 2 ^ 64\<close>
+  \<open>params_ok p \<equiv> \<forall>e \<in> set (SmtProblem_defs_l p). length (SmtDef_params_l e) < 2 ^ 64\<close>
 
-lemma params_ok_nth: \<open>params_ok p \<Longrightarrow> d < length (SmtProblem_defs p) \<Longrightarrow>
-  ((word_of_nat (length (SmtDef_params (SmtProblem_defs p ! d))) :: 64 word) = 0) = (SmtDef_params (SmtProblem_defs p ! d) = [])\<close>
+lemma params_ok_nth: \<open>params_ok p \<Longrightarrow> d < length (SmtProblem_defs_l p) \<Longrightarrow>
+  ((word_of_nat (length (SmtDef_params_l (SmtProblem_defs_l p ! d))) :: 64 word) = 0) = (SmtDef_params_l (SmtProblem_defs_l p ! d) = [])\<close>
 proof -
-  assume a: \<open>params_ok p\<close> and b: \<open>d < length (SmtProblem_defs p)\<close>
-  have L: \<open>length (SmtDef_params (SmtProblem_defs p ! d)) < 2 ^ 64\<close> using a b by (simp add: params_ok_def)
+  assume a: \<open>params_ok p\<close> and b: \<open>d < length (SmtProblem_defs_l p)\<close>
+  have L: \<open>length (SmtDef_params_l (SmtProblem_defs_l p ! d)) < 2 ^ 64\<close> using a b by (simp add: params_ok_def)
   show ?thesis using L by (auto simp: word_of_nat_eq_0_iff dest: nat_dvd_not_less)
 qed
 
@@ -235,7 +235,7 @@ lemma ncnt_args_take_Suc:
 text \<open>The table \<^verbatim>\<open>dc\<close> of \<^verbatim>\<open>input_size\<close> for the first \<open>n\<close> definitions: for a definition with
   parameters, the count of its body where it is expanded.\<close>
 definition dcv :: \<open>SmtProblem \<Rightarrow> nat \<Rightarrow> nat\<close> where
-  \<open>dcv p d \<equiv> if SmtDef_params (SmtProblem_defs p ! d) = [] then 0 else sat (ncnt p d (SmtDef_body (SmtProblem_defs p ! d)))\<close>
+  \<open>dcv p d \<equiv> if SmtDef_params_l (SmtProblem_defs_l p ! d) = [] then 0 else sat (ncnt p d (SmtDef_body (SmtProblem_defs_l p ! d)))\<close>
 
 definition dcw :: \<open>SmtProblem \<Rightarrow> nat \<Rightarrow> 64 word list\<close> where
   \<open>dcw p n \<equiv> map (\<lambda>d. word_of_nat (dcv p d)) [0..<n]\<close>
@@ -262,11 +262,11 @@ text \<open>What \<^verbatim>\<open>input_size\<close> needs: the definitions re
   definitions; every term and list is within the fuel and below \<open>2^63\<close>.\<close>
 definition isize_pre :: \<open>nat \<Rightarrow> SmtProblem \<Rightarrow> bool\<close> where
   \<open>isize_pre F p \<equiv>
-     let ds = SmtProblem_defs p in
-     params_ok p \<and> length (SmtProblem_funs p) < 2 ^ 63 \<and> length ds < 2 ^ 63 \<and> length ds \<le> F \<and>
-     length (SmtProblem_asserts p) < 2 ^ 63 \<and> length (SmtProblem_asserts p) \<le> F \<and>
+     let ds = SmtProblem_defs_l p in
+     params_ok p \<and> length (SmtProblem_funs_l p) < 2 ^ 63 \<and> length ds < 2 ^ 63 \<and> length ds \<le> F \<and>
+     length (SmtProblem_asserts_l p) < 2 ^ 63 \<and> length (SmtProblem_asserts_l p) \<le> F \<and>
      (\<forall>d < length ds. dok d F (SmtDef_body (ds ! d)) \<and> Suc (size (SmtDef_body (ds ! d))) \<le> F) \<and>
-     (\<forall>t \<in> set (SmtProblem_asserts p). dok (length ds) F t \<and> Suc (size t) \<le> F)\<close>
+     (\<forall>t \<in> set (SmtProblem_asserts_l p). dok (length ds) F t \<and> Suc (size t) \<le> F)\<close>
 
 subsection \<open>The precondition holds for well-sorted problems\<close>
 
@@ -274,9 +274,9 @@ text \<open>A bound on the fuel that \<^verbatim>\<open>input_size\<close> needs
   sizes of the bodies of the definitions and of the assertions.\<close>
 definition isize_fuel :: \<open>SmtProblem \<Rightarrow> nat\<close> where
   \<open>isize_fuel p \<equiv>
-     Suc (length (SmtProblem_defs p) + length (SmtProblem_asserts p) +
-          sum_list (map (\<lambda>e. size (SmtDef_body e)) (SmtProblem_defs p)) +
-          sum_list (map size (SmtProblem_asserts p)))\<close>
+     Suc (length (SmtProblem_defs_l p) + length (SmtProblem_asserts_l p) +
+          sum_list (map (\<lambda>e. size (SmtDef_body e)) (SmtProblem_defs_l p)) +
+          sum_list (map size (SmtProblem_asserts_l p)))\<close>
 
 lemma map_eq_Some_ne: \<open>map f xs = map Some ys \<Longrightarrow> x \<in> set xs \<Longrightarrow> f x \<noteq> None\<close>
 proof -
@@ -322,36 +322,36 @@ lemma isize_pre_wf:
   shows \<open>isize_pre F p\<close>
 proof -
   have W: \<open>smt_wf p\<close> and R: \<open>smt_repr_ok p\<close> and B: \<open>isize_fuel p \<le> F\<close> using assms by simp_all
-  have D: \<open>\<forall>d < length (SmtProblem_defs p).
-              dok d F (SmtDef_body (SmtProblem_defs p ! d)) \<and> Suc (size (SmtDef_body (SmtProblem_defs p ! d))) \<le> F\<close>
+  have D: \<open>\<forall>d < length (SmtProblem_defs_l p).
+              dok d F (SmtDef_body (SmtProblem_defs_l p ! d)) \<and> Suc (size (SmtDef_body (SmtProblem_defs_l p ! d))) \<le> F\<close>
   proof (intro allI impI)
-    fix d assume d: \<open>d < length (SmtProblem_defs p)\<close>
-    have m: \<open>SmtProblem_defs p ! d \<in> set (SmtProblem_defs p)\<close> using d by simp
-    have \<open>size (SmtDef_body (SmtProblem_defs p ! d)) \<le> sum_list (map (\<lambda>e. size (SmtDef_body e)) (SmtProblem_defs p))\<close>
+    fix d assume d: \<open>d < length (SmtProblem_defs_l p)\<close>
+    have m: \<open>SmtProblem_defs_l p ! d \<in> set (SmtProblem_defs_l p)\<close> using d by simp
+    have \<open>size (SmtDef_body (SmtProblem_defs_l p ! d)) \<le> sum_list (map (\<lambda>e. size (SmtDef_body e)) (SmtProblem_defs_l p))\<close>
       using m by (auto intro!: member_le_sum_list)
-    then have s: \<open>Suc (size (SmtDef_body (SmtProblem_defs p ! d))) \<le> F\<close> using B by (simp add: isize_fuel_def)
-    have ts: \<open>smt_tsort (SmtProblem_funs p) (take d (SmtProblem_defs p)) (SmtDef_params (SmtProblem_defs p ! d))
-                (SmtDef_body (SmtProblem_defs p ! d)) = Some (SmtDef_ret (SmtProblem_defs p ! d))\<close>
+    then have s: \<open>Suc (size (SmtDef_body (SmtProblem_defs_l p ! d))) \<le> F\<close> using B by (simp add: isize_fuel_def)
+    have ts: \<open>smt_tsort (SmtProblem_funs_l p) (take d (SmtProblem_defs_l p)) (SmtDef_params_l (SmtProblem_defs_l p ! d))
+                (SmtDef_body (SmtProblem_defs_l p ! d)) = Some (SmtDef_ret (SmtProblem_defs_l p ! d))\<close>
       using W d by (simp add: smt_wf_def Let_def)
-    have r: \<open>smt_term_repr (SmtDef_body (SmtProblem_defs p ! d))\<close> using R m by (simp add: smt_repr_ok_def)
-    have n: \<open>smt_tsort (SmtProblem_funs p) (take d (SmtProblem_defs p)) (SmtDef_params (SmtProblem_defs p ! d))
-                (SmtDef_body (SmtProblem_defs p ! d)) \<noteq> None\<close> using ts by simp
-    have \<open>dok (length (take d (SmtProblem_defs p))) F (SmtDef_body (SmtProblem_defs p ! d))\<close>
+    have r: \<open>smt_term_repr (SmtDef_body (SmtProblem_defs_l p ! d))\<close> using R m by (simp add: smt_repr_ok_def)
+    have n: \<open>smt_tsort (SmtProblem_funs_l p) (take d (SmtProblem_defs_l p)) (SmtDef_params_l (SmtProblem_defs_l p ! d))
+                (SmtDef_body (SmtProblem_defs_l p ! d)) \<noteq> None\<close> using ts by simp
+    have \<open>dok (length (take d (SmtProblem_defs_l p))) F (SmtDef_body (SmtProblem_defs_l p ! d))\<close>
       using tsort_dok[OF n r] s by simp
-    then show \<open>dok d F (SmtDef_body (SmtProblem_defs p ! d)) \<and> Suc (size (SmtDef_body (SmtProblem_defs p ! d))) \<le> F\<close>
+    then show \<open>dok d F (SmtDef_body (SmtProblem_defs_l p ! d)) \<and> Suc (size (SmtDef_body (SmtProblem_defs_l p ! d))) \<le> F\<close>
       using d s by (simp add: min_def)
   qed
-  have A: \<open>\<forall>t \<in> set (SmtProblem_asserts p). dok (length (SmtProblem_defs p)) F t \<and> Suc (size t) \<le> F\<close>
+  have A: \<open>\<forall>t \<in> set (SmtProblem_asserts_l p). dok (length (SmtProblem_defs_l p)) F t \<and> Suc (size t) \<le> F\<close>
   proof
-    fix t assume m: \<open>t \<in> set (SmtProblem_asserts p)\<close>
-    have \<open>size t \<le> sum_list (map size (SmtProblem_asserts p))\<close>
+    fix t assume m: \<open>t \<in> set (SmtProblem_asserts_l p)\<close>
+    have \<open>size t \<le> sum_list (map size (SmtProblem_asserts_l p))\<close>
       using m by (auto intro!: member_le_sum_list)
     then have s: \<open>Suc (size t) \<le> F\<close> using B by (simp add: isize_fuel_def)
-    have ts: \<open>smt_tsort (SmtProblem_funs p) (SmtProblem_defs p) [] t = Some SmtSort_Bool\<close>
+    have ts: \<open>smt_tsort (SmtProblem_funs_l p) (SmtProblem_defs_l p) [] t = Some SmtSort_Bool\<close>
       using W m by (simp add: smt_wf_def Let_def)
     have r: \<open>smt_term_repr t\<close> using R m by (simp add: smt_repr_ok_def)
-    have n: \<open>smt_tsort (SmtProblem_funs p) (SmtProblem_defs p) [] t \<noteq> None\<close> using ts by simp
-    show \<open>dok (length (SmtProblem_defs p)) F t \<and> Suc (size t) \<le> F\<close> using tsort_dok[OF n r] s by simp
+    have n: \<open>smt_tsort (SmtProblem_funs_l p) (SmtProblem_defs_l p) [] t \<noteq> None\<close> using ts by simp
+    show \<open>dok (length (SmtProblem_defs_l p)) F t \<and> Suc (size t) \<le> F\<close> using tsort_dok[OF n r] s by simp
   qed
   have P: \<open>params_ok p\<close> using R by (auto simp: params_ok_def smt_repr_ok_def)
   show ?thesis using D A P R B by (simp add: isize_pre_def smt_repr_ok_def isize_fuel_def)
@@ -405,7 +405,7 @@ definition node_count_contract :: \<open>nat \<Rightarrow> SmtProblem \<Rightarr
   [crush_contracts]: \<open>node_count_contract k p dc t \<equiv>
      make_function_contract
        (can_alloc_reference \<star>
-        \<langle>Suc (size t) \<le> k \<and> dc = dcw p (length dc) \<and> length dc \<le> length (SmtProblem_defs p) \<and>
+        \<langle>Suc (size t) \<le> k \<and> dc = dcw p (length dc) \<and> length dc \<le> length (SmtProblem_defs_l p) \<and>
          params_ok p \<and> dok (length dc) urust_fuel t\<rangle>)
        (\<lambda>r. can_alloc_reference \<star> \<langle>unat r = sat (ncnt p (length dc) t)\<rangle>)\<close>
 
@@ -413,7 +413,7 @@ definition node_count_args_contract :: \<open>nat \<Rightarrow> SmtProblem \<Rig
   [crush_contracts]: \<open>node_count_args_contract k p dc ts \<equiv>
      make_function_contract
        (can_alloc_reference \<star>
-        \<langle>Suc (size_list size ts) \<le> k \<and> dc = dcw p (length dc) \<and> length dc \<le> length (SmtProblem_defs p) \<and>
+        \<langle>Suc (size_list size ts) \<le> k \<and> dc = dcw p (length dc) \<and> length dc \<le> length (SmtProblem_defs_l p) \<and>
          params_ok p \<and> length ts < 2 ^ 63 \<and> length ts \<le> urust_fuel \<and> (\<forall>a \<in> set ts. dok (length dc) urust_fuel a)\<rangle>)
        (\<lambda>r. can_alloc_reference \<star> \<langle>unat r = sat (ncnt_args p (length dc) ts)\<rangle>)\<close>
 
@@ -532,14 +532,14 @@ lemma input_size_spec [crush_specs]:
       rule_tac
         INV=\<open>\<lambda>j. \<Squnion>gc c gn n gd d. dc_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> d_ref \<mapsto>\<langle>\<top>\<rangle> gd\<down>d \<star>
                can_alloc_reference \<star>
-               \<langle>unat d \<le> length (SmtProblem_defs p) \<and> c = dcw p (unat d) \<and>
-                unat n = sat (length (SmtProblem_funs p) + length (SmtProblem_defs p) + length (SmtProblem_asserts p) + idsum p (unat d)) \<and>
-                length (SmtProblem_defs p) - unat d \<le> j\<rangle>\<close> and
+               \<langle>unat d \<le> length (SmtProblem_defs_l p) \<and> c = dcw p (unat d) \<and>
+                unat n = sat (length (SmtProblem_funs_l p) + length (SmtProblem_defs_l p) + length (SmtProblem_asserts_l p) + idsum p (unat d)) \<and>
+                length (SmtProblem_defs_l p) - unat d \<le> j\<rangle>\<close> and
         INV'=\<open>\<lambda>j. \<Squnion>gc c gn n gd d. dc_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> d_ref \<mapsto>\<langle>\<top>\<rangle> gd\<down>d \<star>
                can_alloc_reference \<star>
-               \<langle>unat d < length (SmtProblem_defs p) \<and> c = dcw p (unat d) \<and>
-                unat n = sat (length (SmtProblem_funs p) + length (SmtProblem_defs p) + length (SmtProblem_asserts p) + idsum p (unat d)) \<and>
-                length (SmtProblem_defs p) - unat d \<le> Suc j\<rangle>\<close> and
+               \<langle>unat d < length (SmtProblem_defs_l p) \<and> c = dcw p (unat d) \<and>
+                unat n = sat (length (SmtProblem_funs_l p) + length (SmtProblem_defs_l p) + length (SmtProblem_asserts_l p) + idsum p (unat d)) \<and>
+                length (SmtProblem_defs_l p) - unat d \<le> Suc j\<rangle>\<close> and
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
@@ -550,20 +550,20 @@ lemma input_size_spec [crush_specs]:
     subgoal for gc gn n gd d j_ref
       apply (ucincl_discharge\<open>
         rule_tac
-          INV=\<open>\<lambda>j. \<Squnion>gc gn n gj jj. dc_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>dcw p (length (SmtProblem_defs p)) \<star>
+          INV=\<open>\<lambda>j. \<Squnion>gc gn n gj jj. dc_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>dcw p (length (SmtProblem_defs_l p)) \<star>
                  n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>jj \<star> can_alloc_reference \<star>
-                 \<langle>unat jj \<le> length (SmtProblem_asserts p) \<and>
-                  unat n = sat (length (SmtProblem_funs p) + length (SmtProblem_defs p) + length (SmtProblem_asserts p) + idsum p (length (SmtProblem_defs p)) +
-                     sum_list (map (ncnt p (length (SmtProblem_defs p)))
-                                (take (unat jj) (SmtProblem_asserts p)))) \<and>
-                  length (SmtProblem_asserts p) - unat jj \<le> j\<rangle>\<close> and
-          INV'=\<open>\<lambda>j. \<Squnion>gc gn n gj jj. dc_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>dcw p (length (SmtProblem_defs p)) \<star>
+                 \<langle>unat jj \<le> length (SmtProblem_asserts_l p) \<and>
+                  unat n = sat (length (SmtProblem_funs_l p) + length (SmtProblem_defs_l p) + length (SmtProblem_asserts_l p) + idsum p (length (SmtProblem_defs_l p)) +
+                     sum_list (map (ncnt p (length (SmtProblem_defs_l p)))
+                                (take (unat jj) (SmtProblem_asserts_l p)))) \<and>
+                  length (SmtProblem_asserts_l p) - unat jj \<le> j\<rangle>\<close> and
+          INV'=\<open>\<lambda>j. \<Squnion>gc gn n gj jj. dc_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>dcw p (length (SmtProblem_defs_l p)) \<star>
                  n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>jj \<star> can_alloc_reference \<star>
-                 \<langle>unat jj < length (SmtProblem_asserts p) \<and>
-                  unat n = sat (length (SmtProblem_funs p) + length (SmtProblem_defs p) + length (SmtProblem_asserts p) + idsum p (length (SmtProblem_defs p)) +
-                     sum_list (map (ncnt p (length (SmtProblem_defs p)))
-                                (take (unat jj) (SmtProblem_asserts p)))) \<and>
-                  length (SmtProblem_asserts p) - unat jj \<le> Suc j\<rangle>\<close> and
+                 \<langle>unat jj < length (SmtProblem_asserts_l p) \<and>
+                  unat n = sat (length (SmtProblem_funs_l p) + length (SmtProblem_defs_l p) + length (SmtProblem_asserts_l p) + idsum p (length (SmtProblem_defs_l p)) +
+                     sum_list (map (ncnt p (length (SmtProblem_defs_l p)))
+                                (take (unat jj) (SmtProblem_asserts_l p)))) \<and>
+                  length (SmtProblem_asserts_l p) - unat jj \<le> Suc j\<rangle>\<close> and
           \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
           \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         in wp_bounded_while_framedI\<close>)

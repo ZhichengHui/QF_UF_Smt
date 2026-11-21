@@ -20,7 +20,7 @@ fun occ_m :: \<open>64 word \<Rightarrow> SmtTerm \<Rightarrow> nat\<close> and 
 | \<open>occs_m c (a # r) = occ_m c a + occs_m c r\<close>
 
 definition occ_all_m :: \<open>SmtProblem \<Rightarrow> SmtTerm list \<Rightarrow> 64 word \<Rightarrow> nat\<close> where
-  \<open>occ_all_m p a c \<equiv> occs_m c a + sum_list (map (\<lambda>d. occ_m c (SmtDef_body d)) (SmtProblem_defs p))\<close>
+  \<open>occ_all_m p a c \<equiv> occs_m c a + sum_list (map (\<lambda>d. occ_m c (SmtDef_body d)) (SmtProblem_defs_l p))\<close>
 
 definition const_sym_m :: \<open>64 word \<Rightarrow> SmtTerm \<Rightarrow> 64 word\<close> where
   \<open>const_sym_m n t \<equiv> (case t of SmtTerm_Fun f args \<Rightarrow> if args = [] then f else n | _ \<Rightarrow> n)\<close>
@@ -56,12 +56,12 @@ fun find_conj_m :: \<open>64 word \<Rightarrow> 64 word \<Rightarrow> 64 word \<
 
 definition elim_partner_m :: \<open>SmtProblem \<Rightarrow> SmtTerm list \<Rightarrow> 64 word \<Rightarrow> 64 word\<close> where
   \<open>elim_partner_m p a c \<equiv>
-     let fs = SmtProblem_funs p; n = word_of_nat (length fs) in
-     if SmtFun_args (fs ! unat c) \<noteq> [] then n else
+     let fs = SmtProblem_funs_l p; n = word_of_nat (length fs) in
+     if SmtFun_args_l (fs ! unat c) \<noteq> [] then n else
      let tot = sat (occ_all_m p a c) in
      if tot = 0 \<or> 2 ^ 63 \<le> tot then n else
      let g = find_conjs_m c (word_of_nat tot) n a in
-     if g < n \<and> SmtFun_args (fs ! unat g) = [] \<and> SmtFun_ret (fs ! unat g) = SmtFun_ret (fs ! unat c) then g else n\<close>
+     if g < n \<and> SmtFun_args_l (fs ! unat g) = [] \<and> SmtFun_ret (fs ! unat g) = SmtFun_ret (fs ! unat c) then g else n\<close>
 
 fun rename_m :: \<open>64 word \<Rightarrow> 64 word \<Rightarrow> SmtTerm \<Rightarrow> SmtTerm\<close>
   and renames_m :: \<open>64 word \<Rightarrow> 64 word \<Rightarrow> SmtTerm list \<Rightarrow> SmtTerm list\<close> where
@@ -74,18 +74,18 @@ fun rename_m :: \<open>64 word \<Rightarrow> 64 word \<Rightarrow> SmtTerm \<Rig
 
 text \<open>The problem \<open>p\<close> with the assertions \<open>a\<close>.\<close>
 definition wa :: \<open>SmtProblem \<Rightarrow> SmtTerm list \<Rightarrow> SmtProblem\<close> where
-  \<open>wa p a \<equiv> make_SmtProblem (SmtProblem_num_sorts p) (SmtProblem_funs p) (SmtProblem_defs p) a\<close>
+  \<open>wa p a \<equiv> make_SmtProblem (SmtProblem_num_sorts p) (SmtProblem_funs_l p) (SmtProblem_defs_l p) a\<close>
 
 definition elim_step_m :: \<open>SmtProblem \<Rightarrow> SmtTerm list \<times> 64 word list \<times> 64 word list \<Rightarrow> nat \<Rightarrow>
     SmtTerm list \<times> 64 word list \<times> 64 word list\<close> where
   \<open>elim_step_m p s c \<equiv>
      (case s of (a, cs, gs) \<Rightarrow>
         let g = elim_partner_m p a (word_of_nat c) in
-        if g < word_of_nat (length (SmtProblem_funs p))
+        if g < word_of_nat (length (SmtProblem_funs_l p))
         then (renames_m (word_of_nat c) g a, cs @ [word_of_nat c], gs @ [g]) else (a, cs, gs))\<close>
 
 definition eliminate_m :: \<open>SmtProblem \<Rightarrow> SmtTerm list \<times> 64 word list \<times> 64 word list\<close> where
-  \<open>eliminate_m p \<equiv> foldl (elim_step_m p) (SmtProblem_asserts p, [], []) [0..<length (SmtProblem_funs p)]\<close>
+  \<open>eliminate_m p \<equiv> foldl (elim_step_m p) (SmtProblem_asserts_l p, [], []) [0..<length (SmtProblem_funs_l p)]\<close>
 
 text \<open>Step \<open>k\<close> of \<^verbatim>\<open>restore\<close>: the table of \<open>cs ! i\<close> becomes that of \<open>gs ! i\<close>, for
   \<open>i = length cs - 1 - k\<close>.\<close>
@@ -97,7 +97,7 @@ definition fix_m :: \<open>64 word list \<Rightarrow> 64 word list \<Rightarrow>
 
 definition restore_m :: \<open>SmtModel \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow> SmtModel\<close> where
   \<open>restore_m m cs gs \<equiv>
-     make_SmtModel (SmtModel_domains m) (foldl (fix_m cs gs) (SmtModel_funs m) [0..<length cs])\<close>
+     make_SmtModel (SmtModel_domains_l m) (foldl (fix_m cs gs) (SmtModel_funs_l m) [0..<length cs])\<close>
 
 subsection \<open>Basic facts\<close>
 
@@ -115,12 +115,12 @@ lemma occs_sum: \<open>occs_m c ts = sum_list (map (occ_m c) ts)\<close>
 
 lemma wa_sel [simp]:
   \<open>SmtProblem_num_sorts (wa p a) = SmtProblem_num_sorts p\<close>
-  \<open>SmtProblem_funs (wa p a) = SmtProblem_funs p\<close>
-  \<open>SmtProblem_defs (wa p a) = SmtProblem_defs p\<close>
-  \<open>SmtProblem_asserts (wa p a) = a\<close>
+  \<open>SmtProblem_funs_l (wa p a) = SmtProblem_funs_l p\<close>
+  \<open>SmtProblem_defs_l (wa p a) = SmtProblem_defs_l p\<close>
+  \<open>SmtProblem_asserts_l (wa p a) = a\<close>
   by (simp_all add: wa_def)
 
-lemma wa_self: \<open>wa p (SmtProblem_asserts p) = p\<close>
+lemma wa_self: \<open>wa p (SmtProblem_asserts_l p) = p\<close>
   by (cases p) (simp add: wa_def)
 
 lemma wa_wa [simp]: \<open>wa (wa p a) b = wa p b\<close>
@@ -438,51 +438,51 @@ lemma usize_rename: \<open>usize_m (wa p (renames_m c g a)) = usize_m (wa p a)\<
 
 text \<open>The facts of a successful \<^const>\<open>elim_partner_m\<close>.\<close>
 lemma elim_partner_facts:
-  assumes E: \<open>elim_partner_m p a c = g\<close> and G: \<open>g < word_of_nat (length (SmtProblem_funs p))\<close>
-    and C: \<open>unat c < length (SmtProblem_funs p)\<close> and L: \<open>length (SmtProblem_funs p) < 2 ^ 63\<close>
+  assumes E: \<open>elim_partner_m p a c = g\<close> and G: \<open>g < word_of_nat (length (SmtProblem_funs_l p))\<close>
+    and C: \<open>unat c < length (SmtProblem_funs_l p)\<close> and L: \<open>length (SmtProblem_funs_l p) < 2 ^ 63\<close>
     and A: \<open>argss_ok a\<close>
-  defines \<open>n \<equiv> word_of_nat (length (SmtProblem_funs p)) :: 64 word\<close>
-  shows \<open>unat g < length (SmtProblem_funs p)\<close> \<open>c < n\<close> \<open>g < n\<close>
-    and \<open>SmtProblem_funs p ! unat g = SmtProblem_funs p ! unat c\<close>
-    and \<open>SmtFun_args (SmtProblem_funs p ! unat c) = []\<close>
+  defines \<open>n \<equiv> word_of_nat (length (SmtProblem_funs_l p)) :: 64 word\<close>
+  shows \<open>unat g < length (SmtProblem_funs_l p)\<close> \<open>c < n\<close> \<open>g < n\<close>
+    and \<open>SmtProblem_funs_l p ! unat g = SmtProblem_funs_l p ! unat c\<close>
+    and \<open>SmtFun_args_l (SmtProblem_funs_l p ! unat c) = []\<close>
     and \<open>\<exists>tot :: 64 word. find_conjs_m c tot n a = g \<and> occs_m c a = unat tot\<close>
-    and \<open>\<forall>d \<in> set (SmtProblem_defs p). occ_m c (SmtDef_body d) = 0\<close>
+    and \<open>\<forall>d \<in> set (SmtProblem_defs_l p). occ_m c (SmtDef_body d) = 0\<close>
 proof -
-  let ?fs = \<open>SmtProblem_funs p\<close>
+  let ?fs = \<open>SmtProblem_funs_l p\<close>
   have un: \<open>unat n = length ?fs\<close> using L by (simp add: n_def unat_of_nat_eq)
   show cn: \<open>c < n\<close> using C un by (simp add: word_less_nat_alt)
   show gn: \<open>g < n\<close> using G by (simp add: n_def)
   show \<open>unat g < length ?fs\<close> using gn un by (simp add: word_less_nat_alt)
   let ?T = \<open>sat (occ_all_m p a c)\<close>
-  have h: \<open>SmtFun_args (?fs ! unat c) = [] \<and> \<not> (?T = 0 \<or> 2 ^ 63 \<le> ?T) \<and>
-      find_conjs_m c (word_of_nat ?T) n a = g \<and> SmtFun_args (?fs ! unat g) = [] \<and>
+  have h: \<open>SmtFun_args_l (?fs ! unat c) = [] \<and> \<not> (?T = 0 \<or> 2 ^ 63 \<le> ?T) \<and>
+      find_conjs_m c (word_of_nat ?T) n a = g \<and> SmtFun_args_l (?fs ! unat g) = [] \<and>
       SmtFun_ret (?fs ! unat g) = SmtFun_ret (?fs ! unat c)\<close>
     using E gn unfolding elim_partner_m_def n_def Let_def by (auto split: if_splits)
-  show \<open>SmtFun_args (?fs ! unat c) = []\<close> using h by simp
+  show \<open>SmtFun_args_l (?fs ! unat c) = []\<close> using h by simp
   show \<open>?fs ! unat g = ?fs ! unat c\<close> using h by (cases \<open>?fs ! unat g\<close>; cases \<open>?fs ! unat c\<close>) auto
   have T: \<open>?T = occ_all_m p a c\<close> \<open>occ_all_m p a c < 2 ^ 63\<close> using h by (auto simp: sat_def)
   let ?tot = \<open>word_of_nat ?T :: 64 word\<close>
   have ut: \<open>unat ?tot = occ_all_m p a c\<close> using T by (simp add: unat_of_nat_eq)
   have \<open>unat ?tot \<le> occs_m c a\<close> using find_conj_occ(2)[OF cn _ A] h gn by simp
-  then have \<open>occs_m c a = unat ?tot\<close> \<open>sum_list (map (\<lambda>d. occ_m c (SmtDef_body d)) (SmtProblem_defs p)) = 0\<close>
+  then have \<open>occs_m c a = unat ?tot\<close> \<open>sum_list (map (\<lambda>d. occ_m c (SmtDef_body d)) (SmtProblem_defs_l p)) = 0\<close>
     using ut by (auto simp: occ_all_m_def)
   then show \<open>\<exists>tot :: 64 word. find_conjs_m c tot n a = g \<and> occs_m c a = unat tot\<close>
-    and \<open>\<forall>d \<in> set (SmtProblem_defs p). occ_m c (SmtDef_body d) = 0\<close>
+    and \<open>\<forall>d \<in> set (SmtProblem_defs_l p). occ_m c (SmtDef_body d) = 0\<close>
     using h by auto
 qed
 
 text \<open>The problem after one elimination is satisfiable if the problem before is.\<close>
 lemma elim_satisfies:
-  assumes E: \<open>elim_partner_m p a c = g\<close> and G: \<open>g < word_of_nat (length (SmtProblem_funs p))\<close>
-    and C: \<open>unat c < length (SmtProblem_funs p)\<close> and L: \<open>length (SmtProblem_funs p) < 2 ^ 63\<close>
+  assumes E: \<open>elim_partner_m p a c = g\<close> and G: \<open>g < word_of_nat (length (SmtProblem_funs_l p))\<close>
+    and C: \<open>unat c < length (SmtProblem_funs_l p)\<close> and L: \<open>length (SmtProblem_funs_l p) < 2 ^ 63\<close>
     and A: \<open>argss_ok a\<close> and S: \<open>smt_satisfies (wa p a) I\<close>
   shows \<open>smt_satisfies (wa p (renames_m c g a)) I\<close>
 proof -
-  let ?n = \<open>word_of_nat (length (SmtProblem_funs p)) :: 64 word\<close>
+  let ?n = \<open>word_of_nat (length (SmtProblem_funs_l p)) :: 64 word\<close>
   note F = elim_partner_facts[OF E G C L A]
   obtain tot where tot: \<open>find_conjs_m c tot ?n a = g\<close> \<open>occs_m c a = unat tot\<close> using F(6) by blast
   let ?J = \<open>I(unat c := I (unat g))\<close>
-  let ?dv = \<open>smt_def_sems I (SmtProblem_defs p)\<close>
+  let ?dv = \<open>smt_def_sems I (SmtProblem_defs_l p)\<close>
   have JI: \<open>\<forall>f. f \<noteq> unat c \<longrightarrow> ?J f = I f\<close> by simp
   obtain k where k: \<open>k < length a\<close> \<open>find_conj_m c tot ?n (a ! k) = g\<close>
     \<open>\<forall>j < length a. j \<noteq> k \<longrightarrow> occ_m c (a ! j) = 0\<close>
@@ -504,7 +504,7 @@ proof -
     then show ?thesis using true[OF nth_mem[OF j]] by simp
   qed
   then have \<open>\<forall>t \<in> set a. smt_eval ?J ?dv [] t = VBool True\<close> by (metis in_set_conv_nth)
-  moreover have \<open>smt_def_sems ?J (SmtProblem_defs p) = ?dv\<close>
+  moreover have \<open>smt_def_sems ?J (SmtProblem_defs_l p) = ?dv\<close>
     using def_sems_occ0[of c ?J I] F(7) by simp
   ultimately show ?thesis
     by (simp add: smt_satisfies_def renames_map eval_rename)
@@ -512,33 +512,33 @@ qed
 
 text \<open>\<^verbatim>\<open>restore\<close>'s step on a model: \<open>c\<close> gets the table of \<open>g\<close>.\<close>
 definition fixm :: \<open>SmtModel \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> SmtModel\<close> where
-  \<open>fixm m c g \<equiv> make_SmtModel (SmtModel_domains m) ((SmtModel_funs m)[unat c := SmtModel_funs m ! unat g])\<close>
+  \<open>fixm m c g \<equiv> make_SmtModel (SmtModel_domains_l m) ((SmtModel_funs_l m)[unat c := SmtModel_funs_l m ! unat g])\<close>
 
 lemma fixm_interp:
-  assumes \<open>unat c < length (SmtModel_funs m)\<close>
+  assumes \<open>unat c < length (SmtModel_funs_l m)\<close>
   shows \<open>smt_model_interp (fixm m c g) = (smt_model_interp m)(unat c := smt_model_interp m (unat g))\<close>
   using assms by (auto simp: fixm_def smt_model_interp_def fun_eq_iff nth_list_update)
 
 text \<open>A model of the problem after one elimination, fixed by \<^const>\<open>fixm\<close>, is a model of the
   problem before.\<close>
 lemma elim_model:
-  assumes E: \<open>elim_partner_m p a c = g\<close> and G: \<open>g < word_of_nat (length (SmtProblem_funs p))\<close>
-    and C: \<open>unat c < length (SmtProblem_funs p)\<close> and L: \<open>length (SmtProblem_funs p) < 2 ^ 63\<close>
+  assumes E: \<open>elim_partner_m p a c = g\<close> and G: \<open>g < word_of_nat (length (SmtProblem_funs_l p))\<close>
+    and C: \<open>unat c < length (SmtProblem_funs_l p)\<close> and L: \<open>length (SmtProblem_funs_l p) < 2 ^ 63\<close>
     and A: \<open>argss_ok a\<close> and M: \<open>smt_is_model (wa p (renames_m c g a)) m\<close>
   shows \<open>smt_is_model (wa p a) (fixm m c g)\<close>
 proof -
   note F = elim_partner_facts[OF E G C L A]
-  let ?fs = \<open>SmtProblem_funs p\<close>
+  let ?fs = \<open>SmtProblem_funs_l p\<close>
   have wf: \<open>smt_model_wf (wa p (renames_m c g a)) m\<close> and sat: \<open>smt_satisfies (wa p (renames_m c g a)) (smt_model_interp m)\<close>
     using M by (simp_all add: smt_is_model_def)
-  have len: \<open>length (SmtModel_funs m) = length ?fs\<close> using wf by (simp add: smt_model_wf_def Let_def)
+  have len: \<open>length (SmtModel_funs_l m) = length ?fs\<close> using wf by (simp add: smt_model_wf_def Let_def)
   let ?I = \<open>smt_model_interp m\<close>
   let ?J = \<open>?I(unat c := ?I (unat g))\<close>
   have J: \<open>smt_model_interp (fixm m c g) = ?J\<close> using fixm_interp C len by simp
   have \<open>smt_model_wf (wa p a) (fixm m c g)\<close>
     using wf C len F(1,4) unfolding smt_model_wf_def Let_def
     by (auto simp: fixm_def nth_list_update)
-  moreover have \<open>smt_def_sems ?J (SmtProblem_defs p) = smt_def_sems ?I (SmtProblem_defs p)\<close>
+  moreover have \<open>smt_def_sems ?J (SmtProblem_defs_l p) = smt_def_sems ?I (SmtProblem_defs_l p)\<close>
     using def_sems_occ0[of c ?J ?I] F(7) by simp
   then have \<open>smt_satisfies (wa p a) ?J\<close>
     using sat by (simp add: smt_satisfies_def renames_map eval_rename)
@@ -546,8 +546,8 @@ proof -
 qed
 
 lemma elim_wf:
-  assumes \<open>unat c < length (SmtProblem_funs p)\<close> \<open>unat g < length (SmtProblem_funs p)\<close>
-    \<open>SmtProblem_funs p ! unat g = SmtProblem_funs p ! unat c\<close>
+  assumes \<open>unat c < length (SmtProblem_funs_l p)\<close> \<open>unat g < length (SmtProblem_funs_l p)\<close>
+    \<open>SmtProblem_funs_l p ! unat g = SmtProblem_funs_l p ! unat c\<close>
   shows \<open>smt_wf (wa p (renames_m c g a)) = smt_wf (wa p a)\<close>
   using tsort_rename(1)[OF assms] by (simp add: smt_wf_def renames_map)
 
@@ -563,12 +563,12 @@ lemma restore_nil: \<open>restore_m m [] [] = m\<close>
   by (cases m) (simp add: restore_m_def)
 
 lemma restore_snoc:
-  assumes L: \<open>length cs = length gs\<close> and C: \<open>unat c < length (SmtModel_funs m)\<close> and G: \<open>unat g < length (SmtModel_funs m)\<close>
+  assumes L: \<open>length cs = length gs\<close> and C: \<open>unat c < length (SmtModel_funs_l m)\<close> and G: \<open>unat g < length (SmtModel_funs_l m)\<close>
   shows \<open>restore_m m (cs @ [c]) (gs @ [g]) = restore_m (fixm m c g) cs gs\<close>
 proof -
   let ?L = \<open>length cs\<close>
   have u: \<open>[0..<Suc ?L] = 0 # map Suc [0..<?L]\<close> by (metis map_Suc_upt upt_conv_Cons zero_less_Suc)
-  have s0: \<open>fix_m (cs @ [c]) (gs @ [g]) (SmtModel_funs m) 0 = (SmtModel_funs m)[unat c := SmtModel_funs m ! unat g]\<close>
+  have s0: \<open>fix_m (cs @ [c]) (gs @ [g]) (SmtModel_funs_l m) 0 = (SmtModel_funs_l m)[unat c := SmtModel_funs_l m ! unat g]\<close>
     using L C G by (simp add: fix_m_def nth_append)
   have sk: \<open>fix_m (cs @ [c]) (gs @ [g]) F (Suc k) = fix_m cs gs F k\<close> if \<open>k \<in> set [0..<?L]\<close> for F k
     using L that by (auto simp: fix_m_def nth_append Let_def)
@@ -585,24 +585,24 @@ definition elim_inv :: \<open>SmtProblem \<Rightarrow> SmtTerm list \<times> 64 
      (case s of (a, cs, gs) \<Rightarrow>
         smt_wf (wa p a) = smt_wf p \<and> smt_repr_ok (wa p a) = smt_repr_ok p \<and>
         smt_fragment (wa p a) = smt_fragment p \<and> usize_m (wa p a) = usize_m p \<and>
-        size_list size a = size_list size (SmtProblem_asserts p) \<and> length a = length (SmtProblem_asserts p) \<and>
+        size_list size a = size_list size (SmtProblem_asserts_l p) \<and> length a = length (SmtProblem_asserts_l p) \<and>
         length cs = length gs \<and>
         (smt_satisfiable p \<longrightarrow> smt_satisfiable (wa p a)) \<and>
         (\<forall>m. smt_is_model (wa p a) m \<longrightarrow> smt_is_model p (restore_m m cs gs)))\<close>
 
 lemma elim_inv_step:
-  assumes R: \<open>smt_repr_ok p\<close> and K: \<open>k < length (SmtProblem_funs p)\<close> and I: \<open>elim_inv p s\<close>
+  assumes R: \<open>smt_repr_ok p\<close> and K: \<open>k < length (SmtProblem_funs_l p)\<close> and I: \<open>elim_inv p s\<close>
   shows \<open>elim_inv p (elim_step_m p s k)\<close>
 proof -
   obtain a cs gs where s: \<open>s = (a, cs, gs)\<close> by (cases s)
-  let ?fs = \<open>SmtProblem_funs p\<close>
+  let ?fs = \<open>SmtProblem_funs_l p\<close>
   let ?c = \<open>word_of_nat k :: 64 word\<close>
   let ?g = \<open>elim_partner_m p a ?c\<close>
   have L: \<open>length ?fs < 2 ^ 63\<close> using R by (simp add: smt_repr_ok_def)
   have C: \<open>unat ?c < length ?fs\<close> using K L by (simp add: unat_of_nat_eq)
   have inv: \<open>smt_wf (wa p a) = smt_wf p\<close> \<open>smt_repr_ok (wa p a)\<close> \<open>smt_fragment (wa p a) = smt_fragment p\<close>
-    \<open>usize_m (wa p a) = usize_m p\<close> \<open>size_list size a = size_list size (SmtProblem_asserts p)\<close>
-    \<open>length a = length (SmtProblem_asserts p)\<close> \<open>length cs = length gs\<close>
+    \<open>usize_m (wa p a) = usize_m p\<close> \<open>size_list size a = size_list size (SmtProblem_asserts_l p)\<close>
+    \<open>length a = length (SmtProblem_asserts_l p)\<close> \<open>length cs = length gs\<close>
     \<open>smt_satisfiable p \<longrightarrow> smt_satisfiable (wa p a)\<close>
     \<open>\<forall>m. smt_is_model (wa p a) m \<longrightarrow> smt_is_model p (restore_m m cs gs)\<close>
     using I R by (simp_all add: elim_inv_def s)
@@ -620,7 +620,7 @@ proof -
       by (auto simp: smt_satisfiable_def smt_interp_ok_def)
     have model: \<open>smt_is_model p (restore_m m (cs @ [?c]) (gs @ [?g]))\<close> if \<open>smt_is_model (wa p ?a) m\<close> for m
     proof -
-      have \<open>length (SmtModel_funs m) = length ?fs\<close>
+      have \<open>length (SmtModel_funs_l m) = length ?fs\<close>
         using that by (simp add: smt_is_model_def smt_model_wf_def Let_def)
       then have \<open>restore_m m (cs @ [?c]) (gs @ [?g]) = restore_m (fixm m ?c ?g) cs gs\<close>
         using restore_snoc[OF inv(7)] C F(1) by simp
@@ -633,8 +633,8 @@ proof -
 qed
 
 lemma elim_inv_foldl:
-  assumes R: \<open>smt_repr_ok p\<close> and K: \<open>k \<le> length (SmtProblem_funs p)\<close>
-  shows \<open>elim_inv p (foldl (elim_step_m p) (SmtProblem_asserts p, [], []) [0..<k])\<close>
+  assumes R: \<open>smt_repr_ok p\<close> and K: \<open>k \<le> length (SmtProblem_funs_l p)\<close>
+  shows \<open>elim_inv p (foldl (elim_step_m p) (SmtProblem_asserts_l p, [], []) [0..<k])\<close>
   using K
 proof (induction k)
   case 0
@@ -648,8 +648,8 @@ text \<open>The result of the elimination.\<close>
 theorem eliminate_correct:
   assumes R: \<open>smt_repr_ok p\<close> and E: \<open>eliminate_m p = (a, cs, gs)\<close>
   shows \<open>smt_wf (wa p a) = smt_wf p\<close> \<open>smt_repr_ok (wa p a)\<close> \<open>smt_fragment (wa p a) = smt_fragment p\<close>
-    and \<open>usize_m (wa p a) = usize_m p\<close> \<open>size_list size a = size_list size (SmtProblem_asserts p)\<close>
-    and \<open>length a = length (SmtProblem_asserts p)\<close>
+    and \<open>usize_m (wa p a) = usize_m p\<close> \<open>size_list size a = size_list size (SmtProblem_asserts_l p)\<close>
+    and \<open>length a = length (SmtProblem_asserts_l p)\<close>
     and \<open>smt_satisfiable p \<Longrightarrow> smt_satisfiable (wa p a)\<close>
     and \<open>smt_is_model (wa p a) m \<Longrightarrow> smt_is_model p (restore_m m cs gs)\<close>
   using elim_inv_foldl[OF R order.refl] E R by (simp_all add: eliminate_m_def elim_inv_def)

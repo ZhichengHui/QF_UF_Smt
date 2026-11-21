@@ -13,73 +13,73 @@ subsection \<open>Pure facts\<close>
 
 text \<open>The two sides of atom \<open>j\<close> lie in the classes of \<open>rs\<close> of the two sides of an atom set false.\<close>
 definition sep_by :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word list \<Rightarrow> nat \<Rightarrow> bool\<close> where
-  \<open>sep_by p f rs j \<equiv> \<exists>b < length (Problem_atoms p). f ! b \<and>
-     (rs ! unat (Atom_lhs (Problem_atoms p ! j)) = rs ! unat (Atom_lhs (Problem_atoms p ! b)) \<and>
-      rs ! unat (Atom_rhs (Problem_atoms p ! j)) = rs ! unat (Atom_rhs (Problem_atoms p ! b)) \<or>
-      rs ! unat (Atom_lhs (Problem_atoms p ! j)) = rs ! unat (Atom_rhs (Problem_atoms p ! b)) \<and>
-      rs ! unat (Atom_rhs (Problem_atoms p ! j)) = rs ! unat (Atom_lhs (Problem_atoms p ! b)))\<close>
+  \<open>sep_by p f rs j \<equiv> \<exists>b < length (Problem_atoms_l p). f ! b \<and>
+     (rs ! unat (Atom_lhs (Problem_atoms_l p ! j)) = rs ! unat (Atom_lhs (Problem_atoms_l p ! b)) \<and>
+      rs ! unat (Atom_rhs (Problem_atoms_l p ! j)) = rs ! unat (Atom_rhs (Problem_atoms_l p ! b)) \<or>
+      rs ! unat (Atom_lhs (Problem_atoms_l p ! j)) = rs ! unat (Atom_rhs (Problem_atoms_l p ! b)) \<and>
+      rs ! unat (Atom_rhs (Problem_atoms_l p ! j)) = rs ! unat (Atom_lhs (Problem_atoms_l p ! b)))\<close>
 
 text \<open>\<open>t1\<close>, \<open>f1\<close> extend \<open>t\<close>, \<open>f\<close> by unset atoms that the closure \<open>rs\<close> of the atoms set true
   decides.\<close>
 definition implied_ok :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> 64 word list \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> bool\<close> where
   \<open>implied_ok p t f rs t1 f1 \<equiv>
-     rep_sound p (asserted p t (length (Problem_atoms p))) rs \<and> length rs = length (Problem_terms p) \<and>
+     rep_sound p (asserted p t (length (Problem_atoms_l p))) rs \<and> length rs = length (Problem_terms_l p) \<and>
      length t1 = length t \<and> length f1 = length f \<and>
      (\<forall>j < length t. (t ! j \<longrightarrow> t1 ! j) \<and> (f ! j \<longrightarrow> f1 ! j) \<and>
         (t1 ! j \<and> \<not> t ! j \<longrightarrow> \<not> f ! j \<and>
-           rs ! unat (Atom_lhs (Problem_atoms p ! j)) = rs ! unat (Atom_rhs (Problem_atoms p ! j))) \<and>
+           rs ! unat (Atom_lhs (Problem_atoms_l p ! j)) = rs ! unat (Atom_rhs (Problem_atoms_l p ! j))) \<and>
         (f1 ! j \<and> \<not> f ! j \<longrightarrow> \<not> t ! j \<and> sep_by p f rs j))\<close>
 
 lemma rep_sound_val:
-  assumes wf: \<open>wf_problem p\<close> and rs: \<open>rep_sound p (asserted p t (length (Problem_atoms p))) rs\<close>
-      and n: \<open>length rs = length (Problem_terms p)\<close>
-      and I: \<open>\<forall>j < length (Problem_atoms p). t ! j \<longrightarrow> atom_vals I p ! j\<close>
-      and ij: \<open>i < length (Problem_terms p)\<close> \<open>i' < length (Problem_terms p)\<close> \<open>rs ! i = rs ! i'\<close>
-  shows \<open>term_val I (Problem_terms p) i = term_val I (Problem_terms p) i'\<close>
+  assumes wf: \<open>wf_problem p\<close> and rs: \<open>rep_sound p (asserted p t (length (Problem_atoms_l p))) rs\<close>
+      and n: \<open>length rs = length (Problem_terms_l p)\<close>
+      and I: \<open>\<forall>j < length (Problem_atoms_l p). t ! j \<longrightarrow> atom_vals I p ! j\<close>
+      and ij: \<open>i < length (Problem_terms_l p)\<close> \<open>i' < length (Problem_terms_l p)\<close> \<open>rs ! i = rs ! i'\<close>
+  shows \<open>term_val I (Problem_terms_l p) i = term_val I (Problem_terms_l p) i'\<close>
 proof -
-  have \<open>\<forall>(a, b) \<in> asserted p t (length (Problem_atoms p)).
-          term_val I (Problem_terms p) a = term_val I (Problem_terms p) b\<close>
+  have \<open>\<forall>(a, b) \<in> asserted p t (length (Problem_atoms_l p)).
+          term_val I (Problem_terms_l p) a = term_val I (Problem_terms_l p) b\<close>
     using I unfolding asserted_def atom_vals_def atom_true_def by auto
-  moreover have \<open>(i, i') \<in> cc p (asserted p t (length (Problem_atoms p)))\<close>
+  moreover have \<open>(i, i') \<in> cc p (asserted p t (length (Problem_atoms_l p)))\<close>
     using rs n ij unfolding rep_sound_def by simp
   ultimately show ?thesis using cc_sound[OF wf] by blast
 qed
 
 lemma pext_implied:
-  assumes wf: \<open>wf_problem p\<close> and len: \<open>length t = length (Problem_atoms p)\<close>
+  assumes wf: \<open>wf_problem p\<close> and len: \<open>length t = length (Problem_atoms_l p)\<close>
       and ok: \<open>implied_ok p t f rs t1 f1\<close> and e: \<open>pext p t f\<close>
   shows \<open>pext p t1 f1\<close>
 proof -
   obtain I :: \<open>nat \<Rightarrow> nat list \<Rightarrow> nat\<close> where I: \<open>problem_true I p\<close>
-    \<open>\<forall>j < length (Problem_atoms p). (t ! j \<longrightarrow> atom_vals I p ! j) \<and> (f ! j \<longrightarrow> \<not> atom_vals I p ! j)\<close>
+    \<open>\<forall>j < length (Problem_atoms_l p). (t ! j \<longrightarrow> atom_vals I p ! j) \<and> (f ! j \<longrightarrow> \<not> atom_vals I p ! j)\<close>
     using e unfolding pext_def by blast
-  have rs: \<open>rep_sound p (asserted p t (length (Problem_atoms p))) rs\<close> \<open>length rs = length (Problem_terms p)\<close>
+  have rs: \<open>rep_sound p (asserted p t (length (Problem_atoms_l p))) rs\<close> \<open>length rs = length (Problem_terms_l p)\<close>
     using ok unfolding implied_ok_def by simp_all
-  let ?v = \<open>term_val I (Problem_terms p)\<close>
-  let ?L = \<open>\<lambda>j. unat (Atom_lhs (Problem_atoms p ! j))\<close> and ?R = \<open>\<lambda>j. unat (Atom_rhs (Problem_atoms p ! j))\<close>
+  let ?v = \<open>term_val I (Problem_terms_l p)\<close>
+  let ?L = \<open>\<lambda>j. unat (Atom_lhs (Problem_atoms_l p ! j))\<close> and ?R = \<open>\<lambda>j. unat (Atom_rhs (Problem_atoms_l p ! j))\<close>
   have okT: \<open>\<forall>j < length t. t1 ! j \<and> \<not> t ! j \<longrightarrow> rs ! ?L j = rs ! ?R j\<close>
    and okF: \<open>\<forall>j < length t. f1 ! j \<and> \<not> f ! j \<longrightarrow> sep_by p f rs j\<close>
     using ok unfolding implied_ok_def by blast+
-  have eq: \<open>?v i = ?v i'\<close> if \<open>i < length (Problem_terms p)\<close> \<open>i' < length (Problem_terms p)\<close> \<open>rs ! i = rs ! i'\<close> for i i'
+  have eq: \<open>?v i = ?v i'\<close> if \<open>i < length (Problem_terms_l p)\<close> \<open>i' < length (Problem_terms_l p)\<close> \<open>rs ! i = rs ! i'\<close> for i i'
     using rep_sound_val[OF wf rs] I(2) that by blast
-  have av: \<open>atom_vals I p ! j = (?v (?L j) = ?v (?R j))\<close> if \<open>j < length (Problem_atoms p)\<close> for j
+  have av: \<open>atom_vals I p ! j = (?v (?L j) = ?v (?R j))\<close> if \<open>j < length (Problem_atoms_l p)\<close> for j
     using that by (simp add: atom_vals_def atom_true_def)
-  have T: \<open>atom_vals I p ! j\<close> if j: \<open>j < length (Problem_atoms p)\<close> \<open>t1 ! j\<close> for j
+  have T: \<open>atom_vals I p ! j\<close> if j: \<open>j < length (Problem_atoms_l p)\<close> \<open>t1 ! j\<close> for j
   proof (cases \<open>t ! j\<close>)
     case False
     then have \<open>rs ! ?L j = rs ! ?R j\<close> using okT j len by simp
     then show ?thesis using eq wf_atom[OF wf j(1)] av[OF j(1)] by simp
   qed (use I(2) j in blast)
-  have F: \<open>\<not> atom_vals I p ! j\<close> if j: \<open>j < length (Problem_atoms p)\<close> \<open>f1 ! j\<close> for j
+  have F: \<open>\<not> atom_vals I p ! j\<close> if j: \<open>j < length (Problem_atoms_l p)\<close> \<open>f1 ! j\<close> for j
   proof (cases \<open>f ! j\<close>)
     case False
     then have \<open>sep_by p f rs j\<close> using okF j len by simp
-    then obtain b where b: \<open>b < length (Problem_atoms p)\<close> \<open>f ! b\<close>
+    then obtain b where b: \<open>b < length (Problem_atoms_l p)\<close> \<open>f ! b\<close>
       \<open>rs ! ?L j = rs ! ?L b \<and> rs ! ?R j = rs ! ?R b \<or> rs ! ?L j = rs ! ?R b \<and> rs ! ?R j = rs ! ?L b\<close>
       unfolding sep_by_def by blast
     have \<open>?v (?L b) \<noteq> ?v (?R b)\<close> using I(2) b(1,2) av[OF b(1)] by blast
-    moreover have \<open>?L j < length (Problem_terms p)\<close> \<open>?R j < length (Problem_terms p)\<close>
-      \<open>?L b < length (Problem_terms p)\<close> \<open>?R b < length (Problem_terms p)\<close>
+    moreover have \<open>?L j < length (Problem_terms_l p)\<close> \<open>?R j < length (Problem_terms_l p)\<close>
+      \<open>?L b < length (Problem_terms_l p)\<close> \<open>?R b < length (Problem_terms_l p)\<close>
       using wf_atom[OF wf j(1)] wf_atom[OF wf b(1)] by simp_all
     ultimately have \<open>?v (?L j) \<noteq> ?v (?R j)\<close> using b(3) eq by metis
     then show ?thesis using av[OF j(1)] by simp
@@ -112,21 +112,21 @@ proof -
 qed
 
 lemma sep_byI:
-  assumes \<open>\<forall>i < length us. \<exists>b < length (Problem_atoms p). f ! b \<and>
-             us ! i = rs ! unat (Atom_lhs (Problem_atoms p ! b)) \<and> vs ! i = rs ! unat (Atom_rhs (Problem_atoms p ! b))\<close>
-      and \<open>\<exists>i < length us. us ! i = rs ! unat (Atom_lhs (Problem_atoms p ! j)) \<and> vs ! i = rs ! unat (Atom_rhs (Problem_atoms p ! j)) \<or>
-             us ! i = rs ! unat (Atom_rhs (Problem_atoms p ! j)) \<and> vs ! i = rs ! unat (Atom_lhs (Problem_atoms p ! j))\<close>
+  assumes \<open>\<forall>i < length us. \<exists>b < length (Problem_atoms_l p). f ! b \<and>
+             us ! i = rs ! unat (Atom_lhs (Problem_atoms_l p ! b)) \<and> vs ! i = rs ! unat (Atom_rhs (Problem_atoms_l p ! b))\<close>
+      and \<open>\<exists>i < length us. us ! i = rs ! unat (Atom_lhs (Problem_atoms_l p ! j)) \<and> vs ! i = rs ! unat (Atom_rhs (Problem_atoms_l p ! j)) \<or>
+             us ! i = rs ! unat (Atom_rhs (Problem_atoms_l p ! j)) \<and> vs ! i = rs ! unat (Atom_lhs (Problem_atoms_l p ! j))\<close>
   shows \<open>sep_by p f rs j\<close>
   using assms unfolding sep_by_def by metis
 
 lemma implied_okI:
-  assumes \<open>cc_inv p (asserted p t (length (Problem_atoms p))) rs\<close>
-      and \<open>length t = length (Problem_atoms p)\<close> \<open>length f = length (Problem_atoms p)\<close>
-      and \<open>length t1 = length (Problem_atoms p)\<close>
-      and \<open>\<forall>j < length (Problem_atoms p). t1 ! j = (t ! j \<or>
-             \<not> f ! j \<and> rs ! unat (Atom_lhs (Problem_atoms p ! j)) = rs ! unat (Atom_rhs (Problem_atoms p ! j)))\<close>
-      and \<open>length f1 = length (Problem_atoms p)\<close>
-      and \<open>\<forall>j < length (Problem_atoms p). (f ! j \<longrightarrow> f1 ! j) \<and> (f1 ! j \<and> \<not> f ! j \<longrightarrow> \<not> t ! j \<and> sep_by p f rs j)\<close>
+  assumes \<open>cc_inv p (asserted p t (length (Problem_atoms_l p))) rs\<close>
+      and \<open>length t = length (Problem_atoms_l p)\<close> \<open>length f = length (Problem_atoms_l p)\<close>
+      and \<open>length t1 = length (Problem_atoms_l p)\<close>
+      and \<open>\<forall>j < length (Problem_atoms_l p). t1 ! j = (t ! j \<or>
+             \<not> f ! j \<and> rs ! unat (Atom_lhs (Problem_atoms_l p ! j)) = rs ! unat (Atom_rhs (Problem_atoms_l p ! j)))\<close>
+      and \<open>length f1 = length (Problem_atoms_l p)\<close>
+      and \<open>\<forall>j < length (Problem_atoms_l p). (f ! j \<longrightarrow> f1 ! j) \<and> (f1 ! j \<and> \<not> f ! j \<longrightarrow> \<not> t ! j \<and> sep_by p f rs j)\<close>
   shows \<open>implied_ok p t f rs t1 f1\<close>
   using assms unfolding implied_ok_def cc_inv_def rep_ok_def by auto
 
@@ -139,11 +139,11 @@ definition joined_unset_contract :: \<open>Problem \<Rightarrow> bool list \<Rig
       ('s, bool list, 'abort) function_contract\<close> where
   \<open>joined_unset_contract p t f rs \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms p) \<and>
-         length t = length (Problem_atoms p) \<and> length f = length (Problem_atoms p)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms_l p) \<and>
+         length t = length (Problem_atoms_l p) \<and> length f = length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>length r = length (Problem_atoms p) \<and> (\<forall>j < length (Problem_atoms p). r ! j = (t ! j \<or>
-           \<not> f ! j \<and> rs ! unat (Atom_lhs (Problem_atoms p ! j)) = rs ! unat (Atom_rhs (Problem_atoms p ! j))))\<rangle> in
+        \<langle>length r = length (Problem_atoms_l p) \<and> (\<forall>j < length (Problem_atoms_l p). r ! j = (t ! j \<or>
+           \<not> f ! j \<and> rs ! unat (Atom_lhs (Problem_atoms_l p ! j)) = rs ! unat (Atom_rhs (Problem_atoms_l p ! j))))\<rangle> in
      make_function_contract pre post\<close>
 
 lemma joined_unset_spec:
@@ -153,8 +153,8 @@ lemma joined_unset_spec:
   subgoal for t1_ref
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> (\<Squnion>g' xs. t1_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>xs \<star>
-                 \<langle>length xs = length (Problem_atoms p) \<and> (\<forall>j < length (Problem_atoms p). xs ! j = (t ! j \<or>
-                    j < i \<and> \<not> f ! j \<and> rs ! unat (Atom_lhs (Problem_atoms p ! j)) = rs ! unat (Atom_rhs (Problem_atoms p ! j))))\<rangle>)\<close>
+                 \<langle>length xs = length (Problem_atoms_l p) \<and> (\<forall>j < length (Problem_atoms_l p). xs ! j = (t ! j \<or>
+                    j < i \<and> \<not> f ! j \<and> rs ! unat (Atom_lhs (Problem_atoms_l p ! j)) = rs ! unat (Atom_rhs (Problem_atoms_l p ! j))))\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -169,12 +169,12 @@ definition false_pairs_contract :: \<open>Problem \<Rightarrow> bool list \<Righ
       ('s, 64 word list \<times> 64 word list \<times> tnil, 'abort) function_contract\<close> where
   \<open>false_pairs_contract p f rs \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms p) \<and> length f = length (Problem_atoms p)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms_l p) \<and> length f = length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>length (fst (snd r)) = length (fst r) \<and> length (fst r) \<le> length (Problem_atoms p) \<and>
-         (\<forall>i < length (fst r). \<exists>b < length (Problem_atoms p). f ! b \<and>
-            fst r ! i = rs ! unat (Atom_lhs (Problem_atoms p ! b)) \<and>
-            fst (snd r) ! i = rs ! unat (Atom_rhs (Problem_atoms p ! b)))\<rangle> in
+        \<langle>length (fst (snd r)) = length (fst r) \<and> length (fst r) \<le> length (Problem_atoms_l p) \<and>
+         (\<forall>i < length (fst r). \<exists>b < length (Problem_atoms_l p). f ! b \<and>
+            fst r ! i = rs ! unat (Atom_lhs (Problem_atoms_l p ! b)) \<and>
+            fst (snd r) ! i = rs ! unat (Atom_rhs (Problem_atoms_l p ! b)))\<rangle> in
      make_function_contract pre post\<close>
 
 lemma false_pairs_spec:
@@ -185,9 +185,9 @@ lemma false_pairs_spec:
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> (\<Squnion>g' us. us_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>us \<star>
                  (\<Squnion>g'' vs. vs_ref \<mapsto>\<langle>\<top>\<rangle> g''\<down>vs \<star>
-                 \<langle>length vs = length us \<and> length us \<le> i \<and> (\<forall>k < length us. \<exists>b < length (Problem_atoms p). f ! b \<and>
-                    us ! k = rs ! unat (Atom_lhs (Problem_atoms p ! b)) \<and>
-                    vs ! k = rs ! unat (Atom_rhs (Problem_atoms p ! b)))\<rangle>))\<close>
+                 \<langle>length vs = length us \<and> length us \<le> i \<and> (\<forall>k < length us. \<exists>b < length (Problem_atoms_l p). f ! b \<and>
+                    us ! k = rs ! unat (Atom_lhs (Problem_atoms_l p ! b)) \<and>
+                    vs ! k = rs ! unat (Atom_rhs (Problem_atoms_l p ! b)))\<rangle>))\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -227,7 +227,7 @@ text \<open>\<^const>\<open>false_sides\<close> and \<^const>\<open>flag_at\<clo
 definition false_sides_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word list \<Rightarrow> ('s, bool list, 'abort) function_contract\<close> where
   \<open>false_sides_contract p f rs \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms p) \<and> length f = length (Problem_atoms p)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms_l p) \<and> length f = length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>_. can_alloc_reference in
      make_function_contract pre post\<close>
 
@@ -237,12 +237,12 @@ lemma false_sides_spec:
   apply (crush_base simp add: sizes_ok_def unat_of_nat_lt63)
   subgoal for mk_ref
     apply (ucincl_discharge\<open>
-      rule_tac INV=\<open>\<lambda>_ _. can_alloc_reference \<star> (\<Squnion>g' v. mk_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms p)\<rangle>)\<close>
+      rule_tac INV=\<open>\<lambda>_ _. can_alloc_reference \<star> (\<Squnion>g' v. mk_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms_l p)\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_raw_for_loop_framedI'\<close>)
-    apply (crush_base specs add: set_true_spec[where n=\<open>length (Problem_terms p)\<close>]
+    apply (crush_base specs add: set_true_spec[where n=\<open>length (Problem_terms_l p)\<close>]
         contracts add: set_true_contract_def simp add: unat_of_nat_eq less_Suc_eq sizes_ok_def)
     apply (metis wf_atom)+
     done
@@ -262,10 +262,10 @@ definition separated_unset_contract :: \<open>Problem \<Rightarrow> bool list \<
       ('s, bool list, 'abort) function_contract\<close> where
   \<open>separated_unset_contract p t f rs \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms p) \<and>
-         length t = length (Problem_atoms p) \<and> length f = length (Problem_atoms p)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms_l p) \<and>
+         length t = length (Problem_atoms_l p) \<and> length f = length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>length r = length (Problem_atoms p) \<and> (\<forall>j < length (Problem_atoms p).
+        \<langle>length r = length (Problem_atoms_l p) \<and> (\<forall>j < length (Problem_atoms_l p).
            (f ! j \<longrightarrow> r ! j) \<and> (r ! j \<and> \<not> f ! j \<longrightarrow> \<not> t ! j \<and> sep_by p f rs j))\<rangle> in
      make_function_contract pre post\<close>
 
@@ -277,7 +277,7 @@ lemma separated_unset_spec:
   subgoal for us vs mk f1_ref
     apply (ucincl_discharge\<open>
       rule_tac INV=\<open>\<lambda>_ _. can_alloc_reference \<star> (\<Squnion>g' xs. f1_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>xs \<star>
-                 \<langle>length xs = length (Problem_atoms p) \<and> (\<forall>j < length (Problem_atoms p).
+                 \<langle>length xs = length (Problem_atoms_l p) \<and> (\<forall>j < length (Problem_atoms_l p).
                     (f ! j \<longrightarrow> xs ! j) \<and> (xs ! j \<and> \<not> f ! j \<longrightarrow> \<not> t ! j \<and> sep_by p f rs j))\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -314,10 +314,10 @@ definition implied_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarr
       ('s, bool list \<times> bool list \<times> tnil, 'abort) function_contract\<close> where
   \<open>implied_contract p t f rep \<equiv>
      let pre = can_alloc_reference \<star>
-        (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p (asserted p t (length (Problem_atoms p))) rs\<rangle>) \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms p) \<and> length f = length (Problem_atoms p)\<rangle> in
+        (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p (asserted p t (length (Problem_atoms_l p))) rs\<rangle>) \<star>
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms_l p) \<and> length f = length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star>
-        \<langle>cc_inv p (asserted p t (length (Problem_atoms p))) rs \<and> implied_ok p t f rs (fst r) (fst (snd r))\<rangle>) in
+        \<langle>cc_inv p (asserted p t (length (Problem_atoms_l p))) rs \<and> implied_ok p t f rs (fst r) (fst (snd r))\<rangle>) in
      make_function_contract pre post\<close>
 
 lemma implied_spec:
@@ -333,7 +333,7 @@ definition cc_propagate_contract :: \<open>Problem \<Rightarrow> bool list \<Rig
       ('s, 64 word \<times> bool list \<times> bool list \<times> tnil, 'abort) function_contract\<close> where
   \<open>cc_propagate_contract p t f \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms p) \<and> length f = length (Problem_atoms p)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length t = length (Problem_atoms_l p) \<and> length f = length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
         \<langle>conflict_result p t f (fst r) \<and> (\<exists>rs. implied_ok p t f rs (fst (snd r)) (fst (snd (snd r))))\<rangle> in
      make_function_contract pre post\<close>

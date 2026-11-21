@@ -29,9 +29,9 @@ function (sequential) ucnt :: \<open>SmtProblem \<Rightarrow> nat \<Rightarrow> 
   where
   \<open>ucnt p n (SmtTerm_Fun f args) = nw (length args) + ucnt_args p n args\<close>
 | \<open>ucnt p n (SmtTerm_Def d args) =
-     (if SmtDef_params (SmtProblem_defs p ! unat d) = [] then nw (length args)
+     (if SmtDef_params_l (SmtProblem_defs_l p ! unat d) = [] then nw (length args)
       else nw (length args) + (ucnt_args p n args +
-             (if unat d < n then ucnt p (unat d) (SmtDef_body (SmtProblem_defs p ! unat d)) else 0)))\<close>
+             (if unat d < n then ucnt p (unat d) (SmtDef_body (SmtProblem_defs_l p ! unat d)) else 0)))\<close>
 | \<open>ucnt p n (SmtTerm_App op args) = nw (length args) + ucnt_args p n args\<close>
 | \<open>ucnt p n _ = nw 0\<close>
 | \<open>ucnt_args p n [] = 0\<close>
@@ -47,26 +47,26 @@ text \<open>The value \<^verbatim>\<open>uf_size\<close> computes, without satur
   assertions.\<close>
 definition usize_m :: \<open>SmtProblem \<Rightarrow> nat\<close> where
   \<open>usize_m p \<equiv>
-     16 + length (SmtProblem_funs p) +
-     sum_list (map (\<lambda>d. if SmtDef_params (SmtProblem_defs p ! d) = []
-                         then ucnt p d (SmtDef_body (SmtProblem_defs p ! d)) else 0)
-                [0..<length (SmtProblem_defs p)]) +
-     sum_list (map (\<lambda>t. ucnt p (length (SmtProblem_defs p)) t + 2) (SmtProblem_asserts p))\<close>
+     16 + length (SmtProblem_funs_l p) +
+     sum_list (map (\<lambda>d. if SmtDef_params_l (SmtProblem_defs_l p ! d) = []
+                         then ucnt p d (SmtDef_body (SmtProblem_defs_l p ! d)) else 0)
+                [0..<length (SmtProblem_defs_l p)]) +
+     sum_list (map (\<lambda>t. ucnt p (length (SmtProblem_defs_l p)) t + 2) (SmtProblem_asserts_l p))\<close>
 
 text \<open>The definitions part of \<^const>\<open>usize_m\<close> for the first \<open>d\<close> definitions.\<close>
 definition dsum :: \<open>SmtProblem \<Rightarrow> nat \<Rightarrow> nat\<close> where
-  \<open>dsum p d \<equiv> sum_list (map (\<lambda>i. if SmtDef_params (SmtProblem_defs p ! i) = []
-                                   then ucnt p i (SmtDef_body (SmtProblem_defs p ! i)) else 0) [0..<d])\<close>
+  \<open>dsum p d \<equiv> sum_list (map (\<lambda>i. if SmtDef_params_l (SmtProblem_defs_l p ! i) = []
+                                   then ucnt p i (SmtDef_body (SmtProblem_defs_l p ! i)) else 0) [0..<d])\<close>
 
 lemma dsum_0: \<open>dsum p 0 = 0\<close>
   by (simp add: dsum_def)
 
 lemma dsum_Suc: \<open>dsum p (Suc d) = dsum p d +
-  (if SmtDef_params (SmtProblem_defs p ! d) = [] then ucnt p d (SmtDef_body (SmtProblem_defs p ! d)) else 0)\<close>
+  (if SmtDef_params_l (SmtProblem_defs_l p ! d) = [] then ucnt p d (SmtDef_body (SmtProblem_defs_l p ! d)) else 0)\<close>
   by (simp add: dsum_def)
 
-lemma usize_dsum: \<open>usize_m p = 16 + length (SmtProblem_funs p) + dsum p (length (SmtProblem_defs p)) +
-  sum_list (map (\<lambda>t. ucnt p (length (SmtProblem_defs p)) t + 2) (SmtProblem_asserts p))\<close>
+lemma usize_dsum: \<open>usize_m p = 16 + length (SmtProblem_funs_l p) + dsum p (length (SmtProblem_defs_l p)) +
+  sum_list (map (\<lambda>t. ucnt p (length (SmtProblem_defs_l p)) t + 2) (SmtProblem_asserts_l p))\<close>
   by (simp add: usize_m_def dsum_def)
 
 lemma ucnt_args_sum: \<open>ucnt_args p n ts = sum_list (map (ucnt p n) ts)\<close>
@@ -78,8 +78,8 @@ text \<open>The cost of a state: the numbers of terms, atoms and clauses, the le
   \<^verbatim>\<open>uf_size\<close> bounds this sum by \<^const>\<open>usize_m\<close>.\<close>
 definition cst :: \<open>st \<Rightarrow> nat\<close> where
   \<open>cst s \<equiv> length (st_terms s) + length (st_atoms s) + length (st_clauses s) +
-     sum_list (map (\<lambda>c. length (Clause_lits c)) (st_clauses s)) +
-     sum_list (map (\<lambda>t. length (Term_args t)) (st_terms s)) + st_next s\<close>
+     sum_list (map (\<lambda>c. length (Clause_lits_l c)) (st_clauses s)) +
+     sum_list (map (\<lambda>t. length (Term_args_l t)) (st_terms s)) + st_next s\<close>
 
 subsection \<open>The primitive operations\<close>
 
@@ -247,9 +247,9 @@ lemma tr_args_len: \<open>length (snd (tr_args_m p dm env n s ts)) = length ts\<
   by (induction ts arbitrary: s) (simp_all add: Let_def)
 
 lemma tr_cst:
-  \<open>(\<forall>d < n. ar_ok (SmtDef_body (SmtProblem_defs p ! d))) \<Longrightarrow> ar_ok t \<Longrightarrow>
+  \<open>(\<forall>d < n. ar_ok (SmtDef_body (SmtProblem_defs_l p ! d))) \<Longrightarrow> ar_ok t \<Longrightarrow>
      cst (fst (tr_term_m p dm env n s t)) \<le> cst s + ucnt p n t\<close>
-  \<open>(\<forall>d < n. ar_ok (SmtDef_body (SmtProblem_defs p ! d))) \<Longrightarrow> (\<forall>a \<in> set ts. ar_ok a) \<Longrightarrow>
+  \<open>(\<forall>d < n. ar_ok (SmtDef_body (SmtProblem_defs_l p ! d))) \<Longrightarrow> (\<forall>a \<in> set ts. ar_ok a) \<Longrightarrow>
      cst (fst (tr_args_m p dm env n s ts)) \<le> cst s + ucnt_args p n ts\<close>
 proof (induction p dm env n s t and p dm env n s ts rule: tr_term_m_tr_args_m.induct)
   case (4 p dm env n s f args)
@@ -262,7 +262,7 @@ proof (induction p dm env n s t and p dm env n s ts rule: tr_term_m_tr_args_m.in
 next
   case (5 p dm env n s d args)
   show ?case
-  proof (cases \<open>SmtDef_params (SmtProblem_defs p ! unat d) = []\<close>)
+  proof (cases \<open>SmtDef_params_l (SmtProblem_defs_l p ! unat d) = []\<close>)
     case True
     then show ?thesis by simp
   next
@@ -275,8 +275,8 @@ next
       case True
       define r where \<open>r = tr_args_m p dm env n s args\<close>
       have a: \<open>cst (fst r) \<le> cst s + ucnt_args p n args\<close> using 5 F True by (simp add: r_def)
-      have b: \<open>cst (fst (tr_term_m p dm (snd r) (unat d) (fst r) (SmtDef_body (SmtProblem_defs p ! unat d)))) \<le>
-          cst (fst r) + ucnt p (unat d) (SmtDef_body (SmtProblem_defs p ! unat d))\<close>
+      have b: \<open>cst (fst (tr_term_m p dm (snd r) (unat d) (fst r) (SmtDef_body (SmtProblem_defs_l p ! unat d)))) \<le>
+          cst (fst r) + ucnt p (unat d) (SmtDef_body (SmtProblem_defs_l p ! unat d))\<close>
         using 5 F True by (simp add: r_def)
       show ?thesis using a b F True by (simp add: Let_def flip: r_def)
     qed
@@ -301,17 +301,17 @@ qed (simp_all add: nw_def)
 
 subsection \<open>The translation of a problem\<close>
 
-lemma cst_init: \<open>cst (tr_init_m p) = length (SmtProblem_funs p) + 8\<close>
+lemma cst_init: \<open>cst (tr_init_m p) = length (SmtProblem_funs_l p) + 8\<close>
   by (simp add: tr_init_m_def Let_def cst_def add_term_m_def add_atom_m_def add_clause_m_def)
 
 lemma cst_defs_step:
-  \<open>(\<forall>d' < d. ar_ok (SmtDef_body (SmtProblem_defs p ! d'))) \<Longrightarrow> ar_ok (SmtDef_body (SmtProblem_defs p ! d)) \<Longrightarrow>
+  \<open>(\<forall>d' < d. ar_ok (SmtDef_body (SmtProblem_defs_l p ! d'))) \<Longrightarrow> ar_ok (SmtDef_body (SmtProblem_defs_l p ! d)) \<Longrightarrow>
    cst (fst (tr_defs_step p sd d)) \<le> cst (fst sd) +
-     (if SmtDef_params (SmtProblem_defs p ! d) = [] then ucnt p d (SmtDef_body (SmtProblem_defs p ! d)) else 0)\<close>
+     (if SmtDef_params_l (SmtProblem_defs_l p ! d) = [] then ucnt p d (SmtDef_body (SmtProblem_defs_l p ! d)) else 0)\<close>
   by (cases sd) (auto simp: tr_defs_step_def Let_def intro: tr_cst(1))
 
 lemma cst_defs_fold:
-  \<open>(\<forall>d < k. ar_ok (SmtDef_body (SmtProblem_defs p ! d))) \<Longrightarrow>
+  \<open>(\<forall>d < k. ar_ok (SmtDef_body (SmtProblem_defs_l p ! d))) \<Longrightarrow>
    cst (fst (foldl (tr_defs_step p) sd [0..<k])) \<le> cst (fst sd) + dsum p k\<close>
 proof (induction k)
   case 0
@@ -323,28 +323,28 @@ next
 qed
 
 lemma cst_asserts_fold:
-  \<open>(\<forall>d < length (SmtProblem_defs p). ar_ok (SmtDef_body (SmtProblem_defs p ! d))) \<Longrightarrow> (\<forall>t \<in> set ts. ar_ok t) \<Longrightarrow>
-   cst (foldl (tr_asserts_step p dm) s ts) \<le> cst s + sum_list (map (\<lambda>t. ucnt p (length (SmtProblem_defs p)) t + 2) ts)\<close>
+  \<open>(\<forall>d < length (SmtProblem_defs_l p). ar_ok (SmtDef_body (SmtProblem_defs_l p ! d))) \<Longrightarrow> (\<forall>t \<in> set ts. ar_ok t) \<Longrightarrow>
+   cst (foldl (tr_asserts_step p dm) s ts) \<le> cst s + sum_list (map (\<lambda>t. ucnt p (length (SmtProblem_defs_l p)) t + 2) ts)\<close>
 proof (induction ts arbitrary: s)
   case Nil
   then show ?case by simp
 next
   case (Cons t ts)
-  have \<open>cst (tr_asserts_step p dm s t) \<le> cst s + (ucnt p (length (SmtProblem_defs p)) t + 2)\<close>
-    using tr_cst(1)[of \<open>length (SmtProblem_defs p)\<close> p t dm \<open>[]\<close> s] Cons.prems
+  have \<open>cst (tr_asserts_step p dm s t) \<le> cst s + (ucnt p (length (SmtProblem_defs_l p)) t + 2)\<close>
+    using tr_cst(1)[of \<open>length (SmtProblem_defs_l p)\<close> p t dm \<open>[]\<close> s] Cons.prems
     by (simp add: tr_asserts_step_def Let_def cst_add_clause)
   then show ?case using Cons.IH[of \<open>tr_asserts_step p dm s t\<close>] Cons.prems by simp
 qed
 
 lemma wf_ar_ok:
-  \<open>smt_wf p \<Longrightarrow> (\<forall>d < length (SmtProblem_defs p). ar_ok (SmtDef_body (SmtProblem_defs p ! d))) \<and>
-     (\<forall>t \<in> set (SmtProblem_asserts p). ar_ok t)\<close>
+  \<open>smt_wf p \<Longrightarrow> (\<forall>d < length (SmtProblem_defs_l p). ar_ok (SmtDef_body (SmtProblem_defs_l p ! d))) \<and>
+     (\<forall>t \<in> set (SmtProblem_asserts_l p). ar_ok t)\<close>
 proof -
   assume w: \<open>smt_wf p\<close>
-  have d: \<open>smt_tsort (SmtProblem_funs p) (take d (SmtProblem_defs p)) (SmtDef_params (SmtProblem_defs p ! d))
-      (SmtDef_body (SmtProblem_defs p ! d)) \<noteq> None\<close> if \<open>d < length (SmtProblem_defs p)\<close> for d
+  have d: \<open>smt_tsort (SmtProblem_funs_l p) (take d (SmtProblem_defs_l p)) (SmtDef_params_l (SmtProblem_defs_l p ! d))
+      (SmtDef_body (SmtProblem_defs_l p ! d)) \<noteq> None\<close> if \<open>d < length (SmtProblem_defs_l p)\<close> for d
     using w that by (simp add: smt_wf_def Let_def)
-  have a: \<open>smt_tsort (SmtProblem_funs p) (SmtProblem_defs p) [] t \<noteq> None\<close> if \<open>t \<in> set (SmtProblem_asserts p)\<close> for t
+  have a: \<open>smt_tsort (SmtProblem_funs_l p) (SmtProblem_defs_l p) [] t \<noteq> None\<close> if \<open>t \<in> set (SmtProblem_asserts_l p)\<close> for t
     using w that by (simp add: smt_wf_def Let_def)
   show ?thesis using tsort_ar_ok[OF d] tsort_ar_ok[OF a] by blast
 qed
@@ -353,11 +353,11 @@ text \<open>The total cost of the translation is at most \<^const>\<open>usize_m
 theorem cst_tr_state: \<open>smt_wf p \<Longrightarrow> cst (tr_state_m p) + 8 \<le> usize_m p\<close>
 proof -
   assume w: \<open>smt_wf p\<close>
-  have D: \<open>cst (fst (tr_defs_m p)) \<le> length (SmtProblem_funs p) + 8 + dsum p (length (SmtProblem_defs p))\<close>
-    using cst_defs_fold[of \<open>length (SmtProblem_defs p)\<close> p \<open>(tr_init_m p, [])\<close>] wf_ar_ok[OF w]
+  have D: \<open>cst (fst (tr_defs_m p)) \<le> length (SmtProblem_funs_l p) + 8 + dsum p (length (SmtProblem_defs_l p))\<close>
+    using cst_defs_fold[of \<open>length (SmtProblem_defs_l p)\<close> p \<open>(tr_init_m p, [])\<close>] wf_ar_ok[OF w]
     by (simp add: tr_defs_m_def cst_init)
   have A: \<open>cst (tr_state_m p) \<le> cst (fst (tr_defs_m p)) +
-      sum_list (map (\<lambda>t. ucnt p (length (SmtProblem_defs p)) t + 2) (SmtProblem_asserts p))\<close>
+      sum_list (map (\<lambda>t. ucnt p (length (SmtProblem_defs_l p)) t + 2) (SmtProblem_asserts_l p))\<close>
     using cst_asserts_fold wf_ar_ok[OF w] by (simp add: tr_state_m_def tr_asserts_m_def)
   show ?thesis using D A by (simp add: usize_dsum)
 qed
@@ -373,13 +373,13 @@ theorem usize_tr_ok:
 proof -
   define s where \<open>s = tr_state_m p\<close>
   have c: \<open>cst s < 2 ^ 63\<close> using cst_tr_state[OF assms(2)] assms(1) by (simp add: s_def)
-  have f: \<open>length (SmtProblem_funs p) < 2 ^ 63\<close> using assms(1) by (simp add: usize_m_def)
-  have q: \<open>Problem_terms (tr_problem_m p) = st_terms s\<close> \<open>Problem_atoms (tr_problem_m p) = st_atoms s\<close>
-    \<open>Problem_clauses (tr_problem_m p) = st_clauses s\<close> by (simp_all add: tr_problem_m_def s_def Let_def)
-  have ta: \<open>length (Term_args t) < 2 ^ 63\<close> if \<open>t \<in> set (st_terms s)\<close> for t
-    using le_sum_list_map[OF that, of \<open>\<lambda>t. length (Term_args t)\<close>] c by (simp add: cst_def)
-  have cl: \<open>length (Clause_lits cl) < 2 ^ 63\<close> if \<open>cl \<in> set (st_clauses s)\<close> for cl
-    using le_sum_list_map[OF that, of \<open>\<lambda>c. length (Clause_lits c)\<close>] c by (simp add: cst_def)
+  have f: \<open>length (SmtProblem_funs_l p) < 2 ^ 63\<close> using assms(1) by (simp add: usize_m_def)
+  have q: \<open>Problem_terms_l (tr_problem_m p) = st_terms s\<close> \<open>Problem_atoms_l (tr_problem_m p) = st_atoms s\<close>
+    \<open>Problem_clauses_l (tr_problem_m p) = st_clauses s\<close> by (simp_all add: tr_problem_m_def s_def Let_def)
+  have ta: \<open>length (Term_args_l t) < 2 ^ 63\<close> if \<open>t \<in> set (st_terms s)\<close> for t
+    using le_sum_list_map[OF that, of \<open>\<lambda>t. length (Term_args_l t)\<close>] c by (simp add: cst_def)
+  have cl: \<open>length (Clause_lits_l cl) < 2 ^ 63\<close> if \<open>cl \<in> set (st_clauses s)\<close> for cl
+    using le_sum_list_map[OF that, of \<open>\<lambda>c. length (Clause_lits_l c)\<close>] c by (simp add: cst_def)
   show ?thesis using c f ta cl by (simp add: q tr_bounded_def sizes_ok_def cst_def)
 qed
 
@@ -455,14 +455,14 @@ next
   case (2 p n d args)
   define X where \<open>X = ncnt_args p n args\<close>
   define s where \<open>s = sum_list (map (\<lambda>a. (ncnt p n a) ^ 2) args)\<close>
-  define e where \<open>e = SmtProblem_defs p ! unat d\<close>
+  define e where \<open>e = SmtProblem_defs_l p ! unat d\<close>
   have pos: \<open>\<forall>a \<in> set args. 1 \<le> ncnt p n a\<close> using ncnt_pos by blast
   have X: \<open>X = sum_list (map (ncnt p n) args)\<close> by (simp add: X_def ncnt_args_sum)
   have kX: \<open>length args \<le> X\<close> using sum_ge_length[OF pos] X by simp
   have sq: \<open>s + length args * (length args - 1) \<le> X ^ 2\<close> using sum_sq_le[OF pos] X by (simp add: s_def)
   have N: \<open>nw (length args) + 32 * s \<le> 32 * (1 + X) ^ 2\<close> by (rule node_arith[OF kX sq])
   show ?case
-  proof (cases \<open>SmtDef_params e = []\<close>)
+  proof (cases \<open>SmtDef_params_l e = []\<close>)
     case True
     have \<open>nw (length args) \<le> 32 * (1 + X) ^ 2\<close> using N by simp
     then show ?thesis using True by (simp add: e_def X_def)
@@ -495,13 +495,13 @@ theorem in_range_usize:
   assumes \<open>smt_size p \<le> 2 ^ 28\<close>
   shows \<open>usize_m p < 2 ^ 63\<close>
 proof -
-  define L where \<open>L = length (SmtProblem_defs p)\<close>
-  define fd where \<open>fd = (\<lambda>d. if SmtDef_params (SmtProblem_defs p ! d) = [] then ncnt p d (SmtDef_body (SmtProblem_defs p ! d)) else 0)\<close>
-  define ud where \<open>ud = (\<lambda>d. if SmtDef_params (SmtProblem_defs p ! d) = [] then ucnt p d (SmtDef_body (SmtProblem_defs p ! d)) else 0)\<close>
+  define L where \<open>L = length (SmtProblem_defs_l p)\<close>
+  define fd where \<open>fd = (\<lambda>d. if SmtDef_params_l (SmtProblem_defs_l p ! d) = [] then ncnt p d (SmtDef_body (SmtProblem_defs_l p ! d)) else 0)\<close>
+  define ud where \<open>ud = (\<lambda>d. if SmtDef_params_l (SmtProblem_defs_l p ! d) = [] then ucnt p d (SmtDef_body (SmtProblem_defs_l p ! d)) else 0)\<close>
   define ID where \<open>ID = sum_list (map fd [0..<L])\<close>
-  define IA where \<open>IA = sum_list (map (ncnt p L) (SmtProblem_asserts p))\<close>
+  define IA where \<open>IA = sum_list (map (ncnt p L) (SmtProblem_asserts_l p))\<close>
   define S where \<open>S = smt_size p\<close>
-  have S: \<open>S = length (SmtProblem_funs p) + L + length (SmtProblem_asserts p) + ID + IA\<close>
+  have S: \<open>S = length (SmtProblem_funs_l p) + L + length (SmtProblem_asserts_l p) + ID + IA\<close>
     using isize_smt_size[of p] by (simp add: S_def isize_m_def ID_def IA_def fd_def L_def)
   have ud: \<open>ud d \<le> 32 * (fd d) ^ 2\<close> for d by (simp add: ud_def fd_def ucnt_sq(1))
   have D: \<open>sum_list (map ud [0..<L]) \<le> 32 * ID ^ 2\<close>
@@ -520,9 +520,9 @@ proof -
   qed simp
   have A2: \<open>sum_list (map (\<lambda>t. 32 * (ncnt p L t) ^ 2) ts) \<le> 32 * (sum_list (map (ncnt p L) ts)) ^ 2\<close> for ts
     using sum_sq_le_sq[of \<open>ncnt p L\<close> ts] by (simp add: sum_list_const_mult)
-  have A: \<open>sum_list (map (\<lambda>t. ucnt p L t + 2) (SmtProblem_asserts p)) \<le> 32 * IA ^ 2 + 2 * length (SmtProblem_asserts p)\<close>
-    using A1[of \<open>SmtProblem_asserts p\<close>] A2[of \<open>SmtProblem_asserts p\<close>] by (simp add: IA_def)
-  have U: \<open>usize_m p \<le> 16 + length (SmtProblem_funs p) + 32 * ID ^ 2 + 32 * IA ^ 2 + 2 * length (SmtProblem_asserts p)\<close>
+  have A: \<open>sum_list (map (\<lambda>t. ucnt p L t + 2) (SmtProblem_asserts_l p)) \<le> 32 * IA ^ 2 + 2 * length (SmtProblem_asserts_l p)\<close>
+    using A1[of \<open>SmtProblem_asserts_l p\<close>] A2[of \<open>SmtProblem_asserts_l p\<close>] by (simp add: IA_def)
+  have U: \<open>usize_m p \<le> 16 + length (SmtProblem_funs_l p) + 32 * ID ^ 2 + 32 * IA ^ 2 + 2 * length (SmtProblem_asserts_l p)\<close>
     using D A by (simp add: usize_m_def ud_def L_def)
   have sq1: \<open>ID ^ 2 + IA ^ 2 \<le> (ID + IA) ^ 2\<close> by (simp add: power2_eq_square algebra_simps)
   have sq2: \<open>(ID + IA) ^ 2 \<le> S ^ 2\<close> using S by (intro power_mono) simp_all

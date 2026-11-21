@@ -8,7 +8,7 @@ subsection \<open>Rust values and model values\<close>
 
 text \<open>The model state of a Rust state, and the Rust state of a model state.\<close>
 definition st_of :: \<open>Tr \<Rightarrow> st\<close> where
-  \<open>st_of s \<equiv> St (Tr_terms s) (Tr_atoms s) (Tr_clauses s) (unat (Tr_next_fun s))\<close>
+  \<open>st_of s \<equiv> St (Tr_terms_l s) (Tr_atoms_l s) (Tr_clauses_l s) (unat (Tr_next_fun s))\<close>
 
 definition tr_of :: \<open>st \<Rightarrow> Tr\<close> where
   \<open>tr_of S \<equiv> make_Tr (st_terms S) (st_atoms S) (st_clauses S) (word_of_nat (st_next S))\<close>
@@ -139,12 +139,12 @@ function (sequential) tok :: \<open>SmtProblem \<Rightarrow> nat \<Rightarrow> n
   where
   \<open>tok p F dl el n (SmtTerm_Param k) = (unat k < el)\<close>
 | \<open>tok p F dl el n (SmtTerm_Fun f args) =
-     (unat f < length (SmtProblem_funs p) \<and> length args < 2 ^ 64 \<and> length args \<le> F \<and> toks p F dl el n args)\<close>
+     (unat f < length (SmtProblem_funs_l p) \<and> length args < 2 ^ 64 \<and> length args \<le> F \<and> toks p F dl el n args)\<close>
 | \<open>tok p F dl el n (SmtTerm_Def d args) =
-     (unat d < length (SmtProblem_defs p) \<and> length (SmtDef_params (SmtProblem_defs p ! unat d)) < 2 ^ 64 \<and>
-      (if SmtDef_params (SmtProblem_defs p ! unat d) = [] then unat d < dl
+     (unat d < length (SmtProblem_defs_l p) \<and> length (SmtDef_params_l (SmtProblem_defs_l p ! unat d)) < 2 ^ 64 \<and>
+      (if SmtDef_params_l (SmtProblem_defs_l p ! unat d) = [] then unat d < dl
        else if unat d < n then length args < 2 ^ 64 \<and> length args \<le> F \<and> toks p F dl el n args \<and>
-            tok p F dl (length args) (unat d) (SmtDef_body (SmtProblem_defs p ! unat d))
+            tok p F dl (length args) (unat d) (SmtDef_body (SmtProblem_defs_l p ! unat d))
        else False))\<close>
 | \<open>tok p F dl el n (SmtTerm_App op args) =
      (length args < 2 ^ 64 \<and> length args \<le> F \<and> length args * length args \<le> F \<and> min_ar op \<le> length args \<and>
@@ -164,8 +164,8 @@ function (sequential) dep :: \<open>SmtProblem \<Rightarrow> nat \<Rightarrow> S
   where
   \<open>dep p n (SmtTerm_Fun f args) = Suc (deps p n args)\<close>
 | \<open>dep p n (SmtTerm_Def d args) =
-     (if SmtDef_params (SmtProblem_defs p ! unat d) = [] then 0
-      else if unat d < n then Suc (max (deps p n args) (dep p (unat d) (SmtDef_body (SmtProblem_defs p ! unat d))))
+     (if SmtDef_params_l (SmtProblem_defs_l p ! unat d) = [] then 0
+      else if unat d < n then Suc (max (deps p n args) (dep p (unat d) (SmtDef_body (SmtProblem_defs_l p ! unat d))))
       else 0)\<close>
 | \<open>dep p n (SmtTerm_App op args) = Suc (deps p n args)\<close>
 | \<open>dep p n _ = 0\<close>
@@ -202,7 +202,7 @@ proof (induction p F dl el n t and p F dl el n ts arbitrary: env S n' and env S 
 next
   case (3 p F dl el n d args)
   show ?case
-  proof (cases \<open>SmtDef_params (SmtProblem_defs p ! unat d) = []\<close>)
+  proof (cases \<open>SmtDef_params_l (SmtProblem_defs_l p ! unat d) = []\<close>)
     case True
     then show ?thesis using 3(3) by simp
   next
@@ -296,9 +296,9 @@ next
   then show ?case by (auto simp: Let_def add_term_m_def add_atom_m_def bnd_def)
 next
   case (3 p F dl el n d args)
-  let ?D = \<open>SmtProblem_defs p ! unat d\<close>
+  let ?D = \<open>SmtProblem_defs_l p ! unat d\<close>
   show ?case
-  proof (cases \<open>SmtDef_params ?D = []\<close>)
+  proof (cases \<open>SmtDef_params_l ?D = []\<close>)
     case True
     then have \<open>unat d < length dm\<close> using 3(3,6) by simp
     then show ?thesis using True 3(7) by simp
@@ -619,8 +619,8 @@ proof -
 qed
 
 
-lemma tr_of_sel: \<open>Tr_terms (tr_of S) = st_terms S\<close> \<open>Tr_atoms (tr_of S) = st_atoms S\<close>
-  \<open>Tr_clauses (tr_of S) = st_clauses S\<close> \<open>Tr_next_fun (tr_of S) = word_of_nat (st_next S)\<close>
+lemma tr_of_sel: \<open>Tr_terms_l (tr_of S) = st_terms S\<close> \<open>Tr_atoms_l (tr_of S) = st_atoms S\<close>
+  \<open>Tr_clauses_l (tr_of S) = st_clauses S\<close> \<open>Tr_next_fun (tr_of S) = word_of_nat (st_next S)\<close>
   by (simp_all add: tr_of_def)
 
 
@@ -650,8 +650,8 @@ definition add_term_contract :: \<open>Tr \<Rightarrow> 64 word \<Rightarrow> 64
   [crush_contracts]: \<open>add_term_contract s f args \<equiv>
      make_function_contract can_alloc_reference
        (\<lambda>r. can_alloc_reference \<star>
-          \<langle>r = (make_Tr (Tr_terms s @ [make_Term f args]) (Tr_atoms s) (Tr_clauses s) (Tr_next_fun s),
-                word_of_nat (length (Tr_terms s)), TNil)\<rangle>)\<close>
+          \<langle>r = (make_Tr (Tr_terms_l s @ [make_Term f args]) (Tr_atoms_l s) (Tr_clauses_l s) (Tr_next_fun s),
+                word_of_nat (length (Tr_terms_l s)), TNil)\<rangle>)\<close>
 
 lemma add_term_spec [crush_specs]:
   shows \<open>\<Gamma>; add_term s f args \<Turnstile>\<^sub>F add_term_contract s f args\<close>
@@ -663,8 +663,8 @@ definition add_atom_contract :: \<open>Tr \<Rightarrow> 64 word \<Rightarrow> 64
   [crush_contracts]: \<open>add_atom_contract s l r0 \<equiv>
      make_function_contract can_alloc_reference
        (\<lambda>r. can_alloc_reference \<star>
-          \<langle>r = (make_Tr (Tr_terms s) (Tr_atoms s @ [make_Atom l r0]) (Tr_clauses s) (Tr_next_fun s),
-                word_of_nat (length (Tr_atoms s)), TNil)\<rangle>)\<close>
+          \<langle>r = (make_Tr (Tr_terms_l s) (Tr_atoms_l s @ [make_Atom l r0]) (Tr_clauses_l s) (Tr_next_fun s),
+                word_of_nat (length (Tr_atoms_l s)), TNil)\<rangle>)\<close>
 
 lemma add_atom_spec [crush_specs]:
   shows \<open>\<Gamma>; add_atom s l r0 \<Turnstile>\<^sub>F add_atom_contract s l r0\<close>
@@ -676,7 +676,7 @@ definition add_clause_contract :: \<open>Tr \<Rightarrow> Lit list \<Rightarrow>
   [crush_contracts]: \<open>add_clause_contract s ls \<equiv>
      make_function_contract can_alloc_reference
        (\<lambda>r. can_alloc_reference \<star>
-          \<langle>r = make_Tr (Tr_terms s) (Tr_atoms s) (Tr_clauses s @ [make_Clause ls]) (Tr_next_fun s)\<rangle>)\<close>
+          \<langle>r = make_Tr (Tr_terms_l s) (Tr_atoms_l s) (Tr_clauses_l s @ [make_Clause ls]) (Tr_next_fun s)\<rangle>)\<close>
 
 lemma add_clause_spec [crush_specs]:
   shows \<open>\<Gamma>; add_clause s ls \<Turnstile>\<^sub>F add_clause_contract s ls\<close>
@@ -688,8 +688,8 @@ definition new_const_contract :: \<open>Tr \<Rightarrow> ('s, Tr \<times> 64 wor
   [crush_contracts]: \<open>new_const_contract s \<equiv>
      make_function_contract (can_alloc_reference \<star> \<langle>Suc (unat (Tr_next_fun s)) < 2 ^ 64\<rangle>)
        (\<lambda>r. can_alloc_reference \<star>
-          \<langle>r = (make_Tr (Tr_terms s @ [make_Term (Tr_next_fun s) []]) (Tr_atoms s) (Tr_clauses s) (Tr_next_fun s + 1),
-                word_of_nat (length (Tr_terms s)), TNil)\<rangle>)\<close>
+          \<langle>r = (make_Tr (Tr_terms_l s @ [make_Term (Tr_next_fun s) []]) (Tr_atoms_l s) (Tr_clauses_l s) (Tr_next_fun s + 1),
+                word_of_nat (length (Tr_terms_l s)), TNil)\<rangle>)\<close>
 
 lemma new_const_spec [crush_specs]:
   shows \<open>\<Gamma>; new_const s \<Turnstile>\<^sub>F new_const_contract s\<close>
@@ -701,9 +701,9 @@ definition new_lit_contract :: \<open>Tr \<Rightarrow> ('s, Tr \<times> 64 word 
   [crush_contracts]: \<open>new_lit_contract s \<equiv>
      make_function_contract (can_alloc_reference \<star> \<langle>Suc (unat (Tr_next_fun s)) < 2 ^ 64\<rangle>)
        (\<lambda>r. can_alloc_reference \<star>
-          \<langle>r = (make_Tr (Tr_terms s @ [make_Term (Tr_next_fun s) []])
-                  (Tr_atoms s @ [make_Atom (word_of_nat (length (Tr_terms s))) 0]) (Tr_clauses s) (Tr_next_fun s + 1),
-                word_of_nat (length (Tr_atoms s)), TNil)\<rangle>)\<close>
+          \<langle>r = (make_Tr (Tr_terms_l s @ [make_Term (Tr_next_fun s) []])
+                  (Tr_atoms_l s @ [make_Atom (word_of_nat (length (Tr_terms_l s))) 0]) (Tr_clauses_l s) (Tr_next_fun s + 1),
+                word_of_nat (length (Tr_atoms_l s)), TNil)\<rangle>)\<close>
 
 lemma new_lit_spec [crush_specs]:
   shows \<open>\<Gamma>; new_lit s \<Turnstile>\<^sub>F new_lit_contract s\<close>
@@ -833,20 +833,20 @@ lemma gate_andor_spec [crush_specs]:
       INV=\<open>\<lambda>c. \<Squnion>gs sv gb bv gi i. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>sv \<star> big_ref \<mapsto>\<langle>\<top>\<rangle> gb\<down>bv \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star>
            can_alloc_reference \<star>
            \<langle>unat i \<le> length ls \<and>
-            sv = make_Tr (Tr_terms s @ [make_Term (Tr_next_fun s) []])
-                   (Tr_atoms s @ [make_Atom (word_of_nat (length (Tr_terms s))) 0])
-                   (Tr_clauses s @ map (\<lambda>l. make_Clause (andor_cl_m (length (Tr_atoms s)) cj l)) (map lm (take (unat i) ls)))
+            sv = make_Tr (Tr_terms_l s @ [make_Term (Tr_next_fun s) []])
+                   (Tr_atoms_l s @ [make_Atom (word_of_nat (length (Tr_terms_l s))) 0])
+                   (Tr_clauses_l s @ map (\<lambda>l. make_Clause (andor_cl_m (length (Tr_atoms_l s)) cj l)) (map lm (take (unat i) ls)))
                    (Tr_next_fun s + 1) \<and>
-            bv = lit_m (length (Tr_atoms s)) cj # map (\<lambda>l. lit_m (fst l) (if cj then \<not> snd l else snd l)) (map lm (take (unat i) ls)) \<and>
+            bv = lit_m (length (Tr_atoms_l s)) cj # map (\<lambda>l. lit_m (fst l) (if cj then \<not> snd l else snd l)) (map lm (take (unat i) ls)) \<and>
             length ls - unat i \<le> c\<rangle>\<close> and
       INV'=\<open>\<lambda>c. \<Squnion>gs sv gb bv gi i. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>sv \<star> big_ref \<mapsto>\<langle>\<top>\<rangle> gb\<down>bv \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star>
            can_alloc_reference \<star>
            \<langle>unat i < length ls \<and>
-            sv = make_Tr (Tr_terms s @ [make_Term (Tr_next_fun s) []])
-                   (Tr_atoms s @ [make_Atom (word_of_nat (length (Tr_terms s))) 0])
-                   (Tr_clauses s @ map (\<lambda>l. make_Clause (andor_cl_m (length (Tr_atoms s)) cj l)) (map lm (take (unat i) ls)))
+            sv = make_Tr (Tr_terms_l s @ [make_Term (Tr_next_fun s) []])
+                   (Tr_atoms_l s @ [make_Atom (word_of_nat (length (Tr_terms_l s))) 0])
+                   (Tr_clauses_l s @ map (\<lambda>l. make_Clause (andor_cl_m (length (Tr_atoms_l s)) cj l)) (map lm (take (unat i) ls)))
                    (Tr_next_fun s + 1) \<and>
-            bv = lit_m (length (Tr_atoms s)) cj # map (\<lambda>l. lit_m (fst l) (if cj then \<not> snd l else snd l)) (map lm (take (unat i) ls)) \<and>
+            bv = lit_m (length (Tr_atoms_l s)) cj # map (\<lambda>l. lit_m (fst l) (if cj then \<not> snd l else snd l)) (map lm (take (unat i) ls)) \<and>
             length ls - unat i \<le> Suc c\<rangle>\<close> and
       \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and BRK=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
@@ -1053,7 +1053,7 @@ lemma abnd_ite_r: \<open>abnd (st_of s) SmtOp_Ite (map encm es) \<Longrightarrow
 lemma ite_R:
   assumes \<open>abnd (st_of s) SmtOp_Ite (map encm es)\<close> \<open>\<not> is_lit_m (encm (es ! Suc 0))\<close> \<open>3 \<le> length es\<close>
   shows \<open>unat (Tr_next_fun s) < 18446744073709551615\<close>
-    \<open>st_of (make_Tr (Tr_terms s @ [make_Term (Tr_next_fun s) []]) (Tr_atoms s) (Tr_clauses s) (Tr_next_fun s + 1)) =
+    \<open>st_of (make_Tr (Tr_terms_l s @ [make_Term (Tr_next_fun s) []]) (Tr_atoms_l s) (Tr_clauses_l s) (Tr_next_fun s + 1)) =
        fst (new_const_m (st_of s))\<close>
     \<open>bnd (fst (enc_term_m (fst (new_const_m (st_of s))) (encm (es ! Suc 0))))\<close>
     \<open>bnd (fst (enc_term_m (fst (enc_term_m (fst (new_const_m (st_of s))) (encm (es ! Suc 0)))) (encm (es ! 2))))\<close>
@@ -1063,7 +1063,7 @@ proof -
     using assms(1,2) n1 by (simp add: abnd_def)
   note F = ite_term_facts[OF b]
   show u: \<open>unat (Tr_next_fun s) < 18446744073709551615\<close> using F(1) by (simp add: st_of_def)
-  show \<open>st_of (make_Tr (Tr_terms s @ [make_Term (Tr_next_fun s) []]) (Tr_atoms s) (Tr_clauses s) (Tr_next_fun s + 1)) =
+  show \<open>st_of (make_Tr (Tr_terms_l s @ [make_Term (Tr_next_fun s) []]) (Tr_atoms_l s) (Tr_clauses_l s) (Tr_next_fun s + 1)) =
        fst (new_const_m (st_of s))\<close> using u by (simp add: st_of_def new_const_eq unat_r1)
   show \<open>bnd (fst (enc_term_m (fst (new_const_m (st_of s))) (encm (es ! Suc 0))))\<close> using F(2) n1 by simp
   show \<open>bnd (fst (enc_term_m (fst (enc_term_m (fst (new_const_m (st_of s))) (encm (es ! Suc 0)))) (encm (es ! 2))))\<close>
@@ -1365,7 +1365,7 @@ qed
 lemma tres_fun:
   \<open>tres p dm env n S (SmtTerm_Fun f args) =
      (let A = tr_args_m p dm env n S args; E = ET (fst A) (snd A) (length args); T = add_term_m (fst E) (unat f) (snd E) in
-      if SmtFun_ret (SmtProblem_funs p ! unat f) = SmtSort_Bool
+      if SmtFun_ret (SmtProblem_funs_l p ! unat f) = SmtSort_Bool
       then (tr_of (fst (add_atom_m (fst T) (snd T) 0)), Enc_Lit (word_of_nat (snd (add_atom_m (fst T) (snd T) 0))) True, TNil)
       else (tr_of (fst T), Enc_Term (word_of_nat (snd T)), TNil))\<close>
   by (simp add: tres_def Let_def ET_all tr_args_len)
@@ -1389,26 +1389,26 @@ lemma sbnd_app: \<open>tbnd p dm env n S (SmtTerm_App op args) \<Longrightarrow>
   unfolding tbnd_def sbnd_def using bnd_pre[OF pre_enc_app[OF pre_refl]] by (simp add: Let_def)
 
 lemma tres_def0:
-  \<open>SmtDef_params (SmtProblem_defs p ! unat d) = [] \<Longrightarrow> tres p dm env n S (SmtTerm_Def d args) = (tr_of S, enc_of (dm ! unat d), TNil)\<close>
+  \<open>SmtDef_params_l (SmtProblem_defs_l p ! unat d) = [] \<Longrightarrow> tres p dm env n S (SmtTerm_Def d args) = (tr_of S, enc_of (dm ! unat d), TNil)\<close>
   by (simp add: tres_def)
 
 lemma tres_def1:
-  \<open>SmtDef_params (SmtProblem_defs p ! unat d) \<noteq> [] \<Longrightarrow> unat d < n \<Longrightarrow> tres p dm env n S (SmtTerm_Def d args) =
-     tres p dm (snd (tr_args_m p dm env n S args)) (unat d) (fst (tr_args_m p dm env n S args)) (SmtDef_body (SmtProblem_defs p ! unat d))\<close>
+  \<open>SmtDef_params_l (SmtProblem_defs_l p ! unat d) \<noteq> [] \<Longrightarrow> unat d < n \<Longrightarrow> tres p dm env n S (SmtTerm_Def d args) =
+     tres p dm (snd (tr_args_m p dm env n S args)) (unat d) (fst (tr_args_m p dm env n S args)) (SmtDef_body (SmtProblem_defs_l p ! unat d))\<close>
   by (simp add: tres_def Let_def)
 
 lemma tbnd_def1:
-  \<open>SmtDef_params (SmtProblem_defs p ! unat d) \<noteq> [] \<Longrightarrow> unat d < n \<Longrightarrow> tbnd p dm env n S (SmtTerm_Def d args) =
-     tbnd p dm (snd (tr_args_m p dm env n S args)) (unat d) (fst (tr_args_m p dm env n S args)) (SmtDef_body (SmtProblem_defs p ! unat d))\<close>
+  \<open>SmtDef_params_l (SmtProblem_defs_l p ! unat d) \<noteq> [] \<Longrightarrow> unat d < n \<Longrightarrow> tbnd p dm env n S (SmtTerm_Def d args) =
+     tbnd p dm (snd (tr_args_m p dm env n S args)) (unat d) (fst (tr_args_m p dm env n S args)) (SmtDef_body (SmtProblem_defs_l p ! unat d))\<close>
   by (simp add: tbnd_def Let_def)
 
 lemma sbnd_def1:
-  \<open>SmtDef_params (SmtProblem_defs p ! unat d) \<noteq> [] \<Longrightarrow> unat d < n \<Longrightarrow> tbnd p dm env n S (SmtTerm_Def d args) \<Longrightarrow>
+  \<open>SmtDef_params_l (SmtProblem_defs_l p ! unat d) \<noteq> [] \<Longrightarrow> unat d < n \<Longrightarrow> tbnd p dm env n S (SmtTerm_Def d args) \<Longrightarrow>
      sbnd p dm env n S args\<close>
 proof -
-  assume a: \<open>SmtDef_params (SmtProblem_defs p ! unat d) \<noteq> []\<close> \<open>unat d < n\<close> \<open>tbnd p dm env n S (SmtTerm_Def d args)\<close>
+  assume a: \<open>SmtDef_params_l (SmtProblem_defs_l p ! unat d) \<noteq> []\<close> \<open>unat d < n\<close> \<open>tbnd p dm env n S (SmtTerm_Def d args)\<close>
   let ?A = \<open>tr_args_m p dm env n S args\<close>
-  let ?b = \<open>SmtDef_body (SmtProblem_defs p ! unat d)\<close>
+  let ?b = \<open>SmtDef_body (SmtProblem_defs_l p ! unat d)\<close>
   have \<open>pre (fst ?A) (fst (tr_term_m p dm (snd ?A) (unat d) (fst ?A) ?b))\<close>
     using tr_pre(1)[of p dm \<open>snd ?A\<close> \<open>unat d\<close> \<open>fst ?A\<close> ?b] by (cases \<open>tr_term_m p dm (snd ?A) (unat d) (fst ?A) ?b\<close>) simp
   then show ?thesis using a bnd_pre by (simp add: tbnd_def sbnd_def Let_def)
@@ -1428,10 +1428,10 @@ definition enc_args_contract ::
   [crush_contracts]: \<open>enc_args_contract k p dm env s ts \<equiv>
      make_function_contract
        (can_alloc_reference \<star>
-        \<langle>Suc (deps p (length (SmtProblem_defs p)) ts) \<le> k \<and> length ts < 2 ^ 64 \<and> length ts \<le> urust_fuel \<and>
-         toks p urust_fuel (length dm) (length env) (length (SmtProblem_defs p)) ts \<and>
-         sbnd p (map encm dm) (map encm env) (length (SmtProblem_defs p)) (st_of s) ts\<rangle>)
-       (\<lambda>r. can_alloc_reference \<star> \<langle>r = sres p (map encm dm) (map encm env) (length (SmtProblem_defs p)) (st_of s) ts\<rangle>)\<close>
+        \<langle>Suc (deps p (length (SmtProblem_defs_l p)) ts) \<le> k \<and> length ts < 2 ^ 64 \<and> length ts \<le> urust_fuel \<and>
+         toks p urust_fuel (length dm) (length env) (length (SmtProblem_defs_l p)) ts \<and>
+         sbnd p (map encm dm) (map encm env) (length (SmtProblem_defs_l p)) (st_of s) ts\<rangle>)
+       (\<lambda>r. can_alloc_reference \<star> \<langle>r = sres p (map encm dm) (map encm env) (length (SmtProblem_defs_l p)) (st_of s) ts\<rangle>)\<close>
 
 definition enc_contract ::
   \<open>nat \<Rightarrow> SmtProblem \<Rightarrow> Enc list \<Rightarrow> Enc list \<Rightarrow> Tr \<Rightarrow> SmtTerm \<Rightarrow> ('s, Tr \<times> Enc \<times> tnil, 'abort) function_contract\<close>
@@ -1439,10 +1439,10 @@ definition enc_contract ::
   [crush_contracts]: \<open>enc_contract k p dm env s t \<equiv>
      make_function_contract
        (can_alloc_reference \<star>
-        \<langle>Suc (dep p (length (SmtProblem_defs p)) t) \<le> k \<and>
-         tok p urust_fuel (length dm) (length env) (length (SmtProblem_defs p)) t \<and>
-         tbnd p (map encm dm) (map encm env) (length (SmtProblem_defs p)) (st_of s) t\<rangle>)
-       (\<lambda>r. can_alloc_reference \<star> \<langle>r = tres p (map encm dm) (map encm env) (length (SmtProblem_defs p)) (st_of s) t\<rangle>)\<close>
+        \<langle>Suc (dep p (length (SmtProblem_defs_l p)) t) \<le> k \<and>
+         tok p urust_fuel (length dm) (length env) (length (SmtProblem_defs_l p)) t \<and>
+         tbnd p (map encm dm) (map encm env) (length (SmtProblem_defs_l p)) (st_of s) t\<rangle>)
+       (\<lambda>r. can_alloc_reference \<star> \<langle>r = tres p (map encm dm) (map encm env) (length (SmtProblem_defs_l p)) (st_of s) t\<rangle>)\<close>
 
 lemma enc_args_step_spec:
   assumes IH2: \<open>\<And>p dm env s t. \<Gamma>; g p dm env s t \<Turnstile>\<^sub>F enc_contract k p dm env s t\<close>
@@ -1454,14 +1454,14 @@ lemma enc_args_step_spec:
       INV=\<open>\<lambda>c. \<Squnion>gs sv ge ev gi i. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>sv \<star> es_ref \<mapsto>\<langle>\<top>\<rangle> ge\<down>ev \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star>
            can_alloc_reference \<star>
            \<langle>unat i \<le> length ts \<and>
-            sv = tr_of (fst (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs p)) (st_of s) (take (unat i) ts))) \<and>
-            ev = map enc_of (snd (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs p)) (st_of s) (take (unat i) ts))) \<and>
+            sv = tr_of (fst (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs_l p)) (st_of s) (take (unat i) ts))) \<and>
+            ev = map enc_of (snd (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs_l p)) (st_of s) (take (unat i) ts))) \<and>
             length ts - unat i \<le> c\<rangle>\<close> and
       INV'=\<open>\<lambda>c. \<Squnion>gs sv ge ev gi i. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>sv \<star> es_ref \<mapsto>\<langle>\<top>\<rangle> ge\<down>ev \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star>
            can_alloc_reference \<star>
            \<langle>unat i < length ts \<and>
-            sv = tr_of (fst (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs p)) (st_of s) (take (unat i) ts))) \<and>
-            ev = map enc_of (snd (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs p)) (st_of s) (take (unat i) ts))) \<and>
+            sv = tr_of (fst (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs_l p)) (st_of s) (take (unat i) ts))) \<and>
+            ev = map enc_of (snd (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs_l p)) (st_of s) (take (unat i) ts))) \<and>
             length ts - unat i \<le> Suc c\<rangle>\<close> and
       \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and BRK=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
@@ -1527,8 +1527,8 @@ next
     done
 next
   case (SmtTerm_Def d args)
-  let ?b = \<open>SmtDef_body (SmtProblem_defs p ! unat d)\<close>
-  let ?L = \<open>length (SmtProblem_defs p)\<close>
+  let ?b = \<open>SmtDef_body (SmtProblem_defs_l p ! unat d)\<close>
+  let ?L = \<open>length (SmtProblem_defs_l p)\<close>
   have E: \<open>tres p dm' env' ?L S' ?b = tres p dm' env' (unat d) S' ?b\<close>
     \<open>tbnd p dm' env' ?L S' ?b = tbnd p dm' env' (unat d) S' ?b\<close>
     \<open>dep p ?L ?b = dep p (unat d) ?b\<close>
@@ -1559,12 +1559,12 @@ next
       apply (ucincl_discharge\<open>rule_tac
         INV=\<open>\<lambda>c. \<Squnion>gs sv gt tv gi i. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>sv \<star> ts_ref \<mapsto>\<langle>\<top>\<rangle> gt\<down>tv \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star>
              can_alloc_reference \<star>
-             \<langle>unat i \<le> length args \<and> sv = tr_of (fst (ET (fst (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs p)) (st_of s) args)) (snd (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs p)) (st_of s) args)) (unat i))) \<and>
-              tv = map word_of_nat (snd (ET (fst (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs p)) (st_of s) args)) (snd (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs p)) (st_of s) args)) (unat i))) \<and> length args - unat i \<le> c\<rangle>\<close> and
+             \<langle>unat i \<le> length args \<and> sv = tr_of (fst (ET (fst (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs_l p)) (st_of s) args)) (snd (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs_l p)) (st_of s) args)) (unat i))) \<and>
+              tv = map word_of_nat (snd (ET (fst (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs_l p)) (st_of s) args)) (snd (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs_l p)) (st_of s) args)) (unat i))) \<and> length args - unat i \<le> c\<rangle>\<close> and
         INV'=\<open>\<lambda>c. \<Squnion>gs sv gt tv gi i. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>sv \<star> ts_ref \<mapsto>\<langle>\<top>\<rangle> gt\<down>tv \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star>
              can_alloc_reference \<star>
-             \<langle>unat i < length args \<and> sv = tr_of (fst (ET (fst (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs p)) (st_of s) args)) (snd (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs p)) (st_of s) args)) (unat i))) \<and>
-              tv = map word_of_nat (snd (ET (fst (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs p)) (st_of s) args)) (snd (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs p)) (st_of s) args)) (unat i))) \<and> length args - unat i \<le> Suc c\<rangle>\<close> and
+             \<langle>unat i < length args \<and> sv = tr_of (fst (ET (fst (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs_l p)) (st_of s) args)) (snd (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs_l p)) (st_of s) args)) (unat i))) \<and>
+              tv = map word_of_nat (snd (ET (fst (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs_l p)) (st_of s) args)) (snd (tr_args_m p (map encm dm) (map encm env) (length (SmtProblem_defs_l p)) (st_of s) args)) (unat i))) \<and> length args - unat i \<le> Suc c\<rangle>\<close> and
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and BRK=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         in wp_bounded_while_framedI\<close>)
       apply (crush_base inline: vec_push_def
@@ -1612,12 +1612,12 @@ subsection \<open>\<^verbatim>\<open>tr_problem\<close>\<close>
 text \<open>What \<^verbatim>\<open>tr_problem\<close> needs, for the fuel \<open>F\<close>.\<close>
 definition tr_pre :: \<open>nat \<Rightarrow> SmtProblem \<Rightarrow> bool\<close> where
   \<open>tr_pre F p \<equiv>
-     let ds = SmtProblem_defs p; L = length ds in
-     length (SmtProblem_funs p) < 2 ^ 63 \<and> L < 2 ^ 64 \<and> L \<le> F \<and>
-     length (SmtProblem_asserts p) < 2 ^ 64 \<and> length (SmtProblem_asserts p) \<le> F \<and>
-     (\<forall>d < L. length (SmtDef_params (ds ! d)) < 2 ^ 64 \<and>
-        (SmtDef_params (ds ! d) = [] \<longrightarrow> tok p F d 0 d (SmtDef_body (ds ! d)) \<and> Suc (dep p d (SmtDef_body (ds ! d))) \<le> F)) \<and>
-     (\<forall>t \<in> set (SmtProblem_asserts p). tok p F L 0 L t \<and> Suc (dep p L t) \<le> F) \<and>
+     let ds = SmtProblem_defs_l p; L = length ds in
+     length (SmtProblem_funs_l p) < 2 ^ 63 \<and> L < 2 ^ 64 \<and> L \<le> F \<and>
+     length (SmtProblem_asserts_l p) < 2 ^ 64 \<and> length (SmtProblem_asserts_l p) \<le> F \<and>
+     (\<forall>d < L. length (SmtDef_params_l (ds ! d)) < 2 ^ 64 \<and>
+        (SmtDef_params_l (ds ! d) = [] \<longrightarrow> tok p F d 0 d (SmtDef_body (ds ! d)) \<and> Suc (dep p d (SmtDef_body (ds ! d))) \<le> F)) \<and>
+     (\<forall>t \<in> set (SmtProblem_asserts_l p). tok p F L 0 L t \<and> Suc (dep p L t) \<le> F) \<and>
      bnd (tr_state_m p)\<close>
 
 definition TD :: \<open>SmtProblem \<Rightarrow> nat \<Rightarrow> st \<times> enc_m list\<close> where
@@ -1632,32 +1632,32 @@ lemma TD_Suc: \<open>TD p (Suc j) = tr_defs_step p (TD p j) j\<close>
 lemma TD_len: \<open>length (snd (TD p j)) = j\<close>
   by (induction j) (simp_all add: TD_0 TD_Suc tr_defs_step_def split_def Let_def)
 
-lemma TD_final: \<open>TD p (length (SmtProblem_defs p)) = tr_defs_m p\<close>
+lemma TD_final: \<open>TD p (length (SmtProblem_defs_l p)) = tr_defs_m p\<close>
   by (simp add: TD_def tr_defs_m_def)
 
 definition TA :: \<open>SmtProblem \<Rightarrow> nat \<Rightarrow> st\<close> where
-  \<open>TA p j \<equiv> foldl (tr_asserts_step p (snd (tr_defs_m p))) (fst (tr_defs_m p)) (take j (SmtProblem_asserts p))\<close>
+  \<open>TA p j \<equiv> foldl (tr_asserts_step p (snd (tr_defs_m p))) (fst (tr_defs_m p)) (take j (SmtProblem_asserts_l p))\<close>
 
 lemma TA_0: \<open>TA p 0 = fst (tr_defs_m p)\<close>
   by (simp add: TA_def)
 
-lemma TA_Suc: \<open>j < length (SmtProblem_asserts p) \<Longrightarrow> TA p (Suc j) = tr_asserts_step p (snd (tr_defs_m p)) (TA p j) (SmtProblem_asserts p ! j)\<close>
+lemma TA_Suc: \<open>j < length (SmtProblem_asserts_l p) \<Longrightarrow> TA p (Suc j) = tr_asserts_step p (snd (tr_defs_m p)) (TA p j) (SmtProblem_asserts_l p ! j)\<close>
   by (simp add: TA_def take_Suc_conv_app_nth)
 
-lemma TA_final: \<open>n = length (SmtProblem_asserts p) \<Longrightarrow> TA p n = tr_state_m p\<close>
+lemma TA_final: \<open>n = length (SmtProblem_asserts_l p) \<Longrightarrow> TA p n = tr_state_m p\<close>
   by (simp add: TA_def tr_state_m_def tr_asserts_m_def)
 
 lemma pre_TA: \<open>pre (TA p j) (tr_state_m p)\<close>
 proof -
-  have \<open>tr_state_m p = foldl (tr_asserts_step p (snd (tr_defs_m p))) (TA p j) (drop j (SmtProblem_asserts p))\<close>
+  have \<open>tr_state_m p = foldl (tr_asserts_step p (snd (tr_defs_m p))) (TA p j) (drop j (SmtProblem_asserts_l p))\<close>
     unfolding TA_def tr_state_m_def tr_asserts_m_def by (metis append_take_drop_id foldl_append)
   then show ?thesis using pre_asserts by metis
 qed
 
-lemma pre_TD: \<open>j \<le> length (SmtProblem_defs p) \<Longrightarrow> pre (fst (TD p j)) (tr_state_m p)\<close>
+lemma pre_TD: \<open>j \<le> length (SmtProblem_defs_l p) \<Longrightarrow> pre (fst (TD p j)) (tr_state_m p)\<close>
 proof -
-  assume j: \<open>j \<le> length (SmtProblem_defs p)\<close>
-  have \<open>tr_defs_m p = foldl (tr_defs_step p) (TD p j) [j..<length (SmtProblem_defs p)]\<close>
+  assume j: \<open>j \<le> length (SmtProblem_defs_l p)\<close>
+  have \<open>tr_defs_m p = foldl (tr_defs_step p) (TD p j) [j..<length (SmtProblem_defs_l p)]\<close>
     unfolding TD_def tr_defs_m_def using j by (metis foldl_append upt_add_eq_append' zero_le)
   then have \<open>pre (fst (TD p j)) (fst (tr_defs_m p))\<close> using pre_defs by metis
   moreover have \<open>pre (fst (tr_defs_m p)) (tr_state_m p)\<close> using pre_TA[of p 0] by (simp add: TA_0)
@@ -1665,7 +1665,7 @@ proof -
 qed
 
 lemma TD_facts:
-  assumes P: \<open>tr_pre F p\<close> and j: \<open>j \<le> length (SmtProblem_defs p)\<close>
+  assumes P: \<open>tr_pre F p\<close> and j: \<open>j \<le> length (SmtProblem_defs_l p)\<close>
   shows \<open>bnd (fst (TD p j)) \<and> (\<forall>e \<in> set (snd (TD p j)). ib e)\<close>
   using j
 proof (induction j)
@@ -1675,11 +1675,11 @@ proof (induction j)
   then show ?case by (simp add: TD_0)
 next
   case (Suc j)
-  let ?D = \<open>SmtProblem_defs p ! j\<close>
+  let ?D = \<open>SmtProblem_defs_l p ! j\<close>
   have bS: \<open>bnd (fst (TD p (Suc j)))\<close> using bnd_pre[OF pre_TD[OF Suc.prems]] P by (simp add: tr_pre_def Let_def)
   have I: \<open>\<forall>e \<in> set (snd (TD p j)). ib e\<close> using Suc by simp
   have \<open>\<forall>e \<in> set (snd (TD p (Suc j))). ib e\<close>
-  proof (cases \<open>SmtDef_params ?D = []\<close>)
+  proof (cases \<open>SmtDef_params_l ?D = []\<close>)
     case True
     have t: \<open>tok p F j 0 j (SmtDef_body ?D)\<close> using P Suc.prems True by (simp add: tr_pre_def Let_def)
     let ?r = \<open>tr_term_m p (snd (TD p j)) [] j (fst (TD p j)) (SmtDef_body ?D)\<close>
@@ -1695,41 +1695,41 @@ qed
 
 lemma tr_pre_facts:
   assumes P: \<open>tr_pre F p\<close>
-  shows \<open>length (SmtProblem_funs p) < 2 ^ 63\<close> \<open>length (SmtProblem_defs p) < 2 ^ 64\<close> \<open>length (SmtProblem_defs p) \<le> F\<close>
-    \<open>length (SmtProblem_asserts p) < 2 ^ 64\<close> \<open>length (SmtProblem_asserts p) \<le> F\<close>
-    \<open>\<And>d. d < length (SmtProblem_defs p) \<Longrightarrow> length (SmtDef_params (SmtProblem_defs p ! d)) < 2 ^ 64\<close>
-    \<open>\<And>d. d < length (SmtProblem_defs p) \<Longrightarrow> SmtDef_params (SmtProblem_defs p ! d) = [] \<Longrightarrow>
-        tok p F d 0 (length (SmtProblem_defs p)) (SmtDef_body (SmtProblem_defs p ! d))\<close>
-    \<open>\<And>d. d < length (SmtProblem_defs p) \<Longrightarrow> SmtDef_params (SmtProblem_defs p ! d) = [] \<Longrightarrow>
-        Suc (dep p (length (SmtProblem_defs p)) (SmtDef_body (SmtProblem_defs p ! d))) \<le> F\<close>
-    \<open>\<And>d dm S. d < length (SmtProblem_defs p) \<Longrightarrow> SmtDef_params (SmtProblem_defs p ! d) = [] \<Longrightarrow>
-        tr_term_m p dm [] (length (SmtProblem_defs p)) S (SmtDef_body (SmtProblem_defs p ! d)) =
-        tr_term_m p dm [] d S (SmtDef_body (SmtProblem_defs p ! d))\<close>
-    \<open>\<And>j. j < length (SmtProblem_asserts p) \<Longrightarrow>
-        tok p F (length (SmtProblem_defs p)) 0 (length (SmtProblem_defs p)) (SmtProblem_asserts p ! j)\<close>
-    \<open>\<And>j. j < length (SmtProblem_asserts p) \<Longrightarrow> Suc (dep p (length (SmtProblem_defs p)) (SmtProblem_asserts p ! j)) \<le> F\<close>
+  shows \<open>length (SmtProblem_funs_l p) < 2 ^ 63\<close> \<open>length (SmtProblem_defs_l p) < 2 ^ 64\<close> \<open>length (SmtProblem_defs_l p) \<le> F\<close>
+    \<open>length (SmtProblem_asserts_l p) < 2 ^ 64\<close> \<open>length (SmtProblem_asserts_l p) \<le> F\<close>
+    \<open>\<And>d. d < length (SmtProblem_defs_l p) \<Longrightarrow> length (SmtDef_params_l (SmtProblem_defs_l p ! d)) < 2 ^ 64\<close>
+    \<open>\<And>d. d < length (SmtProblem_defs_l p) \<Longrightarrow> SmtDef_params_l (SmtProblem_defs_l p ! d) = [] \<Longrightarrow>
+        tok p F d 0 (length (SmtProblem_defs_l p)) (SmtDef_body (SmtProblem_defs_l p ! d))\<close>
+    \<open>\<And>d. d < length (SmtProblem_defs_l p) \<Longrightarrow> SmtDef_params_l (SmtProblem_defs_l p ! d) = [] \<Longrightarrow>
+        Suc (dep p (length (SmtProblem_defs_l p)) (SmtDef_body (SmtProblem_defs_l p ! d))) \<le> F\<close>
+    \<open>\<And>d dm S. d < length (SmtProblem_defs_l p) \<Longrightarrow> SmtDef_params_l (SmtProblem_defs_l p ! d) = [] \<Longrightarrow>
+        tr_term_m p dm [] (length (SmtProblem_defs_l p)) S (SmtDef_body (SmtProblem_defs_l p ! d)) =
+        tr_term_m p dm [] d S (SmtDef_body (SmtProblem_defs_l p ! d))\<close>
+    \<open>\<And>j. j < length (SmtProblem_asserts_l p) \<Longrightarrow>
+        tok p F (length (SmtProblem_defs_l p)) 0 (length (SmtProblem_defs_l p)) (SmtProblem_asserts_l p ! j)\<close>
+    \<open>\<And>j. j < length (SmtProblem_asserts_l p) \<Longrightarrow> Suc (dep p (length (SmtProblem_defs_l p)) (SmtProblem_asserts_l p ! j)) \<le> F\<close>
 proof -
   note Q = P[unfolded tr_pre_def Let_def]
-  show \<open>length (SmtProblem_funs p) < 2 ^ 63\<close> \<open>length (SmtProblem_defs p) < 2 ^ 64\<close> \<open>length (SmtProblem_defs p) \<le> F\<close>
-    \<open>length (SmtProblem_asserts p) < 2 ^ 64\<close> \<open>length (SmtProblem_asserts p) \<le> F\<close>
+  show \<open>length (SmtProblem_funs_l p) < 2 ^ 63\<close> \<open>length (SmtProblem_defs_l p) < 2 ^ 64\<close> \<open>length (SmtProblem_defs_l p) \<le> F\<close>
+    \<open>length (SmtProblem_asserts_l p) < 2 ^ 64\<close> \<open>length (SmtProblem_asserts_l p) \<le> F\<close>
     using Q by simp_all
-  show \<open>length (SmtDef_params (SmtProblem_defs p ! d)) < 2 ^ 64\<close> if \<open>d < length (SmtProblem_defs p)\<close> for d
+  show \<open>length (SmtDef_params_l (SmtProblem_defs_l p ! d)) < 2 ^ 64\<close> if \<open>d < length (SmtProblem_defs_l p)\<close> for d
     using Q that by blast
   fix d dm S
-  assume d: \<open>d < length (SmtProblem_defs p)\<close> and e: \<open>SmtDef_params (SmtProblem_defs p ! d) = []\<close>
-  have t: \<open>tok p F d 0 d (SmtDef_body (SmtProblem_defs p ! d))\<close> and u: \<open>Suc (dep p d (SmtDef_body (SmtProblem_defs p ! d))) \<le> F\<close>
+  assume d: \<open>d < length (SmtProblem_defs_l p)\<close> and e: \<open>SmtDef_params_l (SmtProblem_defs_l p ! d) = []\<close>
+  have t: \<open>tok p F d 0 d (SmtDef_body (SmtProblem_defs_l p ! d))\<close> and u: \<open>Suc (dep p d (SmtDef_body (SmtProblem_defs_l p ! d))) \<le> F\<close>
     using Q d e by blast+
-  note I = tok_n_indep(1)[OF t, where n'=\<open>length (SmtProblem_defs p)\<close> and dm=dm and env=\<open>[]\<close> and S=S]
-  show \<open>tok p F d 0 (length (SmtProblem_defs p)) (SmtDef_body (SmtProblem_defs p ! d))\<close>
-    \<open>Suc (dep p (length (SmtProblem_defs p)) (SmtDef_body (SmtProblem_defs p ! d))) \<le> F\<close>
-    \<open>tr_term_m p dm [] (length (SmtProblem_defs p)) S (SmtDef_body (SmtProblem_defs p ! d)) =
-        tr_term_m p dm [] d S (SmtDef_body (SmtProblem_defs p ! d))\<close>
+  note I = tok_n_indep(1)[OF t, where n'=\<open>length (SmtProblem_defs_l p)\<close> and dm=dm and env=\<open>[]\<close> and S=S]
+  show \<open>tok p F d 0 (length (SmtProblem_defs_l p)) (SmtDef_body (SmtProblem_defs_l p ! d))\<close>
+    \<open>Suc (dep p (length (SmtProblem_defs_l p)) (SmtDef_body (SmtProblem_defs_l p ! d))) \<le> F\<close>
+    \<open>tr_term_m p dm [] (length (SmtProblem_defs_l p)) S (SmtDef_body (SmtProblem_defs_l p ! d)) =
+        tr_term_m p dm [] d S (SmtDef_body (SmtProblem_defs_l p ! d))\<close>
     using I d u by simp_all
 next
   note Q = P[unfolded tr_pre_def Let_def]
-  fix j assume j: \<open>j < length (SmtProblem_asserts p)\<close>
-  show \<open>tok p F (length (SmtProblem_defs p)) 0 (length (SmtProblem_defs p)) (SmtProblem_asserts p ! j)\<close>
-    \<open>Suc (dep p (length (SmtProblem_defs p)) (SmtProblem_asserts p ! j)) \<le> F\<close>
+  fix j assume j: \<open>j < length (SmtProblem_asserts_l p)\<close>
+  show \<open>tok p F (length (SmtProblem_defs_l p)) 0 (length (SmtProblem_defs_l p)) (SmtProblem_asserts_l p ! j)\<close>
+    \<open>Suc (dep p (length (SmtProblem_defs_l p)) (SmtProblem_asserts_l p ! j)) \<le> F\<close>
     using Q nth_mem[OF j] by blast+
 qed
 
@@ -1738,85 +1738,85 @@ lemma lw_enc_lit_enc_of: \<open>lw (enc_lit_m (encm (enc_of x))) = lw (enc_lit_m
   by (cases x) (simp_all add: lw_def)
 
 lemma tr_init_tr: \<open>tr_of (fst (TD p 0)) =
-  make_Tr [make_Term (word_of_nat (length (SmtProblem_funs p))) [], make_Term (word_of_nat (length (SmtProblem_funs p)) + 1) []]
-    [make_Atom 0 0, make_Atom 0 1] [make_Clause [make_Lit 1 False]] (word_of_nat (length (SmtProblem_funs p)) + 2)\<close>
+  make_Tr [make_Term (word_of_nat (length (SmtProblem_funs_l p))) [], make_Term (word_of_nat (length (SmtProblem_funs_l p)) + 1) []]
+    [make_Atom 0 0, make_Atom 0 1] [make_Clause [make_Lit 1 False]] (word_of_nat (length (SmtProblem_funs_l p)) + 2)\<close>
   by (simp add: TD_0 init_eq tr_of_def lit_m_def)
 
 lemma TD_step:
-  assumes \<open>tr_pre F p\<close> \<open>d < length (SmtProblem_defs p)\<close>
+  assumes \<open>tr_pre F p\<close> \<open>d < length (SmtProblem_defs_l p)\<close>
   shows \<open>bnd (fst (TD p d))\<close> \<open>map (encm \<circ> enc_of) (snd (TD p d)) = snd (TD p d)\<close>
-    \<open>SmtDef_params (SmtProblem_defs p ! d) = [] \<Longrightarrow>
-       tbnd p (snd (TD p d)) [] (length (SmtProblem_defs p)) (fst (TD p d)) (SmtDef_body (SmtProblem_defs p ! d))\<close>
-    \<open>SmtDef_params (SmtProblem_defs p ! d) = [] \<Longrightarrow> TD p (Suc d) =
-       (fst (tr_term_m p (snd (TD p d)) [] (length (SmtProblem_defs p)) (fst (TD p d)) (SmtDef_body (SmtProblem_defs p ! d))),
-        snd (TD p d) @ [snd (tr_term_m p (snd (TD p d)) [] (length (SmtProblem_defs p)) (fst (TD p d)) (SmtDef_body (SmtProblem_defs p ! d)))])\<close>
-    \<open>SmtDef_params (SmtProblem_defs p ! d) \<noteq> [] \<Longrightarrow> TD p (Suc d) = (fst (TD p d), snd (TD p d) @ [ELit 0 True])\<close>
+    \<open>SmtDef_params_l (SmtProblem_defs_l p ! d) = [] \<Longrightarrow>
+       tbnd p (snd (TD p d)) [] (length (SmtProblem_defs_l p)) (fst (TD p d)) (SmtDef_body (SmtProblem_defs_l p ! d))\<close>
+    \<open>SmtDef_params_l (SmtProblem_defs_l p ! d) = [] \<Longrightarrow> TD p (Suc d) =
+       (fst (tr_term_m p (snd (TD p d)) [] (length (SmtProblem_defs_l p)) (fst (TD p d)) (SmtDef_body (SmtProblem_defs_l p ! d))),
+        snd (TD p d) @ [snd (tr_term_m p (snd (TD p d)) [] (length (SmtProblem_defs_l p)) (fst (TD p d)) (SmtDef_body (SmtProblem_defs_l p ! d)))])\<close>
+    \<open>SmtDef_params_l (SmtProblem_defs_l p ! d) \<noteq> [] \<Longrightarrow> TD p (Suc d) = (fst (TD p d), snd (TD p d) @ [ELit 0 True])\<close>
 proof -
   have F: \<open>bnd (fst (TD p d)) \<and> (\<forall>e \<in> set (snd (TD p d)). ib e)\<close> using TD_facts[OF assms(1) less_imp_le[OF assms(2)]] .
   show \<open>bnd (fst (TD p d))\<close> using F by simp
   show \<open>map (encm \<circ> enc_of) (snd (TD p d)) = snd (TD p d)\<close> using F map_encm_enc_of[of \<open>snd (TD p d)\<close>] by simp
   show e: \<open>TD p (Suc d) =
-       (fst (tr_term_m p (snd (TD p d)) [] (length (SmtProblem_defs p)) (fst (TD p d)) (SmtDef_body (SmtProblem_defs p ! d))),
-        snd (TD p d) @ [snd (tr_term_m p (snd (TD p d)) [] (length (SmtProblem_defs p)) (fst (TD p d)) (SmtDef_body (SmtProblem_defs p ! d)))])\<close>
-    if \<open>SmtDef_params (SmtProblem_defs p ! d) = []\<close>
+       (fst (tr_term_m p (snd (TD p d)) [] (length (SmtProblem_defs_l p)) (fst (TD p d)) (SmtDef_body (SmtProblem_defs_l p ! d))),
+        snd (TD p d) @ [snd (tr_term_m p (snd (TD p d)) [] (length (SmtProblem_defs_l p)) (fst (TD p d)) (SmtDef_body (SmtProblem_defs_l p ! d)))])\<close>
+    if \<open>SmtDef_params_l (SmtProblem_defs_l p ! d) = []\<close>
     using that tr_pre_facts(9)[OF assms(1) assms(2) that] by (simp add: TD_Suc tr_defs_step_def split_def Let_def)
-  show \<open>tbnd p (snd (TD p d)) [] (length (SmtProblem_defs p)) (fst (TD p d)) (SmtDef_body (SmtProblem_defs p ! d))\<close>
-    if \<open>SmtDef_params (SmtProblem_defs p ! d) = []\<close>
+  show \<open>tbnd p (snd (TD p d)) [] (length (SmtProblem_defs_l p)) (fst (TD p d)) (SmtDef_body (SmtProblem_defs_l p ! d))\<close>
+    if \<open>SmtDef_params_l (SmtProblem_defs_l p ! d) = []\<close>
   proof -
     have \<open>bnd (fst (TD p (Suc d)))\<close> using TD_facts[OF assms(1), of \<open>Suc d\<close>] assms(2) Suc_leI by blast
     then show ?thesis using e[OF that] by (simp add: tbnd_def)
   qed
-  show \<open>SmtDef_params (SmtProblem_defs p ! d) \<noteq> [] \<Longrightarrow> TD p (Suc d) = (fst (TD p d), snd (TD p d) @ [ELit 0 True])\<close>
+  show \<open>SmtDef_params_l (SmtProblem_defs_l p ! d) \<noteq> [] \<Longrightarrow> TD p (Suc d) = (fst (TD p d), snd (TD p d) @ [ELit 0 True])\<close>
     by (simp add: TD_Suc tr_defs_step_def split_def)
 qed
 
 lemma TA_step:
-  assumes \<open>tr_pre F p\<close> \<open>j < length (SmtProblem_asserts p)\<close>
+  assumes \<open>tr_pre F p\<close> \<open>j < length (SmtProblem_asserts_l p)\<close>
   shows \<open>bnd (TA p j)\<close> \<open>map (encm \<circ> enc_of) (snd (tr_defs_m p)) = snd (tr_defs_m p)\<close>
-    \<open>tbnd p (snd (tr_defs_m p)) [] (length (SmtProblem_defs p)) (TA p j) (SmtProblem_asserts p ! j)\<close>
-    \<open>TA p (Suc j) = add_clause_m (fst (tr_term_m p (snd (tr_defs_m p)) [] (length (SmtProblem_defs p)) (TA p j) (SmtProblem_asserts p ! j)))
-       [lit_m (fst (enc_lit_m (snd (tr_term_m p (snd (tr_defs_m p)) [] (length (SmtProblem_defs p)) (TA p j) (SmtProblem_asserts p ! j)))))
-              (snd (enc_lit_m (snd (tr_term_m p (snd (tr_defs_m p)) [] (length (SmtProblem_defs p)) (TA p j) (SmtProblem_asserts p ! j)))))]\<close>
+    \<open>tbnd p (snd (tr_defs_m p)) [] (length (SmtProblem_defs_l p)) (TA p j) (SmtProblem_asserts_l p ! j)\<close>
+    \<open>TA p (Suc j) = add_clause_m (fst (tr_term_m p (snd (tr_defs_m p)) [] (length (SmtProblem_defs_l p)) (TA p j) (SmtProblem_asserts_l p ! j)))
+       [lit_m (fst (enc_lit_m (snd (tr_term_m p (snd (tr_defs_m p)) [] (length (SmtProblem_defs_l p)) (TA p j) (SmtProblem_asserts_l p ! j)))))
+              (snd (enc_lit_m (snd (tr_term_m p (snd (tr_defs_m p)) [] (length (SmtProblem_defs_l p)) (TA p j) (SmtProblem_asserts_l p ! j)))))]\<close>
 proof -
   have bq: \<open>bnd (tr_state_m p)\<close> using assms(1) by (simp add: tr_pre_def Let_def)
   show \<open>bnd (TA p j)\<close> by (rule bnd_pre[OF pre_TA bq])
-  have F: \<open>bnd (fst (TD p (length (SmtProblem_defs p)))) \<and> (\<forall>e \<in> set (snd (TD p (length (SmtProblem_defs p)))). ib e)\<close>
+  have F: \<open>bnd (fst (TD p (length (SmtProblem_defs_l p)))) \<and> (\<forall>e \<in> set (snd (TD p (length (SmtProblem_defs_l p)))). ib e)\<close>
     using TD_facts[OF assms(1) order_refl] .
   show \<open>map (encm \<circ> enc_of) (snd (tr_defs_m p)) = snd (tr_defs_m p)\<close>
     using F map_encm_enc_of[of \<open>snd (tr_defs_m p)\<close>] by (simp add: TD_final)
-  show e: \<open>TA p (Suc j) = add_clause_m (fst (tr_term_m p (snd (tr_defs_m p)) [] (length (SmtProblem_defs p)) (TA p j) (SmtProblem_asserts p ! j)))
-       [lit_m (fst (enc_lit_m (snd (tr_term_m p (snd (tr_defs_m p)) [] (length (SmtProblem_defs p)) (TA p j) (SmtProblem_asserts p ! j)))))
-              (snd (enc_lit_m (snd (tr_term_m p (snd (tr_defs_m p)) [] (length (SmtProblem_defs p)) (TA p j) (SmtProblem_asserts p ! j)))))]\<close>
+  show e: \<open>TA p (Suc j) = add_clause_m (fst (tr_term_m p (snd (tr_defs_m p)) [] (length (SmtProblem_defs_l p)) (TA p j) (SmtProblem_asserts_l p ! j)))
+       [lit_m (fst (enc_lit_m (snd (tr_term_m p (snd (tr_defs_m p)) [] (length (SmtProblem_defs_l p)) (TA p j) (SmtProblem_asserts_l p ! j)))))
+              (snd (enc_lit_m (snd (tr_term_m p (snd (tr_defs_m p)) [] (length (SmtProblem_defs_l p)) (TA p j) (SmtProblem_asserts_l p ! j)))))]\<close>
     using assms(2) by (simp add: TA_Suc tr_asserts_step_def Let_def)
   have \<open>bnd (TA p (Suc j))\<close> by (rule bnd_pre[OF pre_TA bq])
-  then show \<open>tbnd p (snd (tr_defs_m p)) [] (length (SmtProblem_defs p)) (TA p j) (SmtProblem_asserts p ! j)\<close>
+  then show \<open>tbnd p (snd (tr_defs_m p)) [] (length (SmtProblem_defs_l p)) (TA p j) (SmtProblem_asserts_l p ! j)\<close>
     unfolding e tbnd_def using bnd_pre[OF pre_add_clause[OF pre_refl]] by blast
 qed
 
-lemma tr_pre_params: \<open>tr_pre F p \<Longrightarrow> d < length (SmtProblem_defs p) \<Longrightarrow>
-  ((word_of_nat (length (SmtDef_params (SmtProblem_defs p ! d))) :: 64 word) = 0) = (SmtDef_params (SmtProblem_defs p ! d) = [])\<close>
+lemma tr_pre_params: \<open>tr_pre F p \<Longrightarrow> d < length (SmtProblem_defs_l p) \<Longrightarrow>
+  ((word_of_nat (length (SmtDef_params_l (SmtProblem_defs_l p ! d))) :: 64 word) = 0) = (SmtDef_params_l (SmtProblem_defs_l p ! d) = [])\<close>
   using tr_pre_facts(6)[of F p d] wn_len_0 by blast
 
-lemma tr_pre_lt: \<open>tr_pre F p \<Longrightarrow> unat (r :: 64 word) < length (SmtProblem_defs p) \<Longrightarrow> unat r < 18446744073709551615\<close>
+lemma tr_pre_lt: \<open>tr_pre F p \<Longrightarrow> unat (r :: 64 word) < length (SmtProblem_defs_l p) \<Longrightarrow> unat r < 18446744073709551615\<close>
   using tr_pre_facts(2)[of F p] by simp
 
-lemma tr_pre_inc: \<open>tr_pre F p \<Longrightarrow> unat (r :: 64 word) < length (SmtProblem_defs p) \<Longrightarrow> unat (r + 1) = Suc (unat r)\<close>
+lemma tr_pre_inc: \<open>tr_pre F p \<Longrightarrow> unat (r :: 64 word) < length (SmtProblem_defs_l p) \<Longrightarrow> unat (r + 1) = Suc (unat r)\<close>
   using tr_pre_lt[of F p r] unat_r1 by blast
 
-lemma tr_pre_lt_a: \<open>tr_pre F p \<Longrightarrow> unat (r :: 64 word) < length (SmtProblem_asserts p) \<Longrightarrow> unat r < 18446744073709551615\<close>
+lemma tr_pre_lt_a: \<open>tr_pre F p \<Longrightarrow> unat (r :: 64 word) < length (SmtProblem_asserts_l p) \<Longrightarrow> unat r < 18446744073709551615\<close>
   using tr_pre_facts(4)[of F p] by simp
 
-lemma tr_pre_inc_a: \<open>tr_pre F p \<Longrightarrow> unat (r :: 64 word) < length (SmtProblem_asserts p) \<Longrightarrow> unat (r + 1) = Suc (unat r)\<close>
+lemma tr_pre_inc_a: \<open>tr_pre F p \<Longrightarrow> unat (r :: 64 word) < length (SmtProblem_asserts_l p) \<Longrightarrow> unat (r + 1) = Suc (unat r)\<close>
   using tr_pre_lt_a[of F p r] unat_r1 by blast
 
-lemma tr_pre_unatL: \<open>tr_pre F p \<Longrightarrow> unat (word_of_nat (length (SmtProblem_defs p)) :: 64 word) = length (SmtProblem_defs p)\<close>
+lemma tr_pre_unatL: \<open>tr_pre F p \<Longrightarrow> unat (word_of_nat (length (SmtProblem_defs_l p)) :: 64 word) = length (SmtProblem_defs_l p)\<close>
   using tr_pre_facts(2)[of F p] by (simp add: unat_of_nat_eq)
 
-lemma tr_pre_unatA: \<open>tr_pre F p \<Longrightarrow> unat (word_of_nat (length (SmtProblem_asserts p)) :: 64 word) = length (SmtProblem_asserts p)\<close>
+lemma tr_pre_unatA: \<open>tr_pre F p \<Longrightarrow> unat (word_of_nat (length (SmtProblem_asserts_l p)) :: 64 word) = length (SmtProblem_asserts_l p)\<close>
   using tr_pre_facts(4)[of F p] by (simp add: unat_of_nat_eq)
 
-lemma len_defs_m: \<open>length (snd (tr_defs_m p)) = length (SmtProblem_defs p)\<close>
-  using TD_len[of p \<open>length (SmtProblem_defs p)\<close>] by (simp add: TD_final)
+lemma len_defs_m: \<open>length (snd (tr_defs_m p)) = length (SmtProblem_defs_l p)\<close>
+  using TD_len[of p \<open>length (SmtProblem_defs_l p)\<close>] by (simp add: TD_final)
 
 definition tr_problem_contract :: \<open>SmtProblem \<Rightarrow> ('s, Problem, 'abort) function_contract\<close> where
   [crush_contracts]: \<open>tr_problem_contract p \<equiv>
@@ -1831,12 +1831,12 @@ lemma tr_problem_spec [crush_specs]:
     apply (ucincl_discharge\<open>rule_tac
       INV=\<open>\<lambda>c. \<Squnion>gs sv gm mv gd d. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>sv \<star> dm_ref \<mapsto>\<langle>\<top>\<rangle> gm\<down>mv \<star> d_ref \<mapsto>\<langle>\<top>\<rangle> gd\<down>d \<star>
            can_alloc_reference \<star>
-           \<langle>unat d \<le> length (SmtProblem_defs p) \<and> sv = tr_of (fst (TD p (unat d))) \<and> mv = map enc_of (snd (TD p (unat d))) \<and>
-            length (SmtProblem_defs p) - unat d \<le> c\<rangle>\<close> and
+           \<langle>unat d \<le> length (SmtProblem_defs_l p) \<and> sv = tr_of (fst (TD p (unat d))) \<and> mv = map enc_of (snd (TD p (unat d))) \<and>
+            length (SmtProblem_defs_l p) - unat d \<le> c\<rangle>\<close> and
       INV'=\<open>\<lambda>c. \<Squnion>gs sv gm mv gd d. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>sv \<star> dm_ref \<mapsto>\<langle>\<top>\<rangle> gm\<down>mv \<star> d_ref \<mapsto>\<langle>\<top>\<rangle> gd\<down>d \<star>
            can_alloc_reference \<star>
-           \<langle>unat d < length (SmtProblem_defs p) \<and> sv = tr_of (fst (TD p (unat d))) \<and> mv = map enc_of (snd (TD p (unat d))) \<and>
-            length (SmtProblem_defs p) - unat d \<le> Suc c\<rangle>\<close> and
+           \<langle>unat d < length (SmtProblem_defs_l p) \<and> sv = tr_of (fst (TD p (unat d))) \<and> mv = map enc_of (snd (TD p (unat d))) \<and>
+            length (SmtProblem_defs_l p) - unat d \<le> Suc c\<rangle>\<close> and
       \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and BRK=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
     apply (crush_base inline: vec_push_def simp add: word_less_nat_alt unat_of_nat_eq unat_plus_one_of_less_bound tr_init_tr
@@ -1846,12 +1846,12 @@ lemma tr_problem_spec [crush_specs]:
     apply (simp_all add: tr_pre_facts(7)[of urust_fuel p] tr_pre_facts(8)[of urust_fuel p] tr_pre_unatL[of urust_fuel p])
     subgoal for gs gm gd d j_ref
       apply (ucincl_discharge\<open>rule_tac
-        INV=\<open>\<lambda>c. \<Squnion>gs sv gm gj j. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>sv \<star> dm_ref \<mapsto>\<langle>\<top>\<rangle> gm\<down>(map enc_of (snd (TD p (length (SmtProblem_defs p))))) \<star>
+        INV=\<open>\<lambda>c. \<Squnion>gs sv gm gj j. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>sv \<star> dm_ref \<mapsto>\<langle>\<top>\<rangle> gm\<down>(map enc_of (snd (TD p (length (SmtProblem_defs_l p))))) \<star>
              j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference \<star>
-             \<langle>unat j \<le> length (SmtProblem_asserts p) \<and> sv = tr_of (TA p (unat j)) \<and> length (SmtProblem_asserts p) - unat j \<le> c\<rangle>\<close> and
-        INV'=\<open>\<lambda>c. \<Squnion>gs sv gm gj j. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>sv \<star> dm_ref \<mapsto>\<langle>\<top>\<rangle> gm\<down>(map enc_of (snd (TD p (length (SmtProblem_defs p))))) \<star>
+             \<langle>unat j \<le> length (SmtProblem_asserts_l p) \<and> sv = tr_of (TA p (unat j)) \<and> length (SmtProblem_asserts_l p) - unat j \<le> c\<rangle>\<close> and
+        INV'=\<open>\<lambda>c. \<Squnion>gs sv gm gj j. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>sv \<star> dm_ref \<mapsto>\<langle>\<top>\<rangle> gm\<down>(map enc_of (snd (TD p (length (SmtProblem_defs_l p))))) \<star>
              j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference \<star>
-             \<langle>unat j < length (SmtProblem_asserts p) \<and> sv = tr_of (TA p (unat j)) \<and> length (SmtProblem_asserts p) - unat j \<le> Suc c\<rangle>\<close> and
+             \<langle>unat j < length (SmtProblem_asserts_l p) \<and> sv = tr_of (TA p (unat j)) \<and> length (SmtProblem_asserts_l p) - unat j \<le> Suc c\<rangle>\<close> and
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and BRK=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         in wp_bounded_while_framedI\<close>)
       apply (crush_base simp add: word_less_nat_alt tr_pre_inc_a[of urust_fuel p] tr_pre_lt_a[of urust_fuel p]
@@ -1898,14 +1898,14 @@ lemma wn0_iff: \<open>n < 2 ^ 64 \<Longrightarrow> ((word_of_nat n :: 64 word) =
   done
 
 lemma cv_some:
-  \<open>i < length (Model_entries m) \<Longrightarrow> Entry_fun (Model_entries m ! i) = f \<Longrightarrow> Entry_args (Model_entries m ! i) = [] \<Longrightarrow>
-   \<forall>j < i. Entry_fun (Model_entries m ! j) = f \<longrightarrow> Entry_args (Model_entries m ! j) \<noteq> [] \<Longrightarrow>
-   const_value_m m (unat f) = unat (Entry_val (Model_entries m ! i))\<close>
+  \<open>i < length (Model_entries_l m) \<Longrightarrow> Entry_fun (Model_entries_l m ! i) = f \<Longrightarrow> Entry_args_l (Model_entries_l m ! i) = [] \<Longrightarrow>
+   \<forall>j < i. Entry_fun (Model_entries_l m ! j) = f \<longrightarrow> Entry_args_l (Model_entries_l m ! j) \<noteq> [] \<Longrightarrow>
+   const_value_m m (unat f) = unat (Entry_val (Model_entries_l m ! i))\<close>
   unfolding const_value_m_def
   by (subst find_first[of i]) (auto simp: word_unat_eq_iff[symmetric])
 
 lemma cv_none:
-  \<open>\<forall>j < length (Model_entries m). Entry_fun (Model_entries m ! j) = f \<longrightarrow> Entry_args (Model_entries m ! j) \<noteq> [] \<Longrightarrow>
+  \<open>\<forall>j < length (Model_entries_l m). Entry_fun (Model_entries_l m ! j) = f \<longrightarrow> Entry_args_l (Model_entries_l m ! j) \<noteq> [] \<Longrightarrow>
    const_value_m m (unat f) = 0\<close>
   unfolding const_value_m_def
   by (subst find_none) (auto simp: word_unat_eq_iff[symmetric])
@@ -1914,8 +1914,8 @@ definition const_value_contract :: \<open>Model \<Rightarrow> 64 word \<Rightarr
   [crush_contracts]: \<open>const_value_contract m f \<equiv>
      make_function_contract
        (can_alloc_reference \<star>
-        \<langle>length (Model_entries m) < 2 ^ 64 \<and> length (Model_entries m) \<le> urust_fuel \<and>
-         (\<forall>e \<in> set (Model_entries m). length (Entry_args e) < 2 ^ 64)\<rangle>)
+        \<langle>length (Model_entries_l m) < 2 ^ 64 \<and> length (Model_entries_l m) \<le> urust_fuel \<and>
+         (\<forall>e \<in> set (Model_entries_l m). length (Entry_args_l e) < 2 ^ 64)\<rangle>)
        (\<lambda>r. can_alloc_reference \<star> \<langle>unat r = const_value_m m (unat f)\<rangle>)\<close>
 
 lemma const_value_spec [crush_specs]:
@@ -1925,32 +1925,32 @@ lemma const_value_spec [crush_specs]:
   subgoal for i_ref
     apply (ucincl_discharge\<open>rule_tac
       INV=\<open>\<lambda>c. \<Squnion>gi i. i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
-           \<langle>unat i \<le> length (Model_entries m) \<and>
-            (\<forall>j < unat i. \<not> (unat (Entry_fun (Model_entries m ! j)) = unat f \<and> Entry_args (Model_entries m ! j) = [])) \<and>
-            length (Model_entries m) - unat i \<le> c\<rangle>\<close> and
+           \<langle>unat i \<le> length (Model_entries_l m) \<and>
+            (\<forall>j < unat i. \<not> (unat (Entry_fun (Model_entries_l m ! j)) = unat f \<and> Entry_args_l (Model_entries_l m ! j) = [])) \<and>
+            length (Model_entries_l m) - unat i \<le> c\<rangle>\<close> and
       INV'=\<open>\<lambda>c. \<Squnion>gi i. i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
-           \<langle>unat i < length (Model_entries m) \<and>
-            (\<forall>j < unat i. \<not> (unat (Entry_fun (Model_entries m ! j)) = unat f \<and> Entry_args (Model_entries m ! j) = [])) \<and>
-            length (Model_entries m) - unat i \<le> Suc c\<rangle>\<close> and
+           \<langle>unat i < length (Model_entries_l m) \<and>
+            (\<forall>j < unat i. \<not> (unat (Entry_fun (Model_entries_l m ! j)) = unat f \<and> Entry_args_l (Model_entries_l m ! j) = [])) \<and>
+            length (Model_entries_l m) - unat i \<le> Suc c\<rangle>\<close> and
       \<tau>=\<open>\<lambda>r. (\<Squnion>gi i. i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i) \<star> can_alloc_reference \<star> \<langle>unat r = const_value_m m (unat f)\<rangle>\<close> and
       \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and BRK=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
     apply (crush_base simp add: word_less_nat_alt)
-    apply (auto simp: unat_of_nat_eq wn0_iff unat_plus_one_of_less_bound[where n=\<open>length (Model_entries m)\<close>] less_Suc_eq intro: cv_some cv_none)
+    apply (auto simp: unat_of_nat_eq wn0_iff unat_plus_one_of_less_bound[where n=\<open>length (Model_entries_l m)\<close>] less_Suc_eq intro: cv_some cv_none)
     apply (rule cv_some[symmetric]; simp)
     done
   done
 
 definition DS :: \<open>Entry list \<Rightarrow> nat\<close> where
-  \<open>DS es \<equiv> foldl (\<lambda>n e. foldl dsize_step (dsize_step n (Entry_val e)) (Entry_args e)) 1 es\<close>
+  \<open>DS es \<equiv> foldl (\<lambda>n e. foldl dsize_step (dsize_step n (Entry_val e)) (Entry_args_l e)) 1 es\<close>
 
 lemma DS_0: \<open>DS [] = 1\<close>
   by (simp add: DS_def)
 
-lemma DS_snoc: \<open>DS (es @ [e]) = foldl dsize_step (dsize_step (DS es) (Entry_val e)) (Entry_args e)\<close>
+lemma DS_snoc: \<open>DS (es @ [e]) = foldl dsize_step (dsize_step (DS es) (Entry_val e)) (Entry_args_l e)\<close>
   by (simp add: DS_def)
 
-lemma domain_size_DS: \<open>domain_size_m m = DS (Model_entries m)\<close>
+lemma domain_size_DS: \<open>domain_size_m m = DS (Model_entries_l m)\<close>
   by (simp add: domain_size_m_def DS_def)
 
 lemma unat_inc63: \<open>unat (x :: 64 word) < 2 ^ 63 \<Longrightarrow> unat (x + 1) = Suc (unat x)\<close>
@@ -1960,9 +1960,9 @@ definition domain_size_contract :: \<open>Model \<Rightarrow> ('s, 64 word, 'abo
   [crush_contracts]: \<open>domain_size_contract m \<equiv>
      make_function_contract
        (can_alloc_reference \<star>
-        \<langle>length (Model_entries m) < 2 ^ 64 \<and> length (Model_entries m) \<le> urust_fuel \<and>
-         (\<forall>e \<in> set (Model_entries m). length (Entry_args e) < 2 ^ 64 \<and> length (Entry_args e) \<le> urust_fuel \<and>
-            unat (Entry_val e) < 2 ^ 63 \<and> (\<forall>x \<in> set (Entry_args e). unat x < 2 ^ 63))\<rangle>)
+        \<langle>length (Model_entries_l m) < 2 ^ 64 \<and> length (Model_entries_l m) \<le> urust_fuel \<and>
+         (\<forall>e \<in> set (Model_entries_l m). length (Entry_args_l e) < 2 ^ 64 \<and> length (Entry_args_l e) \<le> urust_fuel \<and>
+            unat (Entry_val e) < 2 ^ 63 \<and> (\<forall>x \<in> set (Entry_args_l e). unat x < 2 ^ 63))\<rangle>)
        (\<lambda>r. can_alloc_reference \<star> \<langle>unat r = domain_size_m m\<rangle>)\<close>
 
 lemma domain_size_spec [crush_specs]:
@@ -1972,58 +1972,58 @@ lemma domain_size_spec [crush_specs]:
   subgoal for n_ref i_ref
     apply (ucincl_discharge\<open>rule_tac
       INV=\<open>\<lambda>c. \<Squnion>gn n gi i. n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
-           \<langle>unat i \<le> length (Model_entries m) \<and> unat n = DS (take (unat i) (Model_entries m)) \<and>
-            length (Model_entries m) - unat i \<le> c\<rangle>\<close> and
+           \<langle>unat i \<le> length (Model_entries_l m) \<and> unat n = DS (take (unat i) (Model_entries_l m)) \<and>
+            length (Model_entries_l m) - unat i \<le> c\<rangle>\<close> and
       INV'=\<open>\<lambda>c. \<Squnion>gn n gi i. n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
-           \<langle>unat i < length (Model_entries m) \<and> unat n = DS (take (unat i) (Model_entries m)) \<and>
-            length (Model_entries m) - unat i \<le> Suc c\<rangle>\<close> and
+           \<langle>unat i < length (Model_entries_l m) \<and> unat n = DS (take (unat i) (Model_entries_l m)) \<and>
+            length (Model_entries_l m) - unat i \<le> Suc c\<rangle>\<close> and
       \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and BRK=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
     apply (crush_base simp add: word_less_nat_alt word_le_nat_alt unat_of_nat_eq unat_plus_one_of_less_bound DS_0)
     subgoal for k gn gi r ra x
       apply (ucincl_discharge\<open>rule_tac
         INV=\<open>\<lambda>c. \<Squnion>gn n gi gk kk. n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>r \<star> x \<mapsto>\<langle>\<top>\<rangle> gk\<down>kk \<star> can_alloc_reference \<star>
-           \<langle>unat kk \<le> length (Entry_args (Model_entries m ! unat r)) \<and>
-            unat n = foldl dsize_step (dsize_step (DS (take (unat r) (Model_entries m))) (Entry_val (Model_entries m ! unat r)))
-              (take (unat kk) (Entry_args (Model_entries m ! unat r))) \<and>
-            length (Entry_args (Model_entries m ! unat r)) - unat kk \<le> c\<rangle>\<close> and
+           \<langle>unat kk \<le> length (Entry_args_l (Model_entries_l m ! unat r)) \<and>
+            unat n = foldl dsize_step (dsize_step (DS (take (unat r) (Model_entries_l m))) (Entry_val (Model_entries_l m ! unat r)))
+              (take (unat kk) (Entry_args_l (Model_entries_l m ! unat r))) \<and>
+            length (Entry_args_l (Model_entries_l m ! unat r)) - unat kk \<le> c\<rangle>\<close> and
         INV'=\<open>\<lambda>c. \<Squnion>gn n gi gk kk. n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>r \<star> x \<mapsto>\<langle>\<top>\<rangle> gk\<down>kk \<star> can_alloc_reference \<star>
-           \<langle>unat kk < length (Entry_args (Model_entries m ! unat r)) \<and>
-            unat n = foldl dsize_step (dsize_step (DS (take (unat r) (Model_entries m))) (Entry_val (Model_entries m ! unat r)))
-              (take (unat kk) (Entry_args (Model_entries m ! unat r))) \<and>
-            length (Entry_args (Model_entries m ! unat r)) - unat kk \<le> Suc c\<rangle>\<close> and
+           \<langle>unat kk < length (Entry_args_l (Model_entries_l m ! unat r)) \<and>
+            unat n = foldl dsize_step (dsize_step (DS (take (unat r) (Model_entries_l m))) (Entry_val (Model_entries_l m ! unat r)))
+              (take (unat kk) (Entry_args_l (Model_entries_l m ! unat r))) \<and>
+            length (Entry_args_l (Model_entries_l m ! unat r)) - unat kk \<le> Suc c\<rangle>\<close> and
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and BRK=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         in wp_bounded_while_framedI\<close>)
       apply (crush_base simp add: word_less_nat_alt word_le_nat_alt unat_of_nat_eq unat_plus_one_of_less_bound
           dsize_step_def take_Suc_conv_app_nth DS_snoc)
-      subgoal using nth_mem[of \<open>unat r\<close> \<open>Model_entries m\<close>] by (fastforce intro: unat_inc63 nth_mem)
-      subgoal using nth_mem[of \<open>unat r\<close> \<open>Model_entries m\<close>] by (fastforce intro: unat_inc63 nth_mem)
-      subgoal using nth_mem[of \<open>unat r\<close> \<open>Model_entries m\<close>] by (fastforce intro: unat_inc63 nth_mem)
-      subgoal for ka gna gia gk raa rb using nth_mem[of \<open>unat r\<close> \<open>Model_entries m\<close>] nth_mem[of \<open>unat rb\<close> \<open>Entry_args (Model_entries m ! unat r)\<close>] by fastforce
+      subgoal using nth_mem[of \<open>unat r\<close> \<open>Model_entries_l m\<close>] by (fastforce intro: unat_inc63 nth_mem)
+      subgoal using nth_mem[of \<open>unat r\<close> \<open>Model_entries_l m\<close>] by (fastforce intro: unat_inc63 nth_mem)
+      subgoal using nth_mem[of \<open>unat r\<close> \<open>Model_entries_l m\<close>] by (fastforce intro: unat_inc63 nth_mem)
+      subgoal for ka gna gia gk raa rb using nth_mem[of \<open>unat r\<close> \<open>Model_entries_l m\<close>] nth_mem[of \<open>unat rb\<close> \<open>Entry_args_l (Model_entries_l m ! unat r)\<close>] by fastforce
       done
     subgoal for k gn gi ra r x
       apply (ucincl_discharge\<open>rule_tac
         INV=\<open>\<lambda>c. \<Squnion>gn n gi gk kk. n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>r \<star> x \<mapsto>\<langle>\<top>\<rangle> gk\<down>kk \<star> can_alloc_reference \<star>
-           \<langle>unat kk \<le> length (Entry_args (Model_entries m ! unat r)) \<and>
-            unat n = foldl dsize_step (dsize_step (DS (take (unat r) (Model_entries m))) (Entry_val (Model_entries m ! unat r)))
-              (take (unat kk) (Entry_args (Model_entries m ! unat r))) \<and>
-            length (Entry_args (Model_entries m ! unat r)) - unat kk \<le> c\<rangle>\<close> and
+           \<langle>unat kk \<le> length (Entry_args_l (Model_entries_l m ! unat r)) \<and>
+            unat n = foldl dsize_step (dsize_step (DS (take (unat r) (Model_entries_l m))) (Entry_val (Model_entries_l m ! unat r)))
+              (take (unat kk) (Entry_args_l (Model_entries_l m ! unat r))) \<and>
+            length (Entry_args_l (Model_entries_l m ! unat r)) - unat kk \<le> c\<rangle>\<close> and
         INV'=\<open>\<lambda>c. \<Squnion>gn n gi gk kk. n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>r \<star> x \<mapsto>\<langle>\<top>\<rangle> gk\<down>kk \<star> can_alloc_reference \<star>
-           \<langle>unat kk < length (Entry_args (Model_entries m ! unat r)) \<and>
-            unat n = foldl dsize_step (dsize_step (DS (take (unat r) (Model_entries m))) (Entry_val (Model_entries m ! unat r)))
-              (take (unat kk) (Entry_args (Model_entries m ! unat r))) \<and>
-            length (Entry_args (Model_entries m ! unat r)) - unat kk \<le> Suc c\<rangle>\<close> and
+           \<langle>unat kk < length (Entry_args_l (Model_entries_l m ! unat r)) \<and>
+            unat n = foldl dsize_step (dsize_step (DS (take (unat r) (Model_entries_l m))) (Entry_val (Model_entries_l m ! unat r)))
+              (take (unat kk) (Entry_args_l (Model_entries_l m ! unat r))) \<and>
+            length (Entry_args_l (Model_entries_l m ! unat r)) - unat kk \<le> Suc c\<rangle>\<close> and
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and BRK=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         in wp_bounded_while_framedI\<close>)
       apply (crush_base simp add: word_less_nat_alt word_le_nat_alt unat_of_nat_eq unat_plus_one_of_less_bound
           dsize_step_def take_Suc_conv_app_nth DS_snoc)
-      subgoal for ka gna gia gk raa rb using nth_mem[of \<open>unat r\<close> \<open>Model_entries m\<close>] nth_mem[of \<open>unat rb\<close> \<open>Entry_args (Model_entries m ! unat r)\<close>] by (fastforce intro: unat_inc63)
-      subgoal for ka gna gia gk raa rb using nth_mem[of \<open>unat r\<close> \<open>Model_entries m\<close>] nth_mem[of \<open>unat rb\<close> \<open>Entry_args (Model_entries m ! unat r)\<close>] by (fastforce intro: unat_inc63)
-      subgoal for ka gna gia gk raa rb using nth_mem[of \<open>unat r\<close> \<open>Model_entries m\<close>] nth_mem[of \<open>unat rb\<close> \<open>Entry_args (Model_entries m ! unat r)\<close>] by (fastforce intro: unat_inc63)
-      subgoal for ka gna gia gk raa rb using nth_mem[of \<open>unat r\<close> \<open>Model_entries m\<close>] nth_mem[of \<open>unat rb\<close> \<open>Entry_args (Model_entries m ! unat r)\<close>] by (fastforce intro: unat_inc63)
-      subgoal using nth_mem[of \<open>unat r\<close> \<open>Model_entries m\<close>] by (fastforce intro: unat_inc63)
+      subgoal for ka gna gia gk raa rb using nth_mem[of \<open>unat r\<close> \<open>Model_entries_l m\<close>] nth_mem[of \<open>unat rb\<close> \<open>Entry_args_l (Model_entries_l m ! unat r)\<close>] by (fastforce intro: unat_inc63)
+      subgoal for ka gna gia gk raa rb using nth_mem[of \<open>unat r\<close> \<open>Model_entries_l m\<close>] nth_mem[of \<open>unat rb\<close> \<open>Entry_args_l (Model_entries_l m ! unat r)\<close>] by (fastforce intro: unat_inc63)
+      subgoal for ka gna gia gk raa rb using nth_mem[of \<open>unat r\<close> \<open>Model_entries_l m\<close>] nth_mem[of \<open>unat rb\<close> \<open>Entry_args_l (Model_entries_l m ! unat r)\<close>] by (fastforce intro: unat_inc63)
+      subgoal for ka gna gia gk raa rb using nth_mem[of \<open>unat r\<close> \<open>Model_entries_l m\<close>] nth_mem[of \<open>unat rb\<close> \<open>Entry_args_l (Model_entries_l m ! unat r)\<close>] by (fastforce intro: unat_inc63)
+      subgoal using nth_mem[of \<open>unat r\<close> \<open>Model_entries_l m\<close>] by (fastforce intro: unat_inc63)
       done
-    subgoal for k gn gi ra rb using nth_mem[of \<open>unat rb\<close> \<open>Model_entries m\<close>] by fastforce
+    subgoal for k gn gi ra rb using nth_mem[of \<open>unat rb\<close> \<open>Model_entries_l m\<close>] by fastforce
     by (simp add: domain_size_DS)
   done
 
@@ -2042,9 +2042,9 @@ definition tr_interp_contract :: \<open>SmtProblem \<Rightarrow> Model \<Rightar
   [crush_contracts]: \<open>tr_interp_contract p m f t u \<equiv>
      make_function_contract
        (can_alloc_reference \<star>
-        \<langle>unat f < length (SmtProblem_funs p) \<and> length (SmtFun_args (SmtProblem_funs p ! unat f)) < 2 ^ 64 \<and>
-         length (Model_entries m) < 2 ^ 64 \<and> length (Model_entries m) \<le> urust_fuel \<and>
-         (\<forall>e \<in> set (Model_entries m). length (Entry_args e) < 2 ^ 64 \<and> length (Entry_args e) \<le> urust_fuel)\<rangle>)
+        \<langle>unat f < length (SmtProblem_funs_l p) \<and> length (SmtFun_args_l (SmtProblem_funs_l p ! unat f)) < 2 ^ 64 \<and>
+         length (Model_entries_l m) < 2 ^ 64 \<and> length (Model_entries_l m) \<le> urust_fuel \<and>
+         (\<forall>e \<in> set (Model_entries_l m). length (Entry_args_l e) < 2 ^ 64 \<and> length (Entry_args_l e) \<le> urust_fuel)\<rangle>)
        (\<lambda>r. can_alloc_reference \<star> \<langle>r = tr_interp_m p m (unat f) (unat t) (unat u)\<rangle>)\<close>
 
 lemma tr_interp_spec [crush_specs]:
@@ -2054,13 +2054,13 @@ lemma tr_interp_spec [crush_specs]:
   subgoal for es_ref i_ref
     apply (ucincl_discharge\<open>rule_tac
       INV=\<open>\<lambda>c. \<Squnion>ge ev gi i. es_ref \<mapsto>\<langle>\<top>\<rangle> ge\<down>ev \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
-           \<langle>unat i \<le> length (Model_entries m) \<and>
-            ev = map (tr_entry_m (SmtProblem_funs p ! unat f) (unat t)) (filter (entry_ok_m (SmtProblem_funs p ! unat f) (unat f) (unat t) (unat u)) (take (unat i) (Model_entries m))) \<and>
-            length (Model_entries m) - unat i \<le> c\<rangle>\<close> and
+           \<langle>unat i \<le> length (Model_entries_l m) \<and>
+            ev = map (tr_entry_m (SmtProblem_funs_l p ! unat f) (unat t)) (filter (entry_ok_m (SmtProblem_funs_l p ! unat f) (unat f) (unat t) (unat u)) (take (unat i) (Model_entries_l m))) \<and>
+            length (Model_entries_l m) - unat i \<le> c\<rangle>\<close> and
       INV'=\<open>\<lambda>c. \<Squnion>ge ev gi i. es_ref \<mapsto>\<langle>\<top>\<rangle> ge\<down>ev \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
-           \<langle>unat i < length (Model_entries m) \<and>
-            ev = map (tr_entry_m (SmtProblem_funs p ! unat f) (unat t)) (filter (entry_ok_m (SmtProblem_funs p ! unat f) (unat f) (unat t) (unat u)) (take (unat i) (Model_entries m))) \<and>
-            length (Model_entries m) - unat i \<le> Suc c\<rangle>\<close> and
+           \<langle>unat i < length (Model_entries_l m) \<and>
+            ev = map (tr_entry_m (SmtProblem_funs_l p ! unat f) (unat t)) (filter (entry_ok_m (SmtProblem_funs_l p ! unat f) (unat f) (unat t) (unat u)) (take (unat i) (Model_entries_l m))) \<and>
+            length (Model_entries_l m) - unat i \<le> Suc c\<rangle>\<close> and
       \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and BRK=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
     apply (crush_base inline: vec_push_def simp add: word_less_nat_alt)
@@ -2069,33 +2069,33 @@ lemma tr_interp_spec [crush_specs]:
       apply (ucincl_discharge\<open>rule_tac
         INV=\<open>\<lambda>c. \<Squnion>gk kk go ok ga av. k_ref \<mapsto>\<langle>\<top>\<rangle> gk\<down>kk \<star> ok_ref \<mapsto>\<langle>\<top>\<rangle> go\<down>ok \<star> as_ref \<mapsto>\<langle>\<top>\<rangle> ga\<down>av \<star>
            can_alloc_reference \<star>
-           \<langle>unat kk \<le> length (Entry_args (Model_entries m ! unat r)) \<and>
-            length (Entry_args (Model_entries m ! unat r)) =
-              length (SmtFun_args (SmtProblem_funs p ! unat (Entry_fun (Model_entries m ! unat r)))) \<and>
-            ok = (\<forall>j < unat kk. SmtFun_args (SmtProblem_funs p ! unat (Entry_fun (Model_entries m ! unat r))) ! j = SmtSort_Bool \<longrightarrow>
-                    Entry_args (Model_entries m ! unat r) ! j = t \<or> Entry_args (Model_entries m ! unat r) ! j = u) \<and>
-            av = map (\<lambda>j. value_of_m (SmtFun_args (SmtProblem_funs p ! unat (Entry_fun (Model_entries m ! unat r))) ! j)
-                    (unat (Entry_args (Model_entries m ! unat r) ! j)) (unat t)) [0..<unat kk] \<and>
-            length (Entry_args (Model_entries m ! unat r)) - unat kk \<le> c\<rangle>\<close> and
+           \<langle>unat kk \<le> length (Entry_args_l (Model_entries_l m ! unat r)) \<and>
+            length (Entry_args_l (Model_entries_l m ! unat r)) =
+              length (SmtFun_args_l (SmtProblem_funs_l p ! unat (Entry_fun (Model_entries_l m ! unat r)))) \<and>
+            ok = (\<forall>j < unat kk. SmtFun_args_l (SmtProblem_funs_l p ! unat (Entry_fun (Model_entries_l m ! unat r))) ! j = SmtSort_Bool \<longrightarrow>
+                    Entry_args_l (Model_entries_l m ! unat r) ! j = t \<or> Entry_args_l (Model_entries_l m ! unat r) ! j = u) \<and>
+            av = map (\<lambda>j. value_of_m (SmtFun_args_l (SmtProblem_funs_l p ! unat (Entry_fun (Model_entries_l m ! unat r))) ! j)
+                    (unat (Entry_args_l (Model_entries_l m ! unat r) ! j)) (unat t)) [0..<unat kk] \<and>
+            length (Entry_args_l (Model_entries_l m ! unat r)) - unat kk \<le> c\<rangle>\<close> and
         INV'=\<open>\<lambda>c. \<Squnion>gk kk go ok ga av. k_ref \<mapsto>\<langle>\<top>\<rangle> gk\<down>kk \<star> ok_ref \<mapsto>\<langle>\<top>\<rangle> go\<down>ok \<star> as_ref \<mapsto>\<langle>\<top>\<rangle> ga\<down>av \<star>
            can_alloc_reference \<star>
-           \<langle>unat kk < length (Entry_args (Model_entries m ! unat r)) \<and>
-            length (Entry_args (Model_entries m ! unat r)) =
-              length (SmtFun_args (SmtProblem_funs p ! unat (Entry_fun (Model_entries m ! unat r)))) \<and>
-            ok = (\<forall>j < unat kk. SmtFun_args (SmtProblem_funs p ! unat (Entry_fun (Model_entries m ! unat r))) ! j = SmtSort_Bool \<longrightarrow>
-                    Entry_args (Model_entries m ! unat r) ! j = t \<or> Entry_args (Model_entries m ! unat r) ! j = u) \<and>
-            av = map (\<lambda>j. value_of_m (SmtFun_args (SmtProblem_funs p ! unat (Entry_fun (Model_entries m ! unat r))) ! j)
-                    (unat (Entry_args (Model_entries m ! unat r) ! j)) (unat t)) [0..<unat kk] \<and>
-            length (Entry_args (Model_entries m ! unat r)) - unat kk \<le> Suc c\<rangle>\<close> and
+           \<langle>unat kk < length (Entry_args_l (Model_entries_l m ! unat r)) \<and>
+            length (Entry_args_l (Model_entries_l m ! unat r)) =
+              length (SmtFun_args_l (SmtProblem_funs_l p ! unat (Entry_fun (Model_entries_l m ! unat r)))) \<and>
+            ok = (\<forall>j < unat kk. SmtFun_args_l (SmtProblem_funs_l p ! unat (Entry_fun (Model_entries_l m ! unat r))) ! j = SmtSort_Bool \<longrightarrow>
+                    Entry_args_l (Model_entries_l m ! unat r) ! j = t \<or> Entry_args_l (Model_entries_l m ! unat r) ! j = u) \<and>
+            av = map (\<lambda>j. value_of_m (SmtFun_args_l (SmtProblem_funs_l p ! unat (Entry_fun (Model_entries_l m ! unat r))) ! j)
+                    (unat (Entry_args_l (Model_entries_l m ! unat r) ! j)) (unat t)) [0..<unat kk] \<and>
+            length (Entry_args_l (Model_entries_l m ! unat r)) - unat kk \<le> Suc c\<rangle>\<close> and
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and BRK=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         in wp_bounded_while_framedI\<close>)
       apply (crush_base inline: vec_push_def SmtEntry_mk_def simp add: word_less_nat_alt split: SmtSort.splits)
-      apply (insert nth_mem[of \<open>unat r\<close> \<open>Model_entries m\<close>])
-      apply (auto simp: unat_plus_one_of_less_bound[where n=\<open>length (SmtFun_args (SmtProblem_funs p ! unat (Entry_fun (Model_entries m ! unat r))))\<close>]
-          unat_plus_one_of_less_bound[where n=\<open>length (Model_entries m)\<close>] less_Suc_eq word_unat.Rep_inverse unat_of_nat_eq
+      apply (insert nth_mem[of \<open>unat r\<close> \<open>Model_entries_l m\<close>])
+      apply (auto simp: unat_plus_one_of_less_bound[where n=\<open>length (SmtFun_args_l (SmtProblem_funs_l p ! unat (Entry_fun (Model_entries_l m ! unat r))))\<close>]
+          unat_plus_one_of_less_bound[where n=\<open>length (Model_entries_l m)\<close>] less_Suc_eq word_unat.Rep_inverse unat_of_nat_eq
           take_Suc_conv_app_nth entry_ok_m_def tr_entry_m_def word_unat_eq_iff[symmetric] wn_len_eq)
       done
-    apply (auto simp: unat_plus_one_of_less_bound[where n=\<open>length (Model_entries m)\<close>] take_Suc_conv_app_nth entry_ok_m_def
+    apply (auto simp: unat_plus_one_of_less_bound[where n=\<open>length (Model_entries_l m)\<close>] take_Suc_conv_app_nth entry_ok_m_def
         word_unat_eq_iff[symmetric] tr_interp_m_def Let_def unat_of_nat_eq)
     done
   done
@@ -2109,11 +2109,11 @@ lemma wn_of_unat: \<open>unat (w :: 64 word) = n \<Longrightarrow> word_of_nat n
 text \<open>What \<^verbatim>\<open>tr_model\<close> needs, for the fuel \<open>F\<close>.\<close>
 definition tm_pre :: \<open>nat \<Rightarrow> SmtProblem \<Rightarrow> Model \<Rightarrow> bool\<close> where
   \<open>tm_pre F p m \<equiv>
-     length (SmtProblem_funs p) < 2 ^ 63 \<and> length (SmtProblem_funs p) \<le> F \<and> unat (SmtProblem_num_sorts p) \<le> F \<and>
-     (\<forall>g \<in> set (SmtProblem_funs p). length (SmtFun_args g) < 2 ^ 64) \<and>
-     length (Model_entries m) < 2 ^ 64 \<and> length (Model_entries m) \<le> F \<and>
-     (\<forall>e \<in> set (Model_entries m). length (Entry_args e) < 2 ^ 64 \<and> length (Entry_args e) \<le> F \<and>
-        unat (Entry_val e) < 2 ^ 63 \<and> (\<forall>x \<in> set (Entry_args e). unat x < 2 ^ 63))\<close>
+     length (SmtProblem_funs_l p) < 2 ^ 63 \<and> length (SmtProblem_funs_l p) \<le> F \<and> unat (SmtProblem_num_sorts p) \<le> F \<and>
+     (\<forall>g \<in> set (SmtProblem_funs_l p). length (SmtFun_args_l g) < 2 ^ 64) \<and>
+     length (Model_entries_l m) < 2 ^ 64 \<and> length (Model_entries_l m) \<le> F \<and>
+     (\<forall>e \<in> set (Model_entries_l m). length (Entry_args_l e) < 2 ^ 64 \<and> length (Entry_args_l e) \<le> F \<and>
+        unat (Entry_val e) < 2 ^ 63 \<and> (\<forall>x \<in> set (Entry_args_l e). unat x < 2 ^ 63))\<close>
 
 definition tr_model_contract :: \<open>SmtProblem \<Rightarrow> Model \<Rightarrow> ('s, SmtModel, 'abort) function_contract\<close> where
   [crush_contracts]: \<open>tr_model_contract p m \<equiv>
@@ -2139,15 +2139,15 @@ lemma tr_model_spec [crush_specs]:
     subgoal for gd gi fs_ref f_ref
       apply (ucincl_discharge\<open>rule_tac
         INV=\<open>\<lambda>c. \<Squnion>gf fv gi i. fs_ref \<mapsto>\<langle>\<top>\<rangle> gf\<down>fv \<star> f_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
-             \<langle>unat i \<le> length (SmtProblem_funs p) \<and> fv = map (\<lambda>f. tr_interp_m p m f (unat t) (unat u)) [0..<unat i] \<and>
-              length (SmtProblem_funs p) - unat i \<le> c\<rangle>\<close> and
+             \<langle>unat i \<le> length (SmtProblem_funs_l p) \<and> fv = map (\<lambda>f. tr_interp_m p m f (unat t) (unat u)) [0..<unat i] \<and>
+              length (SmtProblem_funs_l p) - unat i \<le> c\<rangle>\<close> and
         INV'=\<open>\<lambda>c. \<Squnion>gf fv gi i. fs_ref \<mapsto>\<langle>\<top>\<rangle> gf\<down>fv \<star> f_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
-             \<langle>unat i < length (SmtProblem_funs p) \<and> fv = map (\<lambda>f. tr_interp_m p m f (unat t) (unat u)) [0..<unat i] \<and>
-              length (SmtProblem_funs p) - unat i \<le> Suc c\<rangle>\<close> and
+             \<langle>unat i < length (SmtProblem_funs_l p) \<and> fv = map (\<lambda>f. tr_interp_m p m f (unat t) (unat u)) [0..<unat i] \<and>
+              length (SmtProblem_funs_l p) - unat i \<le> Suc c\<rangle>\<close> and
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and BRK=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         in wp_bounded_while_framedI\<close>)
       apply (crush_base inline: vec_push_def SmtModel_mk_def simp add: word_less_nat_alt unat_of_nat_eq)
-      apply (auto simp: unat_plus_one_of_less_bound[where n=\<open>length (SmtProblem_funs p)\<close>] unat_wn_inc63 tr_model_m_def Let_def)
+      apply (auto simp: unat_plus_one_of_less_bound[where n=\<open>length (SmtProblem_funs_l p)\<close>] unat_wn_inc63 tr_model_m_def Let_def)
       apply (metis wn_of_unat)
       done
     apply (insert More_Word.unat_lt2p[of \<open>SmtProblem_num_sorts p\<close>])
@@ -2157,21 +2157,21 @@ lemma tr_model_spec [crush_specs]:
 
 text \<open>A fuel bound for \<^verbatim>\<open>tr_model\<close> computed from \<open>p\<close> and \<open>m\<close>.\<close>
 definition tm_fuel :: \<open>SmtProblem \<Rightarrow> Model \<Rightarrow> nat\<close> where
-  \<open>tm_fuel p m \<equiv> length (SmtProblem_funs p) + unat (SmtProblem_num_sorts p) + length (Model_entries m) +
-     sum_list (map (\<lambda>e. length (Entry_args e)) (Model_entries m))\<close>
+  \<open>tm_fuel p m \<equiv> length (SmtProblem_funs_l p) + unat (SmtProblem_num_sorts p) + length (Model_entries_l m) +
+     sum_list (map (\<lambda>e. length (Entry_args_l e)) (Model_entries_l m))\<close>
 
 text \<open>The facts the top-level proof supplies imply the precondition of \<^verbatim>\<open>tr_model\<close>.\<close>
 lemma tr_model_pre_vals:
-  assumes R: \<open>smt_repr_ok p\<close> and V: \<open>\<forall>e \<in> set (Model_entries m). unat (Entry_val e) < length (Problem_terms (tr_problem_m p)) \<and>
-              (\<forall>a \<in> set (Entry_args e). unat a < length (Problem_terms (tr_problem_m p)))\<close>
-    and T: \<open>length (Problem_terms (tr_problem_m p)) < 2 ^ 63\<close>
-    and E: \<open>length (Model_entries m) < 2 ^ 63\<close>
-    and A: \<open>\<forall>e \<in> set (Model_entries m). length (Entry_args e) < 2 ^ 64\<close>
+  assumes R: \<open>smt_repr_ok p\<close> and V: \<open>\<forall>e \<in> set (Model_entries_l m). unat (Entry_val e) < length (Problem_terms_l (tr_problem_m p)) \<and>
+              (\<forall>a \<in> set (Entry_args_l e). unat a < length (Problem_terms_l (tr_problem_m p)))\<close>
+    and T: \<open>length (Problem_terms_l (tr_problem_m p)) < 2 ^ 63\<close>
+    and E: \<open>length (Model_entries_l m) < 2 ^ 63\<close>
+    and A: \<open>\<forall>e \<in> set (Model_entries_l m). length (Entry_args_l e) < 2 ^ 64\<close>
     and NF: \<open>tm_fuel p m \<le> F\<close>
   shows \<open>tm_pre F p m\<close>
 proof -
-  have e: \<open>length (Entry_args e) \<le> F\<close> if \<open>e \<in> set (Model_entries m)\<close> for e
-    using member_le_sum_list[of \<open>length (Entry_args e)\<close> \<open>map (\<lambda>e. length (Entry_args e)) (Model_entries m)\<close>] that NF by (simp add: tm_fuel_def)
+  have e: \<open>length (Entry_args_l e) \<le> F\<close> if \<open>e \<in> set (Model_entries_l m)\<close> for e
+    using member_le_sum_list[of \<open>length (Entry_args_l e)\<close> \<open>map (\<lambda>e. length (Entry_args_l e)) (Model_entries_l m)\<close>] that NF by (simp add: tm_fuel_def)
   show ?thesis unfolding tm_pre_def using e E A T V NF R
     by (fastforce simp: smt_repr_ok_def tm_fuel_def)
 qed
@@ -2298,34 +2298,34 @@ lemma terms_in_fragment_spec [crush_specs]:
   shows \<open>\<Gamma>; terms_in_fragment ts \<Turnstile>\<^sub>F tsif_contract urust_fuel ts\<close>
   unfolding terms_in_fragment_def using tif_rec_spec by blast
 
-lemma frag_fun: \<open>smt_fragment p \<Longrightarrow> j < length (SmtProblem_funs p) \<Longrightarrow>
-  smt_sort_no_bv (SmtFun_ret (SmtProblem_funs p ! j)) \<and> (\<forall>s \<in> set (SmtFun_args (SmtProblem_funs p ! j)). smt_sort_no_bv s)\<close>
+lemma frag_fun: \<open>smt_fragment p \<Longrightarrow> j < length (SmtProblem_funs_l p) \<Longrightarrow>
+  smt_sort_no_bv (SmtFun_ret (SmtProblem_funs_l p ! j)) \<and> (\<forall>s \<in> set (SmtFun_args_l (SmtProblem_funs_l p ! j)). smt_sort_no_bv s)\<close>
   by (auto simp: smt_fragment_def dest!: nth_mem)
 
-lemma frag_def: \<open>smt_fragment p \<Longrightarrow> j < length (SmtProblem_defs p) \<Longrightarrow>
-  smt_sort_no_bv (SmtDef_ret (SmtProblem_defs p ! j)) \<and> smt_term_no_bv (SmtDef_body (SmtProblem_defs p ! j)) \<and>
-  (\<forall>s \<in> set (SmtDef_params (SmtProblem_defs p ! j)). smt_sort_no_bv s)\<close>
+lemma frag_def: \<open>smt_fragment p \<Longrightarrow> j < length (SmtProblem_defs_l p) \<Longrightarrow>
+  smt_sort_no_bv (SmtDef_ret (SmtProblem_defs_l p ! j)) \<and> smt_term_no_bv (SmtDef_body (SmtProblem_defs_l p ! j)) \<and>
+  (\<forall>s \<in> set (SmtDef_params_l (SmtProblem_defs_l p ! j)). smt_sort_no_bv s)\<close>
   by (auto simp: smt_fragment_def dest!: nth_mem)
 
 text \<open>The fragment from the three parts \<^verbatim>\<open>in_fragment\<close> checks in turn.\<close>
 lemma frag_iff:
-  assumes \<open>\<forall>j < length (SmtProblem_funs p). (\<forall>s \<in> set (SmtFun_args (SmtProblem_funs p ! j)). smt_sort_no_bv s) \<and>
-             smt_sort_no_bv (SmtFun_ret (SmtProblem_funs p ! j))\<close>
-    \<open>\<forall>j < length (SmtProblem_defs p). (\<forall>s \<in> set (SmtDef_params (SmtProblem_defs p ! j)). smt_sort_no_bv s) \<and>
-             smt_sort_no_bv (SmtDef_ret (SmtProblem_defs p ! j)) \<and> smt_term_no_bv (SmtDef_body (SmtProblem_defs p ! j))\<close>
-  shows \<open>smt_fragment p = (\<forall>a \<in> set (SmtProblem_asserts p). smt_term_no_bv a)\<close>
+  assumes \<open>\<forall>j < length (SmtProblem_funs_l p). (\<forall>s \<in> set (SmtFun_args_l (SmtProblem_funs_l p ! j)). smt_sort_no_bv s) \<and>
+             smt_sort_no_bv (SmtFun_ret (SmtProblem_funs_l p ! j))\<close>
+    \<open>\<forall>j < length (SmtProblem_defs_l p). (\<forall>s \<in> set (SmtDef_params_l (SmtProblem_defs_l p ! j)). smt_sort_no_bv s) \<and>
+             smt_sort_no_bv (SmtDef_ret (SmtProblem_defs_l p ! j)) \<and> smt_term_no_bv (SmtDef_body (SmtProblem_defs_l p ! j))\<close>
+  shows \<open>smt_fragment p = (\<forall>a \<in> set (SmtProblem_asserts_l p). smt_term_no_bv a)\<close>
   using assms by (auto simp: smt_fragment_def all_set_conv_all_nth)
 
 text \<open>What \<^verbatim>\<open>in_fragment\<close> needs, for the fuel \<open>F\<close>.\<close>
 definition if_pre :: \<open>nat \<Rightarrow> SmtProblem \<Rightarrow> bool\<close> where
   \<open>if_pre F p \<equiv>
-     length (SmtProblem_funs p) < 2 ^ 64 \<and> length (SmtProblem_funs p) \<le> F \<and>
-     (\<forall>g \<in> set (SmtProblem_funs p). length (SmtFun_args g) < 2 ^ 64 \<and> length (SmtFun_args g) \<le> F) \<and>
-     length (SmtProblem_defs p) < 2 ^ 64 \<and> length (SmtProblem_defs p) \<le> F \<and>
-     (\<forall>e \<in> set (SmtProblem_defs p). length (SmtDef_params e) < 2 ^ 64 \<and> length (SmtDef_params e) \<le> F \<and>
+     length (SmtProblem_funs_l p) < 2 ^ 64 \<and> length (SmtProblem_funs_l p) \<le> F \<and>
+     (\<forall>g \<in> set (SmtProblem_funs_l p). length (SmtFun_args_l g) < 2 ^ 64 \<and> length (SmtFun_args_l g) \<le> F) \<and>
+     length (SmtProblem_defs_l p) < 2 ^ 64 \<and> length (SmtProblem_defs_l p) \<le> F \<and>
+     (\<forall>e \<in> set (SmtProblem_defs_l p). length (SmtDef_params_l e) < 2 ^ 64 \<and> length (SmtDef_params_l e) \<le> F \<and>
         fok F (SmtDef_body e) \<and> Suc (size (SmtDef_body e)) \<le> F) \<and>
-     length (SmtProblem_asserts p) < 2 ^ 64 \<and> length (SmtProblem_asserts p) \<le> F \<and>
-     Suc (size_list size (SmtProblem_asserts p)) \<le> F \<and> (\<forall>t \<in> set (SmtProblem_asserts p). fok F t)\<close>
+     length (SmtProblem_asserts_l p) < 2 ^ 64 \<and> length (SmtProblem_asserts_l p) \<le> F \<and>
+     Suc (size_list size (SmtProblem_asserts_l p)) \<le> F \<and> (\<forall>t \<in> set (SmtProblem_asserts_l p). fok F t)\<close>
 
 definition in_fragment_contract :: \<open>SmtProblem \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   [crush_contracts]: \<open>in_fragment_contract p \<equiv>
@@ -2339,13 +2339,13 @@ lemma in_fragment_spec [crush_specs]:
   subgoal for i_ref
     apply (ucincl_discharge\<open>rule_tac
       INV=\<open>\<lambda>c. \<Squnion>gi i. i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
-           \<langle>unat i \<le> length (SmtProblem_funs p) \<and>
-            (\<forall>j < unat i. (\<forall>s \<in> set (SmtFun_args (SmtProblem_funs p ! j)). smt_sort_no_bv s) \<and>
-               smt_sort_no_bv (SmtFun_ret (SmtProblem_funs p ! j))) \<and> length (SmtProblem_funs p) - unat i \<le> c\<rangle>\<close> and
+           \<langle>unat i \<le> length (SmtProblem_funs_l p) \<and>
+            (\<forall>j < unat i. (\<forall>s \<in> set (SmtFun_args_l (SmtProblem_funs_l p ! j)). smt_sort_no_bv s) \<and>
+               smt_sort_no_bv (SmtFun_ret (SmtProblem_funs_l p ! j))) \<and> length (SmtProblem_funs_l p) - unat i \<le> c\<rangle>\<close> and
       INV'=\<open>\<lambda>c. \<Squnion>gi i. i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
-           \<langle>unat i < length (SmtProblem_funs p) \<and>
-            (\<forall>j < unat i. (\<forall>s \<in> set (SmtFun_args (SmtProblem_funs p ! j)). smt_sort_no_bv s) \<and>
-               smt_sort_no_bv (SmtFun_ret (SmtProblem_funs p ! j))) \<and> length (SmtProblem_funs p) - unat i \<le> Suc c\<rangle>\<close> and
+           \<langle>unat i < length (SmtProblem_funs_l p) \<and>
+            (\<forall>j < unat i. (\<forall>s \<in> set (SmtFun_args_l (SmtProblem_funs_l p ! j)). smt_sort_no_bv s) \<and>
+               smt_sort_no_bv (SmtFun_ret (SmtProblem_funs_l p ! j))) \<and> length (SmtProblem_funs_l p) - unat i \<le> Suc c\<rangle>\<close> and
       \<tau>=\<open>\<lambda>r. (\<Squnion>gi i. i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i) \<star> can_alloc_reference \<star> \<langle>r = smt_fragment p\<rangle>\<close> and
       \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and BRK=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
@@ -2354,15 +2354,15 @@ lemma in_fragment_spec [crush_specs]:
     subgoal for gi i d_ref
       apply (ucincl_discharge\<open>rule_tac
         INV=\<open>\<lambda>c. \<Squnion>gd d. d_ref \<mapsto>\<langle>\<top>\<rangle> gd\<down>d \<star> can_alloc_reference \<star>
-             \<langle>unat d \<le> length (SmtProblem_defs p) \<and>
-              (\<forall>j < unat d. (\<forall>s \<in> set (SmtDef_params (SmtProblem_defs p ! j)). smt_sort_no_bv s) \<and>
-                 smt_sort_no_bv (SmtDef_ret (SmtProblem_defs p ! j)) \<and> smt_term_no_bv (SmtDef_body (SmtProblem_defs p ! j))) \<and>
-              length (SmtProblem_defs p) - unat d \<le> c\<rangle>\<close> and
+             \<langle>unat d \<le> length (SmtProblem_defs_l p) \<and>
+              (\<forall>j < unat d. (\<forall>s \<in> set (SmtDef_params_l (SmtProblem_defs_l p ! j)). smt_sort_no_bv s) \<and>
+                 smt_sort_no_bv (SmtDef_ret (SmtProblem_defs_l p ! j)) \<and> smt_term_no_bv (SmtDef_body (SmtProblem_defs_l p ! j))) \<and>
+              length (SmtProblem_defs_l p) - unat d \<le> c\<rangle>\<close> and
         INV'=\<open>\<lambda>c. \<Squnion>gd d. d_ref \<mapsto>\<langle>\<top>\<rangle> gd\<down>d \<star> can_alloc_reference \<star>
-             \<langle>unat d < length (SmtProblem_defs p) \<and>
-              (\<forall>j < unat d. (\<forall>s \<in> set (SmtDef_params (SmtProblem_defs p ! j)). smt_sort_no_bv s) \<and>
-                 smt_sort_no_bv (SmtDef_ret (SmtProblem_defs p ! j)) \<and> smt_term_no_bv (SmtDef_body (SmtProblem_defs p ! j))) \<and>
-              length (SmtProblem_defs p) - unat d \<le> Suc c\<rangle>\<close> and
+             \<langle>unat d < length (SmtProblem_defs_l p) \<and>
+              (\<forall>j < unat d. (\<forall>s \<in> set (SmtDef_params_l (SmtProblem_defs_l p ! j)). smt_sort_no_bv s) \<and>
+                 smt_sort_no_bv (SmtDef_ret (SmtProblem_defs_l p ! j)) \<and> smt_term_no_bv (SmtDef_body (SmtProblem_defs_l p ! j))) \<and>
+              length (SmtProblem_defs_l p) - unat d \<le> Suc c\<rangle>\<close> and
         \<tau>=\<open>\<lambda>r. (\<Squnion>gd d. d_ref \<mapsto>\<langle>\<top>\<rangle> gd\<down>d) \<star> can_alloc_reference \<star> \<langle>r = smt_fragment p\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and BRK=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         in wp_bounded_while_framedI\<close>)
@@ -2396,99 +2396,99 @@ text \<open>The bound on the fuel: the lengths of the lists of \<open>p\<close>,
   and of their arguments in the translation (for the loops of \<^verbatim>\<open>tr_model\<close> over the model).\<close>
 definition tr_fuel :: \<open>SmtProblem \<Rightarrow> nat\<close> where
   \<open>tr_fuel p \<equiv>
-     let fs = SmtProblem_funs p; ds = SmtProblem_defs p; ts = SmtProblem_asserts p; q = tr_problem_m p in
+     let fs = SmtProblem_funs_l p; ds = SmtProblem_defs_l p; ts = SmtProblem_asserts_l p; q = tr_problem_m p in
      length fs + length ds + length ts + unat (SmtProblem_num_sorts p) +
-     sum_list (map (\<lambda>g. length (SmtFun_args g)) fs) + sum_list (map (\<lambda>e. length (SmtDef_params e)) ds) +
+     sum_list (map (\<lambda>g. length (SmtFun_args_l g)) fs) + sum_list (map (\<lambda>e. length (SmtDef_params_l e)) ds) +
      sum_list (map (\<lambda>e. margs (SmtDef_body e) * margs (SmtDef_body e) + margs (SmtDef_body e) + Suc (size (SmtDef_body e))) ds) +
      sum_list (map (\<lambda>t. margs t * margs t + margs t) ts) + Suc (size_list size ts) +
      sum_list (map (\<lambda>d. Suc (dep p d (SmtDef_body (ds ! d)))) [0..<length ds]) +
      sum_list (map (\<lambda>t. Suc (dep p (length ds) t)) ts) +
-     length (Problem_terms q) + sum_list (map (\<lambda>t. length (Term_args t)) (Problem_terms q))\<close>
+     length (Problem_terms_l q) + sum_list (map (\<lambda>t. length (Term_args_l t)) (Problem_terms_l q))\<close>
 
 lemma le_sum_list: \<open>x \<in> set xs \<Longrightarrow> (f :: 'a \<Rightarrow> nat) x \<le> sum_list (map f xs)\<close>
   by (induction xs) auto
 
 lemma tr_fuel_ge:
-  \<open>length (SmtProblem_funs p) \<le> tr_fuel p\<close> \<open>length (SmtProblem_defs p) \<le> tr_fuel p\<close>
-  \<open>length (SmtProblem_asserts p) \<le> tr_fuel p\<close> \<open>unat (SmtProblem_num_sorts p) \<le> tr_fuel p\<close>
-  \<open>g \<in> set (SmtProblem_funs p) \<Longrightarrow> length (SmtFun_args g) \<le> tr_fuel p\<close>
-  \<open>e \<in> set (SmtProblem_defs p) \<Longrightarrow> length (SmtDef_params e) \<le> tr_fuel p\<close>
-  \<open>e \<in> set (SmtProblem_defs p) \<Longrightarrow> margs (SmtDef_body e) * margs (SmtDef_body e) + margs (SmtDef_body e) + Suc (size (SmtDef_body e)) \<le> tr_fuel p\<close>
-  \<open>t \<in> set (SmtProblem_asserts p) \<Longrightarrow> margs t * margs t + margs t \<le> tr_fuel p\<close>
-  \<open>Suc (size_list size (SmtProblem_asserts p)) \<le> tr_fuel p\<close>
-  \<open>d < length (SmtProblem_defs p) \<Longrightarrow> Suc (dep p d (SmtDef_body (SmtProblem_defs p ! d))) \<le> tr_fuel p\<close>
-  \<open>t \<in> set (SmtProblem_asserts p) \<Longrightarrow> Suc (dep p (length (SmtProblem_defs p)) t) \<le> tr_fuel p\<close>
-  \<open>length (Problem_terms (tr_problem_m p)) \<le> tr_fuel p\<close>
-  \<open>x \<in> set (Problem_terms (tr_problem_m p)) \<Longrightarrow> length (Term_args x) \<le> tr_fuel p\<close>
+  \<open>length (SmtProblem_funs_l p) \<le> tr_fuel p\<close> \<open>length (SmtProblem_defs_l p) \<le> tr_fuel p\<close>
+  \<open>length (SmtProblem_asserts_l p) \<le> tr_fuel p\<close> \<open>unat (SmtProblem_num_sorts p) \<le> tr_fuel p\<close>
+  \<open>g \<in> set (SmtProblem_funs_l p) \<Longrightarrow> length (SmtFun_args_l g) \<le> tr_fuel p\<close>
+  \<open>e \<in> set (SmtProblem_defs_l p) \<Longrightarrow> length (SmtDef_params_l e) \<le> tr_fuel p\<close>
+  \<open>e \<in> set (SmtProblem_defs_l p) \<Longrightarrow> margs (SmtDef_body e) * margs (SmtDef_body e) + margs (SmtDef_body e) + Suc (size (SmtDef_body e)) \<le> tr_fuel p\<close>
+  \<open>t \<in> set (SmtProblem_asserts_l p) \<Longrightarrow> margs t * margs t + margs t \<le> tr_fuel p\<close>
+  \<open>Suc (size_list size (SmtProblem_asserts_l p)) \<le> tr_fuel p\<close>
+  \<open>d < length (SmtProblem_defs_l p) \<Longrightarrow> Suc (dep p d (SmtDef_body (SmtProblem_defs_l p ! d))) \<le> tr_fuel p\<close>
+  \<open>t \<in> set (SmtProblem_asserts_l p) \<Longrightarrow> Suc (dep p (length (SmtProblem_defs_l p)) t) \<le> tr_fuel p\<close>
+  \<open>length (Problem_terms_l (tr_problem_m p)) \<le> tr_fuel p\<close>
+  \<open>x \<in> set (Problem_terms_l (tr_problem_m p)) \<Longrightarrow> length (Term_args_l x) \<le> tr_fuel p\<close>
 proof -
   note L = le_sum_list
-  show \<open>length (SmtProblem_funs p) \<le> tr_fuel p\<close> \<open>length (SmtProblem_defs p) \<le> tr_fuel p\<close>
-    \<open>length (SmtProblem_asserts p) \<le> tr_fuel p\<close> \<open>unat (SmtProblem_num_sorts p) \<le> tr_fuel p\<close>
-    \<open>Suc (size_list size (SmtProblem_asserts p)) \<le> tr_fuel p\<close> \<open>length (Problem_terms (tr_problem_m p)) \<le> tr_fuel p\<close>
+  show \<open>length (SmtProblem_funs_l p) \<le> tr_fuel p\<close> \<open>length (SmtProblem_defs_l p) \<le> tr_fuel p\<close>
+    \<open>length (SmtProblem_asserts_l p) \<le> tr_fuel p\<close> \<open>unat (SmtProblem_num_sorts p) \<le> tr_fuel p\<close>
+    \<open>Suc (size_list size (SmtProblem_asserts_l p)) \<le> tr_fuel p\<close> \<open>length (Problem_terms_l (tr_problem_m p)) \<le> tr_fuel p\<close>
     by (simp_all add: tr_fuel_def Let_def)
-  show \<open>g \<in> set (SmtProblem_funs p) \<Longrightarrow> length (SmtFun_args g) \<le> tr_fuel p\<close>
-    using L[of g \<open>SmtProblem_funs p\<close> \<open>\<lambda>g. length (SmtFun_args g)\<close>] by (simp add: tr_fuel_def Let_def)
-  show \<open>e \<in> set (SmtProblem_defs p) \<Longrightarrow> length (SmtDef_params e) \<le> tr_fuel p\<close>
-    using L[of e \<open>SmtProblem_defs p\<close> \<open>\<lambda>e. length (SmtDef_params e)\<close>] by (simp add: tr_fuel_def Let_def)
-  show \<open>e \<in> set (SmtProblem_defs p) \<Longrightarrow> margs (SmtDef_body e) * margs (SmtDef_body e) + margs (SmtDef_body e) + Suc (size (SmtDef_body e)) \<le> tr_fuel p\<close>
-    using L[of e \<open>SmtProblem_defs p\<close> \<open>\<lambda>e. margs (SmtDef_body e) * margs (SmtDef_body e) + margs (SmtDef_body e) + Suc (size (SmtDef_body e))\<close>]
+  show \<open>g \<in> set (SmtProblem_funs_l p) \<Longrightarrow> length (SmtFun_args_l g) \<le> tr_fuel p\<close>
+    using L[of g \<open>SmtProblem_funs_l p\<close> \<open>\<lambda>g. length (SmtFun_args_l g)\<close>] by (simp add: tr_fuel_def Let_def)
+  show \<open>e \<in> set (SmtProblem_defs_l p) \<Longrightarrow> length (SmtDef_params_l e) \<le> tr_fuel p\<close>
+    using L[of e \<open>SmtProblem_defs_l p\<close> \<open>\<lambda>e. length (SmtDef_params_l e)\<close>] by (simp add: tr_fuel_def Let_def)
+  show \<open>e \<in> set (SmtProblem_defs_l p) \<Longrightarrow> margs (SmtDef_body e) * margs (SmtDef_body e) + margs (SmtDef_body e) + Suc (size (SmtDef_body e)) \<le> tr_fuel p\<close>
+    using L[of e \<open>SmtProblem_defs_l p\<close> \<open>\<lambda>e. margs (SmtDef_body e) * margs (SmtDef_body e) + margs (SmtDef_body e) + Suc (size (SmtDef_body e))\<close>]
     by (simp add: tr_fuel_def Let_def)
-  show \<open>t \<in> set (SmtProblem_asserts p) \<Longrightarrow> margs t * margs t + margs t \<le> tr_fuel p\<close>
-    using L[of t \<open>SmtProblem_asserts p\<close> \<open>\<lambda>t. margs t * margs t + margs t\<close>] by (simp add: tr_fuel_def Let_def)
-  show \<open>d < length (SmtProblem_defs p) \<Longrightarrow> Suc (dep p d (SmtDef_body (SmtProblem_defs p ! d))) \<le> tr_fuel p\<close>
-    using L[of d \<open>[0..<length (SmtProblem_defs p)]\<close> \<open>\<lambda>d. Suc (dep p d (SmtDef_body (SmtProblem_defs p ! d)))\<close>]
+  show \<open>t \<in> set (SmtProblem_asserts_l p) \<Longrightarrow> margs t * margs t + margs t \<le> tr_fuel p\<close>
+    using L[of t \<open>SmtProblem_asserts_l p\<close> \<open>\<lambda>t. margs t * margs t + margs t\<close>] by (simp add: tr_fuel_def Let_def)
+  show \<open>d < length (SmtProblem_defs_l p) \<Longrightarrow> Suc (dep p d (SmtDef_body (SmtProblem_defs_l p ! d))) \<le> tr_fuel p\<close>
+    using L[of d \<open>[0..<length (SmtProblem_defs_l p)]\<close> \<open>\<lambda>d. Suc (dep p d (SmtDef_body (SmtProblem_defs_l p ! d)))\<close>]
     by (simp add: tr_fuel_def Let_def)
-  show \<open>t \<in> set (SmtProblem_asserts p) \<Longrightarrow> Suc (dep p (length (SmtProblem_defs p)) t) \<le> tr_fuel p\<close>
-    using L[of t \<open>SmtProblem_asserts p\<close> \<open>\<lambda>t. Suc (dep p (length (SmtProblem_defs p)) t)\<close>] by (simp add: tr_fuel_def Let_def)
-  show \<open>x \<in> set (Problem_terms (tr_problem_m p)) \<Longrightarrow> length (Term_args x) \<le> tr_fuel p\<close>
-    using L[of x \<open>Problem_terms (tr_problem_m p)\<close> \<open>\<lambda>t. length (Term_args t)\<close>] by (simp add: tr_fuel_def Let_def)
+  show \<open>t \<in> set (SmtProblem_asserts_l p) \<Longrightarrow> Suc (dep p (length (SmtProblem_defs_l p)) t) \<le> tr_fuel p\<close>
+    using L[of t \<open>SmtProblem_asserts_l p\<close> \<open>\<lambda>t. Suc (dep p (length (SmtProblem_defs_l p)) t)\<close>] by (simp add: tr_fuel_def Let_def)
+  show \<open>x \<in> set (Problem_terms_l (tr_problem_m p)) \<Longrightarrow> length (Term_args_l x) \<le> tr_fuel p\<close>
+    using L[of x \<open>Problem_terms_l (tr_problem_m p)\<close> \<open>\<lambda>t. length (Term_args_l t)\<close>] by (simp add: tr_fuel_def Let_def)
 qed
 
 text \<open>What a well-sorted problem whose lists are within the bounds gives for each definition.\<close>
 definition defs_ok :: \<open>SmtProblem \<Rightarrow> nat \<Rightarrow> bool\<close> where
-  \<open>defs_ok p F \<equiv> \<forall>d < length (SmtProblem_defs p).
-      smt_tsort (SmtProblem_funs p) (take d (SmtProblem_defs p)) (SmtDef_params (SmtProblem_defs p ! d))
-        (SmtDef_body (SmtProblem_defs p ! d)) \<noteq> None \<and>
-      smt_term_repr (SmtDef_body (SmtProblem_defs p ! d)) \<and> margs (SmtDef_body (SmtProblem_defs p ! d)) \<le> F \<and>
-      margs (SmtDef_body (SmtProblem_defs p ! d)) * margs (SmtDef_body (SmtProblem_defs p ! d)) \<le> F \<and>
-      length (SmtDef_params (SmtProblem_defs p ! d)) < 2 ^ 64\<close>
+  \<open>defs_ok p F \<equiv> \<forall>d < length (SmtProblem_defs_l p).
+      smt_tsort (SmtProblem_funs_l p) (take d (SmtProblem_defs_l p)) (SmtDef_params_l (SmtProblem_defs_l p ! d))
+        (SmtDef_body (SmtProblem_defs_l p ! d)) \<noteq> None \<and>
+      smt_term_repr (SmtDef_body (SmtProblem_defs_l p ! d)) \<and> margs (SmtDef_body (SmtProblem_defs_l p ! d)) \<le> F \<and>
+      margs (SmtDef_body (SmtProblem_defs_l p ! d)) * margs (SmtDef_body (SmtProblem_defs_l p ! d)) \<le> F \<and>
+      length (SmtDef_params_l (SmtProblem_defs_l p ! d)) < 2 ^ 64\<close>
 
 lemma sq_le: \<open>a \<le> b \<Longrightarrow> b * b \<le> (F :: nat) \<Longrightarrow> a * a \<le> F\<close>
   by (meson mult_le_mono order_trans)
 
 lemma tok_of_wf:
-  shows \<open>defs_ok p F \<Longrightarrow> smt_tsort (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps t \<noteq> None \<Longrightarrow> smt_term_repr t \<Longrightarrow>
-           margs t \<le> F \<Longrightarrow> margs t * margs t \<le> F \<Longrightarrow> n \<le> length (SmtProblem_defs p) \<Longrightarrow> n \<le> dl \<Longrightarrow> el = length ps \<Longrightarrow>
+  shows \<open>defs_ok p F \<Longrightarrow> smt_tsort (SmtProblem_funs_l p) (take n (SmtProblem_defs_l p)) ps t \<noteq> None \<Longrightarrow> smt_term_repr t \<Longrightarrow>
+           margs t \<le> F \<Longrightarrow> margs t * margs t \<le> F \<Longrightarrow> n \<le> length (SmtProblem_defs_l p) \<Longrightarrow> n \<le> dl \<Longrightarrow> el = length ps \<Longrightarrow>
            tok p F dl el n t\<close>
-    and \<open>defs_ok p F \<Longrightarrow> \<forall>a \<in> set ts. smt_tsort (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps a \<noteq> None \<and> smt_term_repr a \<Longrightarrow>
-           margss ts \<le> F \<Longrightarrow> margss ts * margss ts \<le> F \<Longrightarrow> n \<le> length (SmtProblem_defs p) \<Longrightarrow> n \<le> dl \<Longrightarrow> el = length ps \<Longrightarrow>
+    and \<open>defs_ok p F \<Longrightarrow> \<forall>a \<in> set ts. smt_tsort (SmtProblem_funs_l p) (take n (SmtProblem_defs_l p)) ps a \<noteq> None \<and> smt_term_repr a \<Longrightarrow>
+           margss ts \<le> F \<Longrightarrow> margss ts * margss ts \<le> F \<Longrightarrow> n \<le> length (SmtProblem_defs_l p) \<Longrightarrow> n \<le> dl \<Longrightarrow> el = length ps \<Longrightarrow>
            toks p F dl el n ts\<close>
 proof (induction p F dl el n t and p F dl el n ts arbitrary: ps and ps rule: tok_toks.induct)
   case (2 p F dl el n f args)
   note P = 2(2-9)
-  have M: \<open>map (smt_tsort (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps) args = map Some (SmtFun_args (SmtProblem_funs p ! unat f))\<close>
-    and f: \<open>unat f < length (SmtProblem_funs p)\<close> using P(2) by (auto split: if_splits)
-  have A: \<open>\<forall>a \<in> set args. smt_tsort (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps a \<noteq> None \<and> smt_term_repr a\<close>
+  have M: \<open>map (smt_tsort (SmtProblem_funs_l p) (take n (SmtProblem_defs_l p)) ps) args = map Some (SmtFun_args_l (SmtProblem_funs_l p ! unat f))\<close>
+    and f: \<open>unat f < length (SmtProblem_funs_l p)\<close> using P(2) by (auto split: if_splits)
+  have A: \<open>\<forall>a \<in> set args. smt_tsort (SmtProblem_funs_l p) (take n (SmtProblem_defs_l p)) ps a \<noteq> None \<and> smt_term_repr a\<close>
     using map_Some_ex[OF M] P(3) by fastforce
   have T: \<open>toks p F dl el n args\<close> using 2(1)[OF P(1) A] P(4-8) sq_le[of \<open>margss args\<close> \<open>margs (SmtTerm_Fun f args)\<close> F] by simp
   show ?case using f T P(3) P(4) by simp
 next
   case (3 p F dl el n d args)
   note P = 3(3-10)
-  let ?ds = \<open>SmtProblem_defs p\<close>
+  let ?ds = \<open>SmtProblem_defs_l p\<close>
   let ?D = \<open>?ds ! unat d\<close>
   have d: \<open>unat d < n\<close> \<open>unat d < length ?ds\<close>
-    and M: \<open>map (smt_tsort (SmtProblem_funs p) (take n ?ds) ps) args = map Some (SmtDef_params ?D)\<close>
+    and M: \<open>map (smt_tsort (SmtProblem_funs_l p) (take n ?ds) ps) args = map Some (SmtDef_params_l ?D)\<close>
     using P(2) P(6) by (auto split: if_splits)
-  have A: \<open>\<forall>a \<in> set args. smt_tsort (SmtProblem_funs p) (take n ?ds) ps a \<noteq> None \<and> smt_term_repr a\<close>
+  have A: \<open>\<forall>a \<in> set args. smt_tsort (SmtProblem_funs_l p) (take n ?ds) ps a \<noteq> None \<and> smt_term_repr a\<close>
     using map_Some_ex[OF M] P(3) by fastforce
-  have len: \<open>length args = length (SmtDef_params ?D)\<close> using M map_eq_imp_length_eq by fastforce
-  have Wd: \<open>smt_tsort (SmtProblem_funs p) (take (unat d) ?ds) (SmtDef_params ?D) (SmtDef_body ?D) \<noteq> None\<close>
+  have len: \<open>length args = length (SmtDef_params_l ?D)\<close> using M map_eq_imp_length_eq by fastforce
+  have Wd: \<open>smt_tsort (SmtProblem_funs_l p) (take (unat d) ?ds) (SmtDef_params_l ?D) (SmtDef_body ?D) \<noteq> None\<close>
     \<open>smt_term_repr (SmtDef_body ?D)\<close> \<open>margs (SmtDef_body ?D) \<le> F\<close> \<open>margs (SmtDef_body ?D) * margs (SmtDef_body ?D) \<le> F\<close>
-    \<open>length (SmtDef_params ?D) < 2 ^ 64\<close>
+    \<open>length (SmtDef_params_l ?D) < 2 ^ 64\<close>
     using P(1) d(2) by (simp_all add: defs_ok_def)
   show ?case
-  proof (cases \<open>SmtDef_params ?D = []\<close>)
+  proof (cases \<open>SmtDef_params_l ?D = []\<close>)
     case True
     then show ?thesis using d P(7) Wd by simp
   next
@@ -2502,9 +2502,9 @@ next
 next
   case (4 p F dl el n op args)
   note P = 4(2-9)
-  have A: \<open>\<forall>a \<in> set args. smt_tsort (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps a \<noteq> None \<and> smt_term_repr a\<close>
+  have A: \<open>\<forall>a \<in> set args. smt_tsort (SmtProblem_funs_l p) (take n (SmtProblem_defs_l p)) ps a \<noteq> None \<and> smt_term_repr a\<close>
     using P(2) P(3) by (auto split: if_splits) (metis image_eqI option.exhaust)
-  have S: \<open>smt_op_sort op (map (the \<circ> smt_tsort (SmtProblem_funs p) (take n (SmtProblem_defs p)) ps) args) \<noteq> None\<close>
+  have S: \<open>smt_op_sort op (map (the \<circ> smt_tsort (SmtProblem_funs_l p) (take n (SmtProblem_defs_l p)) ps) args) \<noteq> None\<close>
     using P(2) by (auto split: if_splits)
   have T: \<open>toks p F dl el n args\<close> using 4(1)[OF P(1) A] P(4-8) sq_le[of \<open>margss args\<close> \<open>margs (SmtTerm_App op args)\<close> F] by simp
   have Q: \<open>length args * length args \<le> F\<close> using sq_le[of \<open>length args\<close> \<open>margs (SmtTerm_App op args)\<close> F] P(5) by simp
@@ -2535,37 +2535,37 @@ lemma tr_problem_pre:
     and NF: \<open>tr_fuel p \<le> F\<close>
   shows \<open>tr_pre F p\<close>
 proof -
-  let ?ds = \<open>SmtProblem_defs p\<close>
+  let ?ds = \<open>SmtProblem_defs_l p\<close>
   have mb: \<open>margs (SmtDef_body e) * margs (SmtDef_body e) \<le> F \<and> margs (SmtDef_body e) \<le> F\<close> if \<open>e \<in> set ?ds\<close> for e
     using tr_fuel_ge(7)[OF that] NF by simp
   have D: \<open>defs_ok p F\<close>
     unfolding defs_ok_def
   proof (intro allI impI conjI)
     fix d assume d: \<open>d < length ?ds\<close>
-    show \<open>smt_tsort (SmtProblem_funs p) (take d ?ds) (SmtDef_params (?ds ! d)) (SmtDef_body (?ds ! d)) \<noteq> None\<close>
+    show \<open>smt_tsort (SmtProblem_funs_l p) (take d ?ds) (SmtDef_params_l (?ds ! d)) (SmtDef_body (?ds ! d)) \<noteq> None\<close>
       using W d by (simp add: smt_wf_def Let_def)
-    have r: \<open>length (SmtDef_params (?ds ! d)) < 2 ^ 63 \<and> smt_term_repr (SmtDef_body (?ds ! d))\<close>
+    have r: \<open>length (SmtDef_params_l (?ds ! d)) < 2 ^ 63 \<and> smt_term_repr (SmtDef_body (?ds ! d))\<close>
       using R nth_mem[OF d] unfolding smt_repr_ok_def by blast
-    then show \<open>smt_term_repr (SmtDef_body (?ds ! d))\<close> \<open>length (SmtDef_params (?ds ! d)) < 2 ^ 64\<close> by simp_all
+    then show \<open>smt_term_repr (SmtDef_body (?ds ! d))\<close> \<open>length (SmtDef_params_l (?ds ! d)) < 2 ^ 64\<close> by simp_all
     show \<open>margs (SmtDef_body (?ds ! d)) \<le> F\<close> \<open>margs (SmtDef_body (?ds ! d)) * margs (SmtDef_body (?ds ! d)) \<le> F\<close>
       using mb[OF nth_mem[OF d]] by simp_all
   qed
   have defs: \<open>tok p F d 0 d (SmtDef_body (?ds ! d)) \<and> Suc (dep p d (SmtDef_body (?ds ! d))) \<le> F\<close>
-    if d: \<open>d < length ?ds\<close> and e: \<open>SmtDef_params (?ds ! d) = []\<close> for d
+    if d: \<open>d < length ?ds\<close> and e: \<open>SmtDef_params_l (?ds ! d) = []\<close> for d
   proof
-    have \<open>smt_tsort (SmtProblem_funs p) (take d ?ds) (SmtDef_params (?ds ! d)) (SmtDef_body (?ds ! d)) =
+    have \<open>smt_tsort (SmtProblem_funs_l p) (take d ?ds) (SmtDef_params_l (?ds ! d)) (SmtDef_body (?ds ! d)) =
             Some (SmtDef_ret (?ds ! d))\<close>
       using W d unfolding smt_wf_def Let_def by blast
-    then have t: \<open>smt_tsort (SmtProblem_funs p) (take d ?ds) [] (SmtDef_body (?ds ! d)) \<noteq> None\<close>
+    then have t: \<open>smt_tsort (SmtProblem_funs_l p) (take d ?ds) [] (SmtDef_body (?ds ! d)) \<noteq> None\<close>
       using e by simp
     show \<open>tok p F d 0 d (SmtDef_body (?ds ! d))\<close>
       using tok_of_wf(1)[OF D t] D d by (simp add: defs_ok_def)
     show \<open>Suc (dep p d (SmtDef_body (?ds ! d))) \<le> F\<close> using tr_fuel_ge(10)[OF d] NF by simp
   qed
   have asserts: \<open>tok p F (length ?ds) 0 (length ?ds) t \<and> Suc (dep p (length ?ds) t) \<le> F\<close>
-    if t: \<open>t \<in> set (SmtProblem_asserts p)\<close> for t
+    if t: \<open>t \<in> set (SmtProblem_asserts_l p)\<close> for t
   proof
-    have s: \<open>smt_tsort (SmtProblem_funs p) (take (length ?ds) ?ds) [] t \<noteq> None\<close>
+    have s: \<open>smt_tsort (SmtProblem_funs_l p) (take (length ?ds) ?ds) [] t \<noteq> None\<close>
       using W t by (simp add: smt_wf_def Let_def)
     have m: \<open>margs t * margs t \<le> F\<close> \<open>margs t \<le> F\<close> using tr_fuel_ge(8)[OF t] NF by simp_all
     show \<open>tok p F (length ?ds) 0 (length ?ds) t\<close>
@@ -2583,12 +2583,12 @@ lemma in_fragment_pre:
   assumes R: \<open>smt_repr_ok p\<close> and NF: \<open>tr_fuel p \<le> F\<close>
   shows \<open>if_pre F p\<close>
 proof -
-  have d: \<open>length (SmtDef_params e) < 2 ^ 64 \<and> length (SmtDef_params e) \<le> F \<and> fok F (SmtDef_body e) \<and> Suc (size (SmtDef_body e)) \<le> F\<close>
-    if e: \<open>e \<in> set (SmtProblem_defs p)\<close> for e
+  have d: \<open>length (SmtDef_params_l e) < 2 ^ 64 \<and> length (SmtDef_params_l e) \<le> F \<and> fok F (SmtDef_body e) \<and> Suc (size (SmtDef_body e)) \<le> F\<close>
+    if e: \<open>e \<in> set (SmtProblem_defs_l p)\<close> for e
     using tr_fuel_ge(6,7)[OF e] NF R e fok_of_repr[of \<open>SmtDef_body e\<close> F] by (auto simp: smt_repr_ok_def)
-  have a: \<open>fok F t\<close> if t: \<open>t \<in> set (SmtProblem_asserts p)\<close> for t
+  have a: \<open>fok F t\<close> if t: \<open>t \<in> set (SmtProblem_asserts_l p)\<close> for t
     using tr_fuel_ge(8)[OF t] NF R t fok_of_repr[of t F] by (auto simp: smt_repr_ok_def)
-  have g: \<open>length (SmtFun_args g) < 2 ^ 64 \<and> length (SmtFun_args g) \<le> F\<close> if g: \<open>g \<in> set (SmtProblem_funs p)\<close> for g
+  have g: \<open>length (SmtFun_args_l g) < 2 ^ 64 \<and> length (SmtFun_args_l g) \<le> F\<close> if g: \<open>g \<in> set (SmtProblem_funs_l p)\<close> for g
     using tr_fuel_ge(5)[OF g] NF R g by (auto simp: smt_repr_ok_def)
   show ?thesis unfolding if_pre_def using d a g R NF tr_fuel_ge(1-3,9)[of p] by (auto simp: smt_repr_ok_def)
 qed
@@ -2599,18 +2599,18 @@ text \<open>The facts the top-level proof supplies imply the precondition of \<^
   arguments of the term), and its values must be term indices.\<close>
 lemma tr_model_pre:
   assumes S: \<open>sizes_ok (tr_problem_m p)\<close> and R: \<open>smt_repr_ok p\<close> and NF: \<open>tr_fuel p \<le> F\<close>
-    and V: \<open>\<forall>e \<in> set (Model_entries m). unat (Entry_val e) < length (Problem_terms (tr_problem_m p)) \<and>
-              (\<forall>x \<in> set (Entry_args e). unat x < length (Problem_terms (tr_problem_m p)))\<close>
-    and E: \<open>length (Model_entries m) \<le> length (Problem_terms (tr_problem_m p))\<close>
-    and A: \<open>\<forall>e \<in> set (Model_entries m). \<exists>t \<in> set (Problem_terms (tr_problem_m p)). length (Entry_args e) \<le> length (Term_args t)\<close>
+    and V: \<open>\<forall>e \<in> set (Model_entries_l m). unat (Entry_val e) < length (Problem_terms_l (tr_problem_m p)) \<and>
+              (\<forall>x \<in> set (Entry_args_l e). unat x < length (Problem_terms_l (tr_problem_m p)))\<close>
+    and E: \<open>length (Model_entries_l m) \<le> length (Problem_terms_l (tr_problem_m p))\<close>
+    and A: \<open>\<forall>e \<in> set (Model_entries_l m). \<exists>t \<in> set (Problem_terms_l (tr_problem_m p)). length (Entry_args_l e) \<le> length (Term_args_l t)\<close>
   shows \<open>tm_pre F p m\<close>
 proof -
-  let ?T = \<open>Problem_terms (tr_problem_m p)\<close>
-  have T: \<open>length ?T < 2 ^ 63\<close> \<open>\<forall>t \<in> set ?T. length (Term_args t) < 2 ^ 63\<close> using S by (simp_all add: sizes_ok_def)
-  have e: \<open>length (Entry_args e) < 2 ^ 64 \<and> length (Entry_args e) \<le> F \<and>
-        unat (Entry_val e) < 2 ^ 63 \<and> (\<forall>x \<in> set (Entry_args e). unat x < 2 ^ 63)\<close> if e: \<open>e \<in> set (Model_entries m)\<close> for e
+  let ?T = \<open>Problem_terms_l (tr_problem_m p)\<close>
+  have T: \<open>length ?T < 2 ^ 63\<close> \<open>\<forall>t \<in> set ?T. length (Term_args_l t) < 2 ^ 63\<close> using S by (simp_all add: sizes_ok_def)
+  have e: \<open>length (Entry_args_l e) < 2 ^ 64 \<and> length (Entry_args_l e) \<le> F \<and>
+        unat (Entry_val e) < 2 ^ 63 \<and> (\<forall>x \<in> set (Entry_args_l e). unat x < 2 ^ 63)\<close> if e: \<open>e \<in> set (Model_entries_l m)\<close> for e
   proof -
-    obtain t where t: \<open>t \<in> set ?T\<close> \<open>length (Entry_args e) \<le> length (Term_args t)\<close> using A e by blast
+    obtain t where t: \<open>t \<in> set ?T\<close> \<open>length (Entry_args_l e) \<le> length (Term_args_l t)\<close> using A e by blast
     show ?thesis using t T tr_fuel_ge(13)[OF t(1)] NF V e by fastforce
   qed
   show ?thesis unfolding tm_pre_def using e E T(1) tr_fuel_ge(1,4,12)[of p] NF R by (auto simp: smt_repr_ok_def)

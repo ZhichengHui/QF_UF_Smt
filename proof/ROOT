@@ -1,6 +1,7 @@
 session "QFUF_CoreSpec" in "core_spec" = "QFUF_Spec" +
   options [document = false]
   theories
+    QFUF_Rvec
     QFUF_CoreSpec
 
 session "QFUF_Proof" = "QFUF_CoreSpec" +

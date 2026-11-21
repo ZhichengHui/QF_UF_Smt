@@ -14,8 +14,8 @@ definition search_contract :: \<open>nat \<Rightarrow> Problem \<Rightarrow> Cla
       ('s, Model option \<times> Clause list \<times> tnil, 'abort) function_contract\<close> where
   \<open>search_contract k p l t f \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms p) \<and>
-         length f = length (Problem_atoms p) \<and> unset_count t f < k\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms_l p) \<and>
+         length f = length (Problem_atoms_l p) \<and> unset_count t f < k\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
         \<langle>(case fst r of
            None \<Rightarrow> \<not> pext p t f
@@ -31,64 +31,64 @@ text \<open>The facts of \<^verbatim>\<open>QFUF_Contracts\<close> for the steps
   that \<open>crush_base\<close> leaves.\<close>
 
 lemma step_unit_none:
-  \<open>find_result p t f x \<Longrightarrow> length t = length (Problem_atoms p) \<Longrightarrow>
-   unat (Lit_atom x) < length (Problem_atoms p) \<Longrightarrow> Lit_pos x \<Longrightarrow>
+  \<open>find_result p t f x \<Longrightarrow> length t = length (Problem_atoms_l p) \<Longrightarrow>
+   unat (Lit_atom x) < length (Problem_atoms_l p) \<Longrightarrow> Lit_pos x \<Longrightarrow>
    \<not> pext p (t[unat (Lit_atom x) := True]) f \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
-  \<open>find_result p t f x \<Longrightarrow> length t = length (Problem_atoms p) \<Longrightarrow>
-   unat (Lit_atom x) < length (Problem_atoms p) \<Longrightarrow> \<not> Lit_pos x \<Longrightarrow>
+  \<open>find_result p t f x \<Longrightarrow> length t = length (Problem_atoms_l p) \<Longrightarrow>
+   unat (Lit_atom x) < length (Problem_atoms_l p) \<Longrightarrow> \<not> Lit_pos x \<Longrightarrow>
    \<not> pext p t (f[unat (Lit_atom x) := True]) \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
   using search_unit_none by fastforce+
 
 lemma step_unit_fuel:
-  \<open>find_result p t f x \<Longrightarrow> length t = length (Problem_atoms p) \<Longrightarrow> length f = length (Problem_atoms p) \<Longrightarrow>
-   unat (Lit_atom x) < length (Problem_atoms p) \<Longrightarrow> unset_count t f < Suc k \<Longrightarrow>
+  \<open>find_result p t f x \<Longrightarrow> length t = length (Problem_atoms_l p) \<Longrightarrow> length f = length (Problem_atoms_l p) \<Longrightarrow>
+   unat (Lit_atom x) < length (Problem_atoms_l p) \<Longrightarrow> unset_count t f < Suc k \<Longrightarrow>
    unset_count (t[unat (Lit_atom x) := True]) f < k\<close>
-  \<open>find_result p t f x \<Longrightarrow> length t = length (Problem_atoms p) \<Longrightarrow> length f = length (Problem_atoms p) \<Longrightarrow>
-   unat (Lit_atom x) < length (Problem_atoms p) \<Longrightarrow> unset_count t f < Suc k \<Longrightarrow>
+  \<open>find_result p t f x \<Longrightarrow> length t = length (Problem_atoms_l p) \<Longrightarrow> length f = length (Problem_atoms_l p) \<Longrightarrow>
+   unat (Lit_atom x) < length (Problem_atoms_l p) \<Longrightarrow> unset_count t f < Suc k \<Longrightarrow>
    unset_count t (f[unat (Lit_atom x) := True]) < k\<close>
   using search_unit_fuel[of p t f x k] by simp_all
 
 lemma step_branch_fuel:
-  \<open>length t = length (Problem_atoms p) \<Longrightarrow> length f = length (Problem_atoms p) \<Longrightarrow>
-   unat j \<le> length (Problem_atoms p) \<Longrightarrow> unat j \<noteq> length (Problem_atoms p) \<Longrightarrow>
+  \<open>length t = length (Problem_atoms_l p) \<Longrightarrow> length f = length (Problem_atoms_l p) \<Longrightarrow>
+   unat j \<le> length (Problem_atoms_l p) \<Longrightarrow> unat j \<noteq> length (Problem_atoms_l p) \<Longrightarrow>
    \<not> t ! unat j \<Longrightarrow> \<not> f ! unat j \<Longrightarrow> unset_count t f < Suc k \<Longrightarrow>
    unset_count (t[unat j := True]) f < k\<close>
-  \<open>length t = length (Problem_atoms p) \<Longrightarrow> length f = length (Problem_atoms p) \<Longrightarrow>
-   unat j \<le> length (Problem_atoms p) \<Longrightarrow> unat j \<noteq> length (Problem_atoms p) \<Longrightarrow>
+  \<open>length t = length (Problem_atoms_l p) \<Longrightarrow> length f = length (Problem_atoms_l p) \<Longrightarrow>
+   unat j \<le> length (Problem_atoms_l p) \<Longrightarrow> unat j \<noteq> length (Problem_atoms_l p) \<Longrightarrow>
    \<not> t ! unat j \<Longrightarrow> \<not> f ! unat j \<Longrightarrow> unset_count t f < Suc k \<Longrightarrow>
    unset_count t (f[unat j := True]) < k\<close>
   using search_branch_fuel[of \<open>unat j\<close> t f k] by simp_all
 
 lemma step_leaf:
-  \<open>wf_problem p \<Longrightarrow> length t = length (Problem_atoms p) \<Longrightarrow> \<forall>j < length (Problem_atoms p). t ! j \<or> f ! j \<Longrightarrow>
+  \<open>wf_problem p \<Longrightarrow> length t = length (Problem_atoms_l p) \<Longrightarrow> \<forall>j < length (Problem_atoms_l p). t ! j \<or> f ! j \<Longrightarrow>
    \<not> prop_true p t \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
-  \<open>length t = length (Problem_atoms p) \<Longrightarrow> \<forall>j < length (Problem_atoms p). t ! j \<or> f ! j \<Longrightarrow>
+  \<open>length t = length (Problem_atoms_l p) \<Longrightarrow> \<forall>j < length (Problem_atoms_l p). t ! j \<or> f ! j \<Longrightarrow>
    \<forall>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. atom_vals I p \<noteq> t \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
   using search_leaf_none search_leaf_theory_none by fastforce+
 
 text \<open>A closure conflict: the cut, and the learned clause.\<close>
 
 lemma step_learn:
-  assumes \<open>set (Clause_lits cl) = conflict_lits e c (length (Problem_atoms p))\<close>
-      and \<open>wf_problem p\<close> \<open>length (Problem_atoms p) < 9223372036854775808\<close> \<open>clauses_ok p l\<close>
-      and \<open>unat c < length (Problem_atoms p)\<close> \<open>length e = length (Problem_atoms p)\<close>
-      and \<open>(unat (Atom_lhs (Problem_atoms p ! unat c)), unat (Atom_rhs (Problem_atoms p ! unat c)))
-             \<in> cc p (asserted p e (length (Problem_atoms p)))\<close>
-      and \<open>length (Clause_lits cl) \<le> Suc (length (Problem_atoms p))\<close>
+  assumes \<open>set (Clause_lits_l cl) = conflict_lits e c (length (Problem_atoms_l p))\<close>
+      and \<open>wf_problem p\<close> \<open>length (Problem_atoms_l p) < 9223372036854775808\<close> \<open>clauses_ok p l\<close>
+      and \<open>unat c < length (Problem_atoms_l p)\<close> \<open>length e = length (Problem_atoms_l p)\<close>
+      and \<open>(unat (Atom_lhs (Problem_atoms_l p ! unat c)), unat (Atom_rhs (Problem_atoms_l p ! unat c)))
+             \<in> cc p (asserted p e (length (Problem_atoms_l p)))\<close>
+      and \<open>length (Clause_lits_l cl) \<le> Suc (length (Problem_atoms_l p))\<close>
   shows \<open>clauses_ok p (l @ [cl])\<close>
 proof (rule clauses_ok_append[OF assms(4)])
   show \<open>clause_ok p cl\<close>
     using assms by (intro conflict_lits_clause_ok[where e=e and k=c]) auto
-  show \<open>length (Clause_lits cl) < 2^64\<close>
+  show \<open>length (Clause_lits_l cl) < 2^64\<close>
     using assms(3,8) by simp
 qed
 
 lemma step_conflict:
-  \<open>conflict_result p t f a \<Longrightarrow> wf_problem p \<Longrightarrow> length t = length (Problem_atoms p) \<Longrightarrow>
-   unat a < length (Problem_atoms p) \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
-  \<open>conflict_result p t f a \<Longrightarrow> unat a < length (Problem_atoms p) \<Longrightarrow>
-   (unat (Atom_lhs (Problem_atoms p ! unat a)), unat (Atom_rhs (Problem_atoms p ! unat a)))
-     \<in> cc p (asserted p t (length (Problem_atoms p)))\<close>
+  \<open>conflict_result p t f a \<Longrightarrow> wf_problem p \<Longrightarrow> length t = length (Problem_atoms_l p) \<Longrightarrow>
+   unat a < length (Problem_atoms_l p) \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
+  \<open>conflict_result p t f a \<Longrightarrow> unat a < length (Problem_atoms_l p) \<Longrightarrow>
+   (unat (Atom_lhs (Problem_atoms_l p ! unat a)), unat (Atom_rhs (Problem_atoms_l p ! unat a)))
+     \<in> cc p (asserted p t (length (Problem_atoms_l p)))\<close>
   using conflict_result_none unfolding conflict_result_def by blast+
 
 lemma step_falsified:
@@ -98,7 +98,7 @@ lemma step_falsified:
 text \<open>Theory propagation: the recursive call on the extended assignment \<open>t2\<close>, \<open>f2\<close>.\<close>
 
 lemma step_implied:
-  \<open>implied_ok p t f rs t2 f2 \<Longrightarrow> wf_problem p \<Longrightarrow> length t = length (Problem_atoms p) \<Longrightarrow>
+  \<open>implied_ok p t f rs t2 f2 \<Longrightarrow> wf_problem p \<Longrightarrow> length t = length (Problem_atoms_l p) \<Longrightarrow>
    \<not> pext p t2 f2 \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
   \<open>implied_ok p t f rs t2 f2 \<Longrightarrow> length t = n \<Longrightarrow> length t2 = n\<close>
   \<open>implied_ok p t f rs t2 f2 \<Longrightarrow> length f = n \<Longrightarrow> length f2 = n\<close>
@@ -165,8 +165,8 @@ definition cdcl_contract :: \<open>nat \<Rightarrow> Problem \<Rightarrow> Claus
       64 word list \<Rightarrow> ('s, Model option \<times> Clause list \<times> 64 word \<times> 'w, 'abort) function_contract\<close> where
   \<open>cdcl_contract k p l t f d rep \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms p) \<and>
-         length f = length (Problem_atoms p) \<and> unset_count t f < k \<and> length (Problem_atoms p) < urust_fuel \<and>
+        \<langle>wf_problem p \<and> sizes_ok p \<and> clauses_ok p l \<and> length t = length (Problem_atoms_l p) \<and>
+         length f = length (Problem_atoms_l p) \<and> unset_count t f < k \<and> length (Problem_atoms_l p) < urust_fuel \<and>
          rep_for p t rep\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
         \<langle>(case fst r of
@@ -178,7 +178,7 @@ definition cdcl_contract :: \<open>nat \<Rightarrow> Problem \<Rightarrow> Claus
 lemma step_last_find:
   assumes \<open>clauses_ok p l\<close> \<open>0 < unat (word_of_nat (length l) :: 64 word)\<close>
       and \<open>unit_result t f (l ! unat (word_of_nat (length l) - 1 :: 64 word)) u\<close>
-      and \<open>length t = length (Problem_atoms p)\<close> \<open>length f = length (Problem_atoms p)\<close>
+      and \<open>length t = length (Problem_atoms_l p)\<close> \<open>length f = length (Problem_atoms_l p)\<close>
   shows \<open>find_result p t f u\<close>
   using assms last_idx_lt[OF assms(2)]
   by (intro find_result_clause[where c=\<open>l ! unat (word_of_nat (length l) - 1 :: 64 word)\<close>])
@@ -187,62 +187,62 @@ lemma step_last_find:
 lemma step_last_none:
   \<open>clauses_ok p l \<Longrightarrow> 0 < unat (word_of_nat (length l) :: 64 word) \<Longrightarrow>
    unit_result t f (l ! unat (word_of_nat (length l) - 1 :: 64 word)) u \<Longrightarrow>
-   length t = length (Problem_atoms p) \<Longrightarrow> length f = length (Problem_atoms p) \<Longrightarrow>
-   unat (Lit_atom u) < length (Problem_atoms p) \<Longrightarrow> Lit_pos u \<Longrightarrow>
+   length t = length (Problem_atoms_l p) \<Longrightarrow> length f = length (Problem_atoms_l p) \<Longrightarrow>
+   unat (Lit_atom u) < length (Problem_atoms_l p) \<Longrightarrow> Lit_pos u \<Longrightarrow>
    \<not> pext p (t[unat (Lit_atom u) := True]) f \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
   \<open>clauses_ok p l \<Longrightarrow> 0 < unat (word_of_nat (length l) :: 64 word) \<Longrightarrow>
    unit_result t f (l ! unat (word_of_nat (length l) - 1 :: 64 word)) u \<Longrightarrow>
-   length t = length (Problem_atoms p) \<Longrightarrow> length f = length (Problem_atoms p) \<Longrightarrow>
-   unat (Lit_atom u) < length (Problem_atoms p) \<Longrightarrow> \<not> Lit_pos u \<Longrightarrow>
+   length t = length (Problem_atoms_l p) \<Longrightarrow> length f = length (Problem_atoms_l p) \<Longrightarrow>
+   unat (Lit_atom u) < length (Problem_atoms_l p) \<Longrightarrow> \<not> Lit_pos u \<Longrightarrow>
    \<not> pext p t (f[unat (Lit_atom u) := True]) \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
   \<open>clauses_ok p l \<Longrightarrow> 0 < unat (word_of_nat (length l) :: 64 word) \<Longrightarrow>
    unit_result t f (l ! unat (word_of_nat (length l) - 1 :: 64 word)) u \<Longrightarrow>
-   length t = length (Problem_atoms p) \<Longrightarrow> length f = length (Problem_atoms p) \<Longrightarrow>
-   \<not> unat (Lit_atom u) < length (Problem_atoms p) \<Longrightarrow> Lit_pos u \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
+   length t = length (Problem_atoms_l p) \<Longrightarrow> length f = length (Problem_atoms_l p) \<Longrightarrow>
+   \<not> unat (Lit_atom u) < length (Problem_atoms_l p) \<Longrightarrow> Lit_pos u \<Longrightarrow> pext p t f \<Longrightarrow> False\<close>
   using step_last_find[of p l t f u] unfolding find_result_def by auto
 
 lemma step_last_fuel:
   \<open>clauses_ok p l \<Longrightarrow> 0 < unat (word_of_nat (length l) :: 64 word) \<Longrightarrow>
    unit_result t f (l ! unat (word_of_nat (length l) - 1 :: 64 word)) u \<Longrightarrow>
-   length t = length (Problem_atoms p) \<Longrightarrow> length f = length (Problem_atoms p) \<Longrightarrow>
-   unat (Lit_atom u) < length (Problem_atoms p) \<Longrightarrow> unset_count t f < Suc k \<Longrightarrow>
+   length t = length (Problem_atoms_l p) \<Longrightarrow> length f = length (Problem_atoms_l p) \<Longrightarrow>
+   unat (Lit_atom u) < length (Problem_atoms_l p) \<Longrightarrow> unset_count t f < Suc k \<Longrightarrow>
    unset_count (t[unat (Lit_atom u) := True]) f < k\<close>
   \<open>clauses_ok p l \<Longrightarrow> 0 < unat (word_of_nat (length l) :: 64 word) \<Longrightarrow>
    unit_result t f (l ! unat (word_of_nat (length l) - 1 :: 64 word)) u \<Longrightarrow>
-   length t = length (Problem_atoms p) \<Longrightarrow> length f = length (Problem_atoms p) \<Longrightarrow>
-   unat (Lit_atom u) < length (Problem_atoms p) \<Longrightarrow> unset_count t f < Suc k \<Longrightarrow>
+   length t = length (Problem_atoms_l p) \<Longrightarrow> length f = length (Problem_atoms_l p) \<Longrightarrow>
+   unat (Lit_atom u) < length (Problem_atoms_l p) \<Longrightarrow> unset_count t f < Suc k \<Longrightarrow>
    unset_count t (f[unat (Lit_atom u) := True]) < k\<close>
   using step_last_find[of p l t f u] search_unit_fuel[of p t f u k] by simp_all
 
 lemma step_last_pre:
   \<open>clauses_ok p l \<Longrightarrow> 0 < unat (word_of_nat (length l) :: 64 word) \<Longrightarrow>
-   length (Clause_lits (l ! unat (word_of_nat (length l) - 1 :: 64 word))) < 18446744073709551616\<close>
+   length (Clause_lits_l (l ! unat (word_of_nat (length l) - 1 :: 64 word))) < 18446744073709551616\<close>
   \<open>clauses_ok p l \<Longrightarrow> 0 < unat (word_of_nat (length l) :: 64 word) \<Longrightarrow>
-   a \<in> set (Clause_lits (l ! unat (word_of_nat (length l) - 1 :: 64 word))) \<Longrightarrow>
-   unat (Lit_atom a) < length (Problem_atoms p)\<close>
+   a \<in> set (Clause_lits_l (l ! unat (word_of_nat (length l) - 1 :: 64 word))) \<Longrightarrow>
+   unat (Lit_atom a) < length (Problem_atoms_l p)\<close>
   using last_idx_lt[of \<open>length l\<close>] nth_mem[of \<open>unat (word_of_nat (length l) - 1 :: 64 word)\<close> l]
   unfolding clauses_ok_def clause_ok_def by auto
 
 text \<open>The clause of a closure conflict, as \<^verbatim>\<open>on_conflict\<close> needs it.\<close>
 lemma step_conflict_fits:
-  assumes \<open>set (Clause_lits cl) = conflict_lits e c (length (Problem_atoms p))\<close>
-      and \<open>wf_problem p\<close> \<open>length (Problem_atoms p) < 9223372036854775808\<close>
-      and \<open>unat c < length (Problem_atoms p)\<close> \<open>length e = length (Problem_atoms p)\<close>
-      and \<open>(unat (Atom_lhs (Problem_atoms p ! unat c)), unat (Atom_rhs (Problem_atoms p ! unat c)))
-             \<in> cc p (asserted p e (length (Problem_atoms p)))\<close>
-      and \<open>length (Clause_lits cl) \<le> Suc (length (Problem_atoms p))\<close>
+  assumes \<open>set (Clause_lits_l cl) = conflict_lits e c (length (Problem_atoms_l p))\<close>
+      and \<open>wf_problem p\<close> \<open>length (Problem_atoms_l p) < 9223372036854775808\<close>
+      and \<open>unat c < length (Problem_atoms_l p)\<close> \<open>length e = length (Problem_atoms_l p)\<close>
+      and \<open>(unat (Atom_lhs (Problem_atoms_l p ! unat c)), unat (Atom_rhs (Problem_atoms_l p ! unat c)))
+             \<in> cc p (asserted p e (length (Problem_atoms_l p)))\<close>
+      and \<open>length (Clause_lits_l cl) \<le> Suc (length (Problem_atoms_l p))\<close>
   shows \<open>clause_fits p cl\<close>
   using assms conflict_lits_clause_ok[of p c e cl] unfolding clause_fits_def by simp
 
 text \<open>A falsified clause when there are no atoms.\<close>
 lemma step_empty_conflict:
   assumes \<open>find_result p t f x\<close> \<open>Lit_atom x = 0\<close> \<open>Lit_pos x\<close>
-      and \<open>(word_of_nat (length (Problem_atoms p)) :: 64 word) = 0\<close> \<open>length (Problem_atoms p) < 9223372036854775808\<close>
-      and \<open>length t = length (Problem_atoms p)\<close> \<open>pext p t f\<close>
+      and \<open>(word_of_nat (length (Problem_atoms_l p)) :: 64 word) = 0\<close> \<open>length (Problem_atoms_l p) < 9223372036854775808\<close>
+      and \<open>length t = length (Problem_atoms_l p)\<close> \<open>pext p t f\<close>
   shows False
 proof -
-  have \<open>length (Problem_atoms p) = 0\<close>
-    using assms(4,5) unat_of_nat_eq[of \<open>length (Problem_atoms p)\<close>, where 'a=64] by simp
+  have \<open>length (Problem_atoms_l p) = 0\<close>
+    using assms(4,5) unat_of_nat_eq[of \<open>length (Problem_atoms_l p)\<close>, where 'a=64] by simp
   then show False using assms(1,2,3,6,7) unfolding find_result_def by simp
 qed
 
@@ -254,7 +254,7 @@ proof -
 qed
 
 lemma step_fallback_fuel:
-  \<open>length t = length (Problem_atoms p) \<Longrightarrow> length (Problem_atoms p) < urust_fuel \<Longrightarrow> unset_count t f < urust_fuel\<close>
+  \<open>length t = length (Problem_atoms_l p) \<Longrightarrow> length (Problem_atoms_l p) < urust_fuel \<Longrightarrow> unset_count t f < urust_fuel\<close>
   using unset_count_le[of t f] by simp
 
 text \<open>Unit propagation (\<^verbatim>\<open>watch_pass\<close>): the recursive call on the extended assignment.\<close>
@@ -271,7 +271,7 @@ lemma step_pass_fuel:
   using ext_ok_fuel by fastforce+
 
 lemma step_pass_rep:
-  \<open>ext_ok p t f t0 f0 \<Longrightarrow> length t = length (Problem_atoms p) \<Longrightarrow> rep_for p t rs \<Longrightarrow> rep_for p t0 rs\<close>
+  \<open>ext_ok p t f t0 f0 \<Longrightarrow> length t = length (Problem_atoms_l p) \<Longrightarrow> rep_for p t rs \<Longrightarrow> rep_for p t0 rs\<close>
   by (rule ext_ok_rep_for)
 
 lemma step_pass_len:
@@ -335,7 +335,7 @@ proof -
 qed
 
 lemma solve_spec:
-  assumes fuel: \<open>length (Problem_atoms p) < urust_fuel\<close>
+  assumes fuel: \<open>length (Problem_atoms_l p) < urust_fuel\<close>
   shows \<open>\<Gamma>; solve p \<Turnstile>\<^sub>F solve_contract p\<close>
   apply (crush_boot f: solve_def contract: solve_contract_def)
   apply (crush_base specs add: root_log_spec cdcl_spec sym_index_spec watch_new_spec sat_add_ok_spec
@@ -353,15 +353,15 @@ definition solve_contract_vals :: \<open>Problem \<Rightarrow> ('s, Answer, 'abo
      let post = \<lambda>r. can_alloc_reference \<star>
         \<langle>case r of
            Answer_Sat m \<Rightarrow> problem_true (model_interp m) p \<and>
-             length (Model_entries m) \<le> length (Problem_terms p) \<and>
-             (\<forall>e \<in> set (Model_entries m). unat (Entry_val e) < length (Problem_terms p) \<and>
-                (\<forall>a \<in> set (Entry_args e). unat a < length (Problem_terms p)) \<and>
-                (\<exists>t \<in> set (Problem_terms p). length (Entry_args e) \<le> length (Term_args t)))
+             length (Model_entries_l m) \<le> length (Problem_terms_l p) \<and>
+             (\<forall>e \<in> set (Model_entries_l m). unat (Entry_val e) < length (Problem_terms_l p) \<and>
+                (\<forall>a \<in> set (Entry_args_l e). unat a < length (Problem_terms_l p)) \<and>
+                (\<exists>t \<in> set (Problem_terms_l p). length (Entry_args_l e) \<le> length (Term_args_l t)))
          | Answer_Unsat \<Rightarrow> \<not> satisfiable p\<rangle> in
      make_function_contract pre post\<close>
 
 lemma solve_vals_spec:
-  assumes fuel: \<open>length (Problem_atoms p) < urust_fuel\<close>
+  assumes fuel: \<open>length (Problem_atoms_l p) < urust_fuel\<close>
   shows \<open>\<Gamma>; solve p \<Turnstile>\<^sub>F solve_contract_vals p\<close>
   apply (crush_boot f: solve_def contract: solve_contract_vals_def)
   apply (crush_base specs add: root_log_spec cdcl_spec sym_index_spec watch_new_spec sat_add_ok_spec
@@ -393,15 +393,15 @@ text \<open>\<^verbatim>\<open>QFUF_heap\<close> has the assumptions of \<^local
   form an instance of \<^locale>\<open>QFUF_ctx\<close>, and the contract lemmas of \<^locale>\<open>QFUF_ctx\<close> apply.\<close>
 
 text \<open>The statement of the specification, \<^const>\<open>solve_correct\<close> in \<^verbatim>\<open>QFUF_Spec\<close>. The bound
-  is \<open>length (Problem_atoms p) + 1\<close>, the fuel that \<open>QFUF_ctx.solve_spec\<close> needs.\<close>
+  is \<open>length (Problem_atoms_l p) + 1\<close>, the fuel that \<open>QFUF_ctx.solve_spec\<close> needs.\<close>
 theorem solve_correct:
   shows \<open>solve_correct \<Gamma>\<close>
 proof (unfold solve_correct_def, intro allI impI)
   fix p
-  have \<open>\<Gamma>; solve fuel p \<Turnstile>\<^sub>F solve_contract p\<close> if \<open>length (Problem_atoms p) < fuel\<close> for fuel
+  have \<open>\<Gamma>; solve fuel p \<Turnstile>\<^sub>F solve_contract p\<close> if \<open>length (Problem_atoms_l p) < fuel\<close> for fuel
     by (rule QFUF_ctx.solve_spec[OF QFUF_ctxI that])
   then show \<open>\<exists>N. \<forall>fuel \<ge> N. \<Gamma>; solve fuel p \<Turnstile>\<^sub>F solve_contract p\<close>
-    by (intro exI[of _ \<open>length (Problem_atoms p) + 1\<close>]) simp
+    by (intro exI[of _ \<open>length (Problem_atoms_l p) + 1\<close>]) simp
 qed
 
 end

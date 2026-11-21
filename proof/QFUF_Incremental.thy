@@ -11,52 +11,52 @@ text \<open>\<^verbatim>\<open>cdcl\<close> carries a partition down its recursi
 subsection \<open>Pure facts\<close>
 
 definition rep_for :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word list \<Rightarrow> bool\<close> where
-  \<open>rep_for p t rs \<equiv> wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms p) \<and> reps_lt p rs \<and>
-     rep_sound p (asserted p t (length (Problem_atoms p))) rs\<close>
+  \<open>rep_for p t rs \<equiv> wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms_l p) \<and> reps_lt p rs \<and>
+     rep_sound p (asserted p t (length (Problem_atoms_l p))) rs\<close>
 
 lemma rep_for_mono:
-  assumes \<open>rep_for p t rs\<close> \<open>\<forall>j < length (Problem_atoms p). t ! j \<longrightarrow> t' ! j\<close>
+  assumes \<open>rep_for p t rs\<close> \<open>\<forall>j < length (Problem_atoms_l p). t ! j \<longrightarrow> t' ! j\<close>
   shows \<open>rep_for p t' rs\<close>
 proof -
-  have \<open>asserted p t (length (Problem_atoms p)) \<subseteq> asserted p t' (length (Problem_atoms p))\<close>
+  have \<open>asserted p t (length (Problem_atoms_l p)) \<subseteq> asserted p t' (length (Problem_atoms_l p))\<close>
     using assms(2) unfolding asserted_def by blast
   then show ?thesis
     using assms(1) cc_mono unfolding rep_for_def rep_sound_def by blast
 qed
 
 lemma rep_for_update:
-  assumes \<open>rep_for p t rs\<close> \<open>length t = length (Problem_atoms p)\<close>
+  assumes \<open>rep_for p t rs\<close> \<open>length t = length (Problem_atoms_l p)\<close>
   shows \<open>rep_for p (t[i := True]) rs\<close>
 proof (rule rep_for_mono[OF assms(1)], intro allI impI)
-  fix j assume \<open>j < length (Problem_atoms p)\<close> \<open>t ! j\<close>
+  fix j assume \<open>j < length (Problem_atoms_l p)\<close> \<open>t ! j\<close>
   then show \<open>t[i := True] ! j\<close> using assms(2) by (cases \<open>i = j\<close>) simp_all
 qed
 
 lemma rep_for_implied:
-  assumes \<open>implied_ok p t f rs' t2 f2\<close> \<open>length t = length (Problem_atoms p)\<close> \<open>rep_for p t rs\<close>
+  assumes \<open>implied_ok p t f rs' t2 f2\<close> \<open>length t = length (Problem_atoms_l p)\<close> \<open>rep_for p t rs\<close>
   shows \<open>rep_for p t2 rs\<close>
 proof (rule rep_for_mono[OF assms(3)], intro allI impI)
-  fix j assume \<open>j < length (Problem_atoms p)\<close> \<open>t ! j\<close>
+  fix j assume \<open>j < length (Problem_atoms_l p)\<close> \<open>t ! j\<close>
   moreover have \<open>\<forall>j < length t. t ! j \<longrightarrow> t2 ! j\<close>
     using assms(1) unfolding implied_ok_def by blast
   ultimately show \<open>t2 ! j\<close> using assms(2) by simp
 qed
 
 lemma rep_for_cc_inv:
-  \<open>cc_inv p (asserted p t (length (Problem_atoms p))) rs \<Longrightarrow> rep_for p t rs\<close>
+  \<open>cc_inv p (asserted p t (length (Problem_atoms_l p))) rs \<Longrightarrow> rep_for p t rs\<close>
   unfolding cc_inv_def rep_ok_def rep_for_def by simp
 
 lemma rep_for_empty:
   assumes \<open>cc_inv p {} rs\<close>
   shows \<open>rep_for p t rs\<close>
 proof -
-  have \<open>rep_sound p (asserted p t (length (Problem_atoms p))) rs\<close>
+  have \<open>rep_sound p (asserted p t (length (Problem_atoms_l p))) rs\<close>
     using assms cc_mono[of _ _ p \<open>{}\<close>] unfolding cc_inv_def rep_ok_def rep_sound_def by blast
   then show ?thesis using assms unfolding cc_inv_def rep_ok_def rep_for_def by simp
 qed
 
 lemma rep_for_length:
-  \<open>rep_for p t rs \<Longrightarrow> length rs = length (Problem_terms p)\<close>
+  \<open>rep_for p t rs \<Longrightarrow> length rs = length (Problem_terms_l p)\<close>
   by (simp add: rep_for_def)
 
 text \<open>The invariant of \<^verbatim>\<open>log_atoms\<close> after the atoms below \<open>k\<close>.\<close>
@@ -68,8 +68,8 @@ lemma atoms_inv_0:
   by (simp add: atoms_inv_def rep_has_def)
 
 lemma atoms_inv_end:
-  \<open>atoms_inv p t (length (Problem_atoms p)) rs \<Longrightarrow> cc_inv p (asserted p t (length (Problem_atoms p))) rs\<close>
-  using asserted_bounded[of p \<open>length (Problem_atoms p)\<close> t]
+  \<open>atoms_inv p t (length (Problem_atoms_l p)) rs \<Longrightarrow> cc_inv p (asserted p t (length (Problem_atoms_l p))) rs\<close>
+  using asserted_bounded[of p \<open>length (Problem_atoms_l p)\<close> t]
   unfolding atoms_inv_def rep_for_def cc_inv_def rep_ok_def by auto
 
 lemma atoms_inv_skip:
@@ -79,7 +79,7 @@ lemma atoms_inv_skip:
 
 lemma atoms_inv_joined:
   assumes \<open>atoms_inv p t k rs\<close>
-      and \<open>rs ! unat (Atom_lhs (Problem_atoms p ! k)) = rs ! unat (Atom_rhs (Problem_atoms p ! k))\<close>
+      and \<open>rs ! unat (Atom_lhs (Problem_atoms_l p ! k)) = rs ! unat (Atom_rhs (Problem_atoms_l p ! k))\<close>
   shows \<open>atoms_inv p t (Suc k) rs\<close>
   using assms by (simp add: atoms_inv_def asserted_Suc rep_has_def)
 
@@ -87,13 +87,13 @@ context QFUF_ctx
 begin
 
 lemma atoms_inv_merge:
-  assumes \<open>atoms_inv p t k rs\<close> \<open>k < length (Problem_atoms p)\<close> \<open>t ! k\<close>
+  assumes \<open>atoms_inv p t k rs\<close> \<open>k < length (Problem_atoms_l p)\<close> \<open>t ! k\<close>
   shows \<open>atoms_inv p t (Suc k)
-           (merge_list rs (unat (Atom_lhs (Problem_atoms p ! k))) (unat (Atom_rhs (Problem_atoms p ! k))))\<close>
+           (merge_list rs (unat (Atom_lhs (Problem_atoms_l p ! k))) (unat (Atom_rhs (Problem_atoms_l p ! k))))\<close>
 proof -
-  let ?l = \<open>unat (Atom_lhs (Problem_atoms p ! k))\<close> and ?r = \<open>unat (Atom_rhs (Problem_atoms p ! k))\<close>
-  let ?A = \<open>asserted p t (length (Problem_atoms p))\<close>
-  have wf: \<open>wf_problem p\<close> and n: \<open>length rs = length (Problem_terms p)\<close>
+  let ?l = \<open>unat (Atom_lhs (Problem_atoms_l p ! k))\<close> and ?r = \<open>unat (Atom_rhs (Problem_atoms_l p ! k))\<close>
+  let ?A = \<open>asserted p t (length (Problem_atoms_l p))\<close>
+  have wf: \<open>wf_problem p\<close> and n: \<open>length rs = length (Problem_terms_l p)\<close>
     and sound: \<open>rep_sound p ?A rs\<close> and has: \<open>rep_has (asserted p t k) rs\<close> and lt: \<open>reps_lt p rs\<close>
     using assms(1) unfolding atoms_inv_def rep_for_def by simp_all
   have lr: \<open>?l < length rs\<close> \<open>?r < length rs\<close> using wf_atom[OF wf assms(2)] n by simp_all
@@ -115,8 +115,8 @@ proof -
 qed
 
 lemma atoms_inv_lt:
-  assumes \<open>atoms_inv p t k rs\<close> \<open>j < length (Problem_atoms p)\<close>
-  shows \<open>unat (Atom_lhs (Problem_atoms p ! j)) < length rs\<close> \<open>unat (Atom_rhs (Problem_atoms p ! j)) < length rs\<close>
+  assumes \<open>atoms_inv p t k rs\<close> \<open>j < length (Problem_atoms_l p)\<close>
+  shows \<open>unat (Atom_lhs (Problem_atoms_l p ! j)) < length rs\<close> \<open>unat (Atom_rhs (Problem_atoms_l p ! j)) < length rs\<close>
     \<open>length rs < 18446744073709551616\<close>
   using assms wf_atom[of p j] unfolding atoms_inv_def rep_for_def sizes_ok_def by auto
 
@@ -128,9 +128,9 @@ definition log_atoms_inv_contract :: \<open>Problem \<Rightarrow> bool list \<Ri
       ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
   \<open>log_atoms_inv_contract p t rep g rs xs gx xv ys gy yv ls gl lv \<equiv>
      let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> xs \<mapsto>\<langle>\<top>\<rangle> gx\<down>xv \<star> ys \<mapsto>\<langle>\<top>\<rangle> gy\<down>yv \<star> ls \<mapsto>\<langle>\<top>\<rangle> gl\<down>lv \<star>
-        \<langle>rep_for p t rs \<and> length t = length (Problem_atoms p)\<rangle> in
+        \<langle>rep_for p t rs \<and> length t = length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>_. can_alloc_reference \<star>
-        (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p (asserted p t (length (Problem_atoms p))) rs'\<rangle>) \<star>
+        (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p (asserted p t (length (Problem_atoms_l p))) rs'\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) in
      make_function_contract pre post\<close>
 
@@ -155,8 +155,8 @@ lemma log_atoms_inv_spec:
 definition arg_moved_contract :: \<open>Problem \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow> 64 word \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>arg_moved_contract p old rs i \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length old = length (Problem_terms p) \<and> length rs = length (Problem_terms p) \<and>
-         unat i < length (Problem_terms p)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length old = length (Problem_terms_l p) \<and> length rs = length (Problem_terms_l p) \<and>
+         unat i < length (Problem_terms_l p)\<rangle> in
      make_function_contract pre (\<lambda>_. can_alloc_reference)\<close>
 
 lemma arg_moved_spec:
@@ -176,8 +176,8 @@ lemma arg_moved_spec:
 definition moved_rows_contract :: \<open>Problem \<Rightarrow> 64 word list \<Rightarrow> 64 word list \<Rightarrow> ('s, bool list, 'abort) function_contract\<close> where
   \<open>moved_rows_contract p old rs \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> length old = length (Problem_terms p) \<and> length rs = length (Problem_terms p)\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> \<langle>length r = length (Problem_terms p)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> length old = length (Problem_terms_l p) \<and> length rs = length (Problem_terms_l p)\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>length r = length (Problem_terms_l p)\<rangle> in
      make_function_contract pre post\<close>
 
 lemma moved_rows_spec:
@@ -186,7 +186,7 @@ lemma moved_rows_spec:
   apply (crush_base simp add: sizes_ok_def unat_of_nat_lt63)
   subgoal for rows_ref
     apply (ucincl_discharge\<open>
-      rule_tac INV=\<open>\<lambda>_ _. can_alloc_reference \<star> (\<Squnion>g' v. rows_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms p)\<rangle>)\<close>
+      rule_tac INV=\<open>\<lambda>_ _. can_alloc_reference \<star> (\<Squnion>g' v. rows_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms_l p)\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -203,7 +203,7 @@ definition log_col_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 word
       64 word \<Rightarrow> (nat \<times> nat) set \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>log_col_contract p rep g rs xs gx xv ys gy yv ls gl lv i E \<equiv>
      let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> xs \<mapsto>\<langle>\<top>\<rangle> gx\<down>xv \<star> ys \<mapsto>\<langle>\<top>\<rangle> gy\<down>yv \<star> ls \<mapsto>\<langle>\<top>\<rangle> gl\<down>lv \<star>
-        \<langle>cc_inv p E rs \<and> unat i < length (Problem_terms p)\<rangle> in
+        \<langle>cc_inv p E rs \<and> unat i < length (Problem_terms_l p)\<rangle> in
      let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p E rs'\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) in
      make_function_contract pre post\<close>
@@ -275,7 +275,7 @@ definition log_bucket_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 w
       64 word \<Rightarrow> (nat \<times> nat) set \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>log_bucket_contract p rep g rs xs gx xv ys gy yv ls gl lv i E \<equiv>
      let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> xs \<mapsto>\<langle>\<top>\<rangle> gx\<down>xv \<star> ys \<mapsto>\<langle>\<top>\<rangle> gy\<down>yv \<star> ls \<mapsto>\<langle>\<top>\<rangle> gl\<down>lv \<star>
-        \<langle>cc_inv p E rs \<and> unat i < length (Problem_terms p) \<and> Term_args (Problem_terms p ! unat i) \<noteq> []\<rangle> in
+        \<langle>cc_inv p E rs \<and> unat i < length (Problem_terms_l p) \<and> Term_args_l (Problem_terms_l p ! unat i) \<noteq> []\<rangle> in
      let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p E rs'\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) in
      make_function_contract pre post\<close>
@@ -312,7 +312,7 @@ definition log_moved_contract :: \<open>Problem \<Rightarrow> bool list \<Righta
       (nat \<times> nat) set \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>log_moved_contract p rows rep g rs xs gx xv ys gy yv ls gl lv E \<equiv>
      let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> xs \<mapsto>\<langle>\<top>\<rangle> gx\<down>xv \<star> ys \<mapsto>\<langle>\<top>\<rangle> gy\<down>yv \<star> ls \<mapsto>\<langle>\<top>\<rangle> gl\<down>lv \<star>
-        \<langle>cc_inv p E rs \<and> length rows = length (Problem_terms p)\<rangle> in
+        \<langle>cc_inv p E rs \<and> length rows = length (Problem_terms_l p)\<rangle> in
      let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p E rs'\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) in
      make_function_contract pre post\<close>
@@ -362,11 +362,11 @@ definition round_moved_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 
       ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow>
       ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> (nat \<times> nat) set \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>round_moved_contract p old rep g rs xs ys ls E \<equiv>
-     let pre = can_alloc_reference \<star> (\<Squnion>g' v. old \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms p)\<rangle>) \<star>
+     let pre = can_alloc_reference \<star> (\<Squnion>g' v. old \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms_l p)\<rangle>) \<star>
         rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star>
         \<langle>cc_inv p E rs \<and> wf_problem p \<and> sizes_ok p\<rangle> in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' v. old \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms p)\<rangle>) \<star>
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' v. old \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms_l p)\<rangle>) \<star>
         (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p E rs'\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) in
      make_function_contract pre post\<close>
@@ -374,7 +374,7 @@ definition round_moved_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 
 lemma round_moved_spec:
   shows \<open>\<Gamma>; round_moved p perm st old rep xs ys ls \<Turnstile>\<^sub>F round_moved_contract p old rep g rs xs ys ls E\<close>
   apply (crush_boot f: round_moved_def contract: round_moved_contract_def)
-  apply (crush_base specs add: moved_rows_spec copy_into_spec[where n=\<open>length (Problem_terms p)\<close>] buckets_spec log_moved_spec
+  apply (crush_base specs add: moved_rows_spec copy_into_spec[where n=\<open>length (Problem_terms_l p)\<close>] buckets_spec log_moved_spec
       contracts add: moved_rows_contract_def copy_into_contract_def buckets_contract_def log_moved_contract_def
       simp add: cc_inv_length)
   done
@@ -384,11 +384,11 @@ definition close_moved_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 
       ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow>
       ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> (nat \<times> nat) set \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
   \<open>close_moved_contract p old rep g rs xs ys ls E \<equiv>
-     let pre = can_alloc_reference \<star> (\<Squnion>g' v. old \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms p)\<rangle>) \<star>
+     let pre = can_alloc_reference \<star> (\<Squnion>g' v. old \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms_l p)\<rangle>) \<star>
         rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star>
         \<langle>cc_inv p E rs \<and> wf_problem p \<and> sizes_ok p\<rangle> in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' v. old \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms p)\<rangle>) \<star>
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' v. old \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms_l p)\<rangle>) \<star>
         (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p E rs'\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) in
      make_function_contract pre post\<close>
@@ -398,11 +398,11 @@ lemma close_moved_spec:
   apply (crush_boot f: close_moved_def contract: close_moved_contract_def)
   apply (crush_base simp add: cc_inv_def sizes_ok_def)
   apply (ucincl_discharge\<open>
-    rule_tac INV=\<open>\<lambda>_ _. can_alloc_reference \<star> (\<Squnion>g' v. old \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms p)\<rangle>) \<star>
+    rule_tac INV=\<open>\<lambda>_ _. can_alloc_reference \<star> (\<Squnion>g' v. old \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms_l p)\<rangle>) \<star>
         (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p E rs'\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v)\<close>
       and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
-      and \<tau>=\<open>\<lambda>_. can_alloc_reference \<star> (\<Squnion>g' v. old \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms p)\<rangle>) \<star>
+      and \<tau>=\<open>\<lambda>_. can_alloc_reference \<star> (\<Squnion>g' v. old \<mapsto>\<langle>\<top>\<rangle> g'\<down>v \<star> \<langle>length v = length (Problem_terms_l p)\<rangle>) \<star>
         (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p E rs'\<rangle>) \<star>
         (\<Squnion>g' v. xs \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ys \<mapsto>\<langle>\<top>\<rangle> g'\<down>v) \<star> (\<Squnion>g' v. ls \<mapsto>\<langle>\<top>\<rangle> g'\<down>v)\<close>
       and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -418,8 +418,8 @@ definition cc_step_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarr
         function_contract\<close> where
   \<open>cc_step_contract p t f rs \<equiv>
      let pre = can_alloc_reference \<star>
-        \<langle>wf_problem p \<and> sizes_ok p \<and> rep_for p t rs \<and> length t = length (Problem_atoms p) \<and>
-         length f = length (Problem_atoms p)\<rangle> in
+        \<langle>wf_problem p \<and> sizes_ok p \<and> rep_for p t rs \<and> length t = length (Problem_atoms_l p) \<and>
+         length f = length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
         \<langle>conflict_result p t f (fst r) \<and> (\<exists>rs'. implied_ok p t f rs' (fst (snd r)) (fst (snd (snd r)))) \<and>
          rep_for p t (fst (snd (snd (snd r))))\<rangle> in
