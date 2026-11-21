@@ -76,18 +76,18 @@ text \<open>\<^typ>\<open>SmtTerm\<close> has exactly these constructors.\<close
 lemma SmtTerm_shape:
   fixes x :: SmtTerm
   obtains a0 where \<open>x = CONST SmtTerm_BoolConst (a0 :: bool)\<close>
-  | a0 where \<open>x = CONST SmtTerm_BvConst (a0 :: bool list)\<close>
+  | a0 where \<open>x = CONST SmtTerm_BvConst (a0 :: bool rvec)\<close>
   | a0 where \<open>x = CONST SmtTerm_Param (a0 :: 64 word)\<close>
-  | a0 a1 where \<open>x = CONST SmtTerm_Fun (a0 :: 64 word) (a1 :: SmtTerm list)\<close>
-  | a0 a1 where \<open>x = CONST SmtTerm_Def (a0 :: 64 word) (a1 :: SmtTerm list)\<close>
-  | a0 a1 where \<open>x = CONST SmtTerm_App (a0 :: SmtOp) (a1 :: SmtTerm list)\<close>
+  | a0 a1 where \<open>x = CONST SmtTerm_Fun (a0 :: 64 word) (a1 :: SmtTerm rvec)\<close>
+  | a0 a1 where \<open>x = CONST SmtTerm_Def (a0 :: 64 word) (a1 :: SmtTerm rvec)\<close>
+  | a0 a1 where \<open>x = CONST SmtTerm_App (a0 :: SmtOp) (a1 :: SmtTerm rvec)\<close>
   by (cases x) auto
 
 text \<open>\<^typ>\<open>SmtFun\<close> is a record with exactly these fields.\<close>
 lemma SmtFun_shape:
   fixes x y :: SmtFun
   shows \<open>x = y \<longleftrightarrow>
-     (CONST SmtFun_args x :: SmtSort list) = SmtFun_args y \<and>
+     (CONST SmtFun_args x :: SmtSort rvec) = SmtFun_args y \<and>
      (CONST SmtFun_ret x :: SmtSort) = SmtFun_ret y\<close>
   by (cases x; cases y) simp
 
@@ -95,7 +95,7 @@ text \<open>\<^typ>\<open>SmtDef\<close> is a record with exactly these fields.\
 lemma SmtDef_shape:
   fixes x y :: SmtDef
   shows \<open>x = y \<longleftrightarrow>
-     (CONST SmtDef_params x :: SmtSort list) = SmtDef_params y \<and>
+     (CONST SmtDef_params x :: SmtSort rvec) = SmtDef_params y \<and>
      (CONST SmtDef_ret x :: SmtSort) = SmtDef_ret y \<and>
      (CONST SmtDef_body x :: SmtTerm) = SmtDef_body y\<close>
   by (cases x; cases y) simp
@@ -105,16 +105,16 @@ lemma SmtProblem_shape:
   fixes x y :: SmtProblem
   shows \<open>x = y \<longleftrightarrow>
      (CONST SmtProblem_num_sorts x :: 64 word) = SmtProblem_num_sorts y \<and>
-     (CONST SmtProblem_funs x :: SmtFun list) = SmtProblem_funs y \<and>
-     (CONST SmtProblem_defs x :: SmtDef list) = SmtProblem_defs y \<and>
-     (CONST SmtProblem_asserts x :: SmtTerm list) = SmtProblem_asserts y\<close>
+     (CONST SmtProblem_funs x :: SmtFun rvec) = SmtProblem_funs y \<and>
+     (CONST SmtProblem_defs x :: SmtDef rvec) = SmtProblem_defs y \<and>
+     (CONST SmtProblem_asserts x :: SmtTerm rvec) = SmtProblem_asserts y\<close>
   by (cases x; cases y) simp
 
 text \<open>\<^typ>\<open>SmtValue\<close> has exactly these constructors.\<close>
 lemma SmtValue_shape:
   fixes x :: SmtValue
   obtains a0 where \<open>x = CONST SmtValue_Bool (a0 :: bool)\<close>
-  | a0 where \<open>x = CONST SmtValue_Bv (a0 :: bool list)\<close>
+  | a0 where \<open>x = CONST SmtValue_Bv (a0 :: bool rvec)\<close>
   | a0 where \<open>x = CONST SmtValue_Elem (a0 :: 64 word)\<close>
   by (cases x) auto
 
@@ -122,7 +122,7 @@ text \<open>\<^typ>\<open>SmtEntry\<close> is a record with exactly these fields
 lemma SmtEntry_shape:
   fixes x y :: SmtEntry
   shows \<open>x = y \<longleftrightarrow>
-     (CONST SmtEntry_args x :: SmtValue list) = SmtEntry_args y \<and>
+     (CONST SmtEntry_args x :: SmtValue rvec) = SmtEntry_args y \<and>
      (CONST SmtEntry_val x :: SmtValue) = SmtEntry_val y\<close>
   by (cases x; cases y) simp
 
@@ -130,7 +130,7 @@ text \<open>\<^typ>\<open>SmtInterp\<close> is a record with exactly these field
 lemma SmtInterp_shape:
   fixes x y :: SmtInterp
   shows \<open>x = y \<longleftrightarrow>
-     (CONST SmtInterp_entries x :: SmtEntry list) = SmtInterp_entries y \<and>
+     (CONST SmtInterp_entries x :: SmtEntry rvec) = SmtInterp_entries y \<and>
      (CONST SmtInterp_default x :: SmtValue) = SmtInterp_default y\<close>
   by (cases x; cases y) simp
 
@@ -138,8 +138,8 @@ text \<open>\<^typ>\<open>SmtModel\<close> is a record with exactly these fields
 lemma SmtModel_shape:
   fixes x y :: SmtModel
   shows \<open>x = y \<longleftrightarrow>
-     (CONST SmtModel_domains x :: (64 word) list) = SmtModel_domains y \<and>
-     (CONST SmtModel_funs x :: SmtInterp list) = SmtModel_funs y\<close>
+     (CONST SmtModel_domains x :: (64 word) rvec) = SmtModel_domains y \<and>
+     (CONST SmtModel_funs x :: SmtInterp rvec) = SmtModel_funs y\<close>
   by (cases x; cases y) simp
 
 text \<open>\<^typ>\<open>SmtAnswer\<close> has exactly these constructors.\<close>

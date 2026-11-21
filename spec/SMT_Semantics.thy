@@ -248,34 +248,45 @@ text \<open>The last case covers the binary functions with result of the width o
   \<open>bvudiv\<close>, \<open>bvurem\<close>, \<open>bvshl\<close>, \<open>bvlshr\<close>, \<open>bvnand\<close>, \<open>bvnor\<close>, \<open>bvxor\<close>, \<open>bvxnor\<close>, \<open>bvsub\<close>,
   \<open>bvsdiv\<close>, \<open>bvsrem\<close>, \<open>bvsmod\<close>, \<open>bvashr\<close>.\<close>
 
+text \<open>A \<^verbatim>\<open>Vec\<close> is a value of \<^typ>\<open>'a rvec\<close> (AutoCorrode's model of \<^verbatim>\<open>Vec<T>\<close>, with its
+  capacity); its elements are \<^const>\<open>rvec_elems\<close>, its length \<^const>\<open>rvec_length\<close>. The
+  specification reads every \<^verbatim>\<open>Vec\<close> through its elements; the capacity has no meaning in it.
+  The recursive functions on terms below recurse through the elements of the arguments; this
+  lemma gives their termination.\<close>
+lemma rvec_elems_size [termination_simp]:
+  assumes \<open>x \<in> set (rvec_elems v)\<close>
+  shows \<open>f x < size_rvec f v\<close>
+  using assms by (cases v) (auto simp: less_Suc_eq_le intro: size_list_estimation')
+
 text \<open>The sort of a term, if it is well-sorted, given the declared symbols \<open>fs\<close>, the definitions
   \<open>ds\<close> it may refer to, and the sorts \<open>ps\<close> of the parameters in scope.\<close>
 fun smt_tsort :: \<open>SmtFun list \<Rightarrow> SmtDef list \<Rightarrow> SmtSort list \<Rightarrow> SmtTerm \<Rightarrow> SmtSort option\<close> where
   \<open>smt_tsort fs ds ps (SmtTerm_BoolConst b) = Some SmtSort_Bool\<close>
 | \<open>smt_tsort fs ds ps (SmtTerm_BvConst bs) =
-     (if 0 < length bs \<and> length bs < 2 ^ 64 then Some (SmtSort_BitVec (of_nat (length bs))) else None)\<close>
+     (if 0 < rvec_length bs \<and> rvec_length bs < 2 ^ 64 then Some (SmtSort_BitVec (of_nat (rvec_length bs))) else None)\<close>
 | \<open>smt_tsort fs ds ps (SmtTerm_Param k) = (if unat k < length ps then Some (ps ! unat k) else None)\<close>
 | \<open>smt_tsort fs ds ps (SmtTerm_Fun f args) =
-     (if unat f < length fs \<and> map (smt_tsort fs ds ps) args = map Some (SmtFun_args (fs ! unat f))
+     (if unat f < length fs \<and> map (smt_tsort fs ds ps) (rvec_elems args) = map Some (rvec_elems (SmtFun_args (fs ! unat f)))
       then Some (SmtFun_ret (fs ! unat f)) else None)\<close>
 | \<open>smt_tsort fs ds ps (SmtTerm_Def d args) =
-     (if unat d < length ds \<and> map (smt_tsort fs ds ps) args = map Some (SmtDef_params (ds ! unat d))
+     (if unat d < length ds \<and> map (smt_tsort fs ds ps) (rvec_elems args) = map Some (rvec_elems (SmtDef_params (ds ! unat d)))
       then Some (SmtDef_ret (ds ! unat d)) else None)\<close>
 | \<open>smt_tsort fs ds ps (SmtTerm_App op args) =
-     (if None \<notin> set (map (smt_tsort fs ds ps) args)
-      then smt_op_sort op (map (the \<circ> smt_tsort fs ds ps) args) else None)\<close>
+     (if None \<notin> set (map (smt_tsort fs ds ps) (rvec_elems args))
+      then smt_op_sort op (map (the \<circ> smt_tsort fs ds ps) (rvec_elems args)) else None)\<close>
 
 text \<open>A well-sorted problem: all sorts are sorts of the problem; the body of definition \<open>d\<close> has the
   declared result sort, over the parameters of \<open>d\<close> and the definitions before \<open>d\<close>; every assertion
   is Boolean and has no parameters.\<close>
 definition smt_wf :: \<open>SmtProblem \<Rightarrow> bool\<close> where
   \<open>smt_wf p \<equiv>
-     let ns = unat (SmtProblem_num_sorts p) in let fs = SmtProblem_funs p in let ds = SmtProblem_defs p in
-     (\<forall>f \<in> set fs. (\<forall>s \<in> set (SmtFun_args f). smt_wf_sort ns s) \<and> smt_wf_sort ns (SmtFun_ret f)) \<and>
-     (\<forall>d < length ds. (\<forall>s \<in> set (SmtDef_params (ds ! d)). smt_wf_sort ns s) \<and>
+     let ns = unat (SmtProblem_num_sorts p) in
+     let fs = rvec_elems (SmtProblem_funs p) in let ds = rvec_elems (SmtProblem_defs p) in
+     (\<forall>f \<in> set fs. (\<forall>s \<in> set (rvec_elems (SmtFun_args f)). smt_wf_sort ns s) \<and> smt_wf_sort ns (SmtFun_ret f)) \<and>
+     (\<forall>d < length ds. (\<forall>s \<in> set (rvec_elems (SmtDef_params (ds ! d))). smt_wf_sort ns s) \<and>
         smt_wf_sort ns (SmtDef_ret (ds ! d)) \<and>
-        smt_tsort fs (take d ds) (SmtDef_params (ds ! d)) (SmtDef_body (ds ! d)) = Some (SmtDef_ret (ds ! d))) \<and>
-     (\<forall>t \<in> set (SmtProblem_asserts p). smt_tsort fs ds [] t = Some SmtSort_Bool)\<close>
+        smt_tsort fs (take d ds) (rvec_elems (SmtDef_params (ds ! d))) (SmtDef_body (ds ! d)) = Some (SmtDef_ret (ds ! d))) \<and>
+     (\<forall>t \<in> set (rvec_elems (SmtProblem_asserts p)). smt_tsort fs ds [] t = Some SmtSort_Bool)\<close>
 
 subsection \<open>Evaluation\<close>
 
@@ -609,11 +620,11 @@ text \<open>The value of a term under the interpretation \<open>I\<close> of the
   the parameters in scope.\<close>
 fun smt_eval :: \<open>(nat \<Rightarrow> sval list \<Rightarrow> sval) \<Rightarrow> (sval list \<Rightarrow> sval) list \<Rightarrow> sval list \<Rightarrow> SmtTerm \<Rightarrow> sval\<close> where
   \<open>smt_eval I dv vs (SmtTerm_BoolConst b) = VBool b\<close>
-| \<open>smt_eval I dv vs (SmtTerm_BvConst bs) = VBv (length bs) (smt_bits_nat bs)\<close>
+| \<open>smt_eval I dv vs (SmtTerm_BvConst bs) = VBv (rvec_length bs) (smt_bits_nat (rvec_elems bs))\<close>
 | \<open>smt_eval I dv vs (SmtTerm_Param k) = vs ! unat k\<close>
-| \<open>smt_eval I dv vs (SmtTerm_Fun f args) = I (unat f) (map (smt_eval I dv vs) args)\<close>
-| \<open>smt_eval I dv vs (SmtTerm_Def d args) = (dv ! unat d) (map (smt_eval I dv vs) args)\<close>
-| \<open>smt_eval I dv vs (SmtTerm_App op args) = smt_op_sem op (map (smt_eval I dv vs) args)\<close>
+| \<open>smt_eval I dv vs (SmtTerm_Fun f args) = I (unat f) (map (smt_eval I dv vs) (rvec_elems args))\<close>
+| \<open>smt_eval I dv vs (SmtTerm_Def d args) = (dv ! unat d) (map (smt_eval I dv vs) (rvec_elems args))\<close>
+| \<open>smt_eval I dv vs (SmtTerm_App op args) = smt_op_sem op (map (smt_eval I dv vs) (rvec_elems args))\<close>
 
 text \<open>The meanings of the definitions, in order: definition \<open>d\<close> means its body with the parameters
   bound to the arguments and the definitions before \<open>d\<close> meaning what they mean.\<close>
@@ -623,15 +634,15 @@ definition smt_def_sems :: \<open>(nat \<Rightarrow> sval list \<Rightarrow> sva
 text \<open>An interpretation that respects the sorts of the declared symbols.\<close>
 definition smt_interp_ok :: \<open>SmtProblem \<Rightarrow> (nat \<Rightarrow> sval list \<Rightarrow> sval) \<Rightarrow> bool\<close> where
   \<open>smt_interp_ok p I \<equiv>
-     \<forall>f < length (SmtProblem_funs p). \<forall>vs.
-       list_all2 smt_has_sort (SmtFun_args (SmtProblem_funs p ! f)) vs \<longrightarrow>
-       smt_has_sort (SmtFun_ret (SmtProblem_funs p ! f)) (I f vs)\<close>
+     \<forall>f < rvec_length (SmtProblem_funs p). \<forall>vs.
+       list_all2 smt_has_sort (rvec_elems (SmtFun_args (rvec_elems (SmtProblem_funs p) ! f))) vs \<longrightarrow>
+       smt_has_sort (SmtFun_ret (rvec_elems (SmtProblem_funs p) ! f)) (I f vs)\<close>
 
 text \<open>Every assertion is true under \<open>I\<close>.\<close>
 definition smt_satisfies :: \<open>SmtProblem \<Rightarrow> (nat \<Rightarrow> sval list \<Rightarrow> sval) \<Rightarrow> bool\<close> where
   \<open>smt_satisfies p I \<equiv>
-     let dv = smt_def_sems I (SmtProblem_defs p) in
-     \<forall>t \<in> set (SmtProblem_asserts p). smt_eval I dv [] t = VBool True\<close>
+     let dv = smt_def_sems I (rvec_elems (SmtProblem_defs p)) in
+     \<forall>t \<in> set (rvec_elems (SmtProblem_asserts p)). smt_eval I dv [] t = VBool True\<close>
 
 definition smt_satisfiable :: \<open>SmtProblem \<Rightarrow> bool\<close> where
   \<open>smt_satisfiable p \<equiv> \<exists>I. smt_interp_ok p I \<and> smt_satisfies p I\<close>
@@ -642,12 +653,12 @@ definition smt_val_of :: \<open>SmtValue \<Rightarrow> sval\<close> where
   \<open>smt_val_of val \<equiv>
      (case val of
         SmtValue_Bool b \<Rightarrow> (VBool b)
-      | SmtValue_Bv bs \<Rightarrow> (VBv (length bs) (smt_bits_nat bs))
+      | SmtValue_Bv bs \<Rightarrow> (VBv (rvec_length bs) (smt_bits_nat (rvec_elems bs)))
       | SmtValue_Elem e \<Rightarrow> (VElem (unat e)))\<close>
 
 lemma smt_val_of_simps [simp]:
   \<open>smt_val_of (SmtValue_Bool b) = VBool b\<close>
-  \<open>smt_val_of (SmtValue_Bv bs) = VBv (length bs) (smt_bits_nat bs)\<close>
+  \<open>smt_val_of (SmtValue_Bv bs) = VBv (rvec_length bs) (smt_bits_nat (rvec_elems bs))\<close>
   \<open>smt_val_of (SmtValue_Elem e) = VElem (unat e)\<close>
   by (simp_all add: smt_val_of_def)
 
@@ -655,12 +666,12 @@ text \<open>A table: at the arguments \<open>vs\<close>, the value of the first 
   the default.\<close>
 definition smt_interp_of :: \<open>SmtInterp \<Rightarrow> sval list \<Rightarrow> sval\<close> where
   \<open>smt_interp_of t vs \<equiv>
-     (case List.find (\<lambda>e. List.map smt_val_of (SmtEntry_args e) = vs) (SmtInterp_entries t) of
+     (case List.find (\<lambda>e. List.map smt_val_of (rvec_elems (SmtEntry_args e)) = vs) (rvec_elems (SmtInterp_entries t)) of
         Some e \<Rightarrow> smt_val_of (SmtEntry_val e)
       | None \<Rightarrow> smt_val_of (SmtInterp_default t))\<close>
 
 definition smt_model_interp :: \<open>SmtModel \<Rightarrow> nat \<Rightarrow> sval list \<Rightarrow> sval\<close> where
-  \<open>smt_model_interp m f vs \<equiv> smt_interp_of (SmtModel_funs m ! f) vs\<close>
+  \<open>smt_model_interp m f vs \<equiv> smt_interp_of (rvec_elems (SmtModel_funs m) ! f) vs\<close>
 
 text \<open>A value of sort \<open>s\<close> in a model with the domain sizes \<open>dms\<close>: an element is below the size of
   the domain of its sort.\<close>
@@ -668,14 +679,14 @@ definition smt_model_value_ok :: \<open>64 word list \<Rightarrow> SmtSort \<Rig
   \<open>smt_model_value_ok dms srt val \<equiv>
      (case (srt, val) of
         (SmtSort_Bool, SmtValue_Bool b) \<Rightarrow> True
-      | (SmtSort_BitVec w, SmtValue_Bv bs) \<Rightarrow> (length bs = unat w)
+      | (SmtSort_BitVec w, SmtValue_Bv bs) \<Rightarrow> (rvec_length bs = unat w)
       | (SmtSort_Uninterpreted s, SmtValue_Elem e) \<Rightarrow>
           (unat s < length dms \<and> unat e < unat (dms ! unat s))
       | _ \<Rightarrow> False)\<close>
 
 lemma smt_model_value_ok_simps [simp]:
   \<open>smt_model_value_ok dms SmtSort_Bool (SmtValue_Bool b) = True\<close>
-  \<open>smt_model_value_ok dms (SmtSort_BitVec w) (SmtValue_Bv bs) = (length bs = unat w)\<close>
+  \<open>smt_model_value_ok dms (SmtSort_BitVec w) (SmtValue_Bv bs) = (rvec_length bs = unat w)\<close>
   \<open>smt_model_value_ok dms (SmtSort_Uninterpreted s) (SmtValue_Elem e) =
      (unat s < length dms \<and> unat e < unat (dms ! unat s))\<close>
   \<open>smt_model_value_ok dms SmtSort_Bool (SmtValue_Bv bs) = False\<close>
@@ -690,13 +701,14 @@ text \<open>A well-formed model of \<open>p\<close>: a non-empty domain for ever
   every declared symbol, and every value in the tables of the right sort and in its domain.\<close>
 definition smt_model_wf :: \<open>SmtProblem \<Rightarrow> SmtModel \<Rightarrow> bool\<close> where
   \<open>smt_model_wf p m \<equiv>
-     let dms = SmtModel_domains m in let fs = SmtProblem_funs p in let ts = SmtModel_funs m in
+     let dms = rvec_elems (SmtModel_domains m) in let fs = rvec_elems (SmtProblem_funs p) in
+     let ts = rvec_elems (SmtModel_funs m) in
      length dms = unat (SmtProblem_num_sorts p) \<and> (\<forall>n \<in> set dms. 0 < unat n) \<and>
      length ts = length fs \<and>
      (\<forall>f < length fs.
         smt_model_value_ok dms (SmtFun_ret (fs ! f)) (SmtInterp_default (ts ! f)) \<and>
-        (\<forall>e \<in> set (SmtInterp_entries (ts ! f)).
-           list_all2 (smt_model_value_ok dms) (SmtFun_args (fs ! f)) (SmtEntry_args e) \<and>
+        (\<forall>e \<in> set (rvec_elems (SmtInterp_entries (ts ! f))).
+           list_all2 (smt_model_value_ok dms) (rvec_elems (SmtFun_args (fs ! f))) (rvec_elems (SmtEntry_args e)) \<and>
            smt_model_value_ok dms (SmtFun_ret (fs ! f)) (SmtEntry_val e)))\<close>
 
 text \<open>A model of \<open>p\<close>: well-formed, and every assertion true under its interpretation.\<close>
@@ -708,23 +720,26 @@ subsection \<open>The representation condition\<close>
 text \<open>Every list in the term \<open>t\<close> (the bits of a constant, the arguments of an application) has
   fewer than \<open>2^63\<close> elements.\<close>
 fun smt_term_repr :: \<open>SmtTerm \<Rightarrow> bool\<close> where
-  \<open>smt_term_repr (SmtTerm_BvConst bs) = (length bs < 2 ^ 63)\<close>
-| \<open>smt_term_repr (SmtTerm_Fun f args) = (length args < 2 ^ 63 \<and> (\<forall>a \<in> set args. smt_term_repr a))\<close>
-| \<open>smt_term_repr (SmtTerm_Def d args) = (length args < 2 ^ 63 \<and> (\<forall>a \<in> set args. smt_term_repr a))\<close>
-| \<open>smt_term_repr (SmtTerm_App op args) = (length args < 2 ^ 63 \<and> (\<forall>a \<in> set args. smt_term_repr a))\<close>
+  \<open>smt_term_repr (SmtTerm_BvConst bs) = (rvec_length bs < 2 ^ 63)\<close>
+| \<open>smt_term_repr (SmtTerm_Fun f args) = (rvec_length args < 2 ^ 63 \<and> (\<forall>a \<in> set (rvec_elems args). smt_term_repr a))\<close>
+| \<open>smt_term_repr (SmtTerm_Def d args) = (rvec_length args < 2 ^ 63 \<and> (\<forall>a \<in> set (rvec_elems args). smt_term_repr a))\<close>
+| \<open>smt_term_repr (SmtTerm_App op args) = (rvec_length args < 2 ^ 63 \<and> (\<forall>a \<in> set (rvec_elems args). smt_term_repr a))\<close>
 | \<open>smt_term_repr _ = True\<close>
 
 text \<open>\<open>smt_repr_ok p\<close>: every list in \<open>p\<close> has fewer than \<open>2^63\<close> elements. Rust ensures
   this for every \<^verbatim>\<open>Vec\<close> whose elements are not zero-sized, because an allocation has at most
   \<^verbatim>\<open>isize::MAX\<close> \<open>= 2^63 - 1\<close> bytes; so the condition holds for every value a Rust program can
-  pass. The translation represents a \<^verbatim>\<open>Vec\<close> as a HOL list, which has no such bound, so a
-  contract states it.\<close>
+  pass. The type \<^typ>\<open>'a rvec\<close> of the translation does not bound the number of elements (the
+  bound is in \<^const>\<open>rvec_wf\<close>, which is not part of the type), so a contract states it.\<close>
 definition smt_repr_ok :: \<open>SmtProblem \<Rightarrow> bool\<close> where
   \<open>smt_repr_ok p \<equiv>
-     length (SmtProblem_funs p) < 2 ^ 63 \<and> (\<forall>f \<in> set (SmtProblem_funs p). length (SmtFun_args f) < 2 ^ 63) \<and>
-     length (SmtProblem_defs p) < 2 ^ 63 \<and>
-     (\<forall>d \<in> set (SmtProblem_defs p). length (SmtDef_params d) < 2 ^ 63 \<and> smt_term_repr (SmtDef_body d)) \<and>
-     length (SmtProblem_asserts p) < 2 ^ 63 \<and> (\<forall>t \<in> set (SmtProblem_asserts p). smt_term_repr t)\<close>
+     rvec_length (SmtProblem_funs p) < 2 ^ 63 \<and>
+     (\<forall>f \<in> set (rvec_elems (SmtProblem_funs p)). rvec_length (SmtFun_args f) < 2 ^ 63) \<and>
+     rvec_length (SmtProblem_defs p) < 2 ^ 63 \<and>
+     (\<forall>d \<in> set (rvec_elems (SmtProblem_defs p)).
+        rvec_length (SmtDef_params d) < 2 ^ 63 \<and> smt_term_repr (SmtDef_body d)) \<and>
+     rvec_length (SmtProblem_asserts p) < 2 ^ 63 \<and>
+     (\<forall>t \<in> set (rvec_elems (SmtProblem_asserts p)). smt_term_repr t)\<close>
 
 subsection \<open>The size of a problem\<close>
 
@@ -737,32 +752,32 @@ function smt_nodes :: \<open>SmtDef list \<Rightarrow> SmtTerm \<Rightarrow> nat
   \<open>smt_nodes ds (SmtTerm_BoolConst b) = 1\<close>
 | \<open>smt_nodes ds (SmtTerm_BvConst bs) = 1\<close>
 | \<open>smt_nodes ds (SmtTerm_Param k) = 1\<close>
-| \<open>smt_nodes ds (SmtTerm_Fun f args) = Suc (sum_list (map (smt_nodes ds) args))\<close>
+| \<open>smt_nodes ds (SmtTerm_Fun f args) = Suc (sum_list (map (smt_nodes ds) (rvec_elems args)))\<close>
 | \<open>smt_nodes ds (SmtTerm_Def d args) =
-     Suc (sum_list (map (smt_nodes ds) args)) +
-     (if unat d < length ds \<and> SmtDef_params (ds ! unat d) \<noteq> []
+     Suc (sum_list (map (smt_nodes ds) (rvec_elems args))) +
+     (if unat d < length ds \<and> rvec_elems (SmtDef_params (ds ! unat d)) \<noteq> []
       then smt_nodes (take (unat d) ds) (SmtDef_body (ds ! unat d)) else 0)\<close>
-| \<open>smt_nodes ds (SmtTerm_App op args) = Suc (sum_list (map (smt_nodes ds) args))\<close>
+| \<open>smt_nodes ds (SmtTerm_App op args) = Suc (sum_list (map (smt_nodes ds) (rvec_elems args)))\<close>
   by pat_completeness auto
 termination
   by (relation \<open>measures [\<lambda>(ds, _). length ds, \<lambda>(_, t). size t]\<close>)
-     (auto intro: size_list_estimation' simp: less_Suc_eq_le)
+     (auto dest: rvec_elems_size[where f=size] simp: less_Suc_eq)
 
 text \<open>The size of a problem: the numbers of declared symbols, definitions and assertions, and the
   nodes of the assertions and of the bodies of the definitions without parameters.\<close>
 definition smt_size :: \<open>SmtProblem \<Rightarrow> nat\<close> where
   \<open>smt_size p \<equiv>
-     let ds = SmtProblem_defs p in
-     length (SmtProblem_funs p) + length ds + length (SmtProblem_asserts p) +
-     sum_list (map (\<lambda>d. if SmtDef_params (ds ! d) = [] then smt_nodes (take d ds) (SmtDef_body (ds ! d)) else 0)
+     let ds = rvec_elems (SmtProblem_defs p) in
+     rvec_length (SmtProblem_funs p) + length ds + rvec_length (SmtProblem_asserts p) +
+     sum_list (map (\<lambda>d. if rvec_elems (SmtDef_params (ds ! d)) = [] then smt_nodes (take d ds) (SmtDef_body (ds ! d)) else 0)
                 [0..<length ds]) +
-     sum_list (map (smt_nodes ds) (SmtProblem_asserts p))\<close>
+     sum_list (map (smt_nodes ds) (rvec_elems (SmtProblem_asserts p)))\<close>
 
 text \<open>The subterms of a term, the term included.\<close>
 fun smt_subterms :: \<open>SmtTerm \<Rightarrow> SmtTerm list\<close> where
-  \<open>smt_subterms (SmtTerm_Fun f args) = SmtTerm_Fun f args # concat (map smt_subterms args)\<close>
-| \<open>smt_subterms (SmtTerm_Def d args) = SmtTerm_Def d args # concat (map smt_subterms args)\<close>
-| \<open>smt_subterms (SmtTerm_App op args) = SmtTerm_App op args # concat (map smt_subterms args)\<close>
+  \<open>smt_subterms (SmtTerm_Fun f args) = SmtTerm_Fun f args # concat (map smt_subterms (rvec_elems args))\<close>
+| \<open>smt_subterms (SmtTerm_Def d args) = SmtTerm_Def d args # concat (map smt_subterms (rvec_elems args))\<close>
+| \<open>smt_subterms (SmtTerm_App op args) = SmtTerm_App op args # concat (map smt_subterms (rvec_elems args))\<close>
 | \<open>smt_subterms t = [t]\<close>
 
 text \<open>The width of the sort of a term (0 if it is not a bit-vector).\<close>
@@ -773,16 +788,16 @@ text \<open>The widths of the subterms satisfying \<open>Q\<close> of the bodies
   parameters) and of the assertions.\<close>
 definition smt_term_widths :: \<open>(SmtTerm \<Rightarrow> bool) \<Rightarrow> SmtProblem \<Rightarrow> nat set\<close> where
   \<open>smt_term_widths Q p \<equiv>
-     let fs = SmtProblem_funs p in let ds = SmtProblem_defs p in
-     (\<Union>d < length ds. smt_twidth fs (take d ds) (SmtDef_params (ds ! d)) `
+     let fs = rvec_elems (SmtProblem_funs p) in let ds = rvec_elems (SmtProblem_defs p) in
+     (\<Union>d < length ds. smt_twidth fs (take d ds) (rvec_elems (SmtDef_params (ds ! d))) `
         Set.filter Q (set (smt_subterms (SmtDef_body (ds ! d))))) \<union>
-     (\<Union>t \<in> set (SmtProblem_asserts p). smt_twidth fs ds [] ` Set.filter Q (set (smt_subterms t)))\<close>
+     (\<Union>t \<in> set (rvec_elems (SmtProblem_asserts p)). smt_twidth fs ds [] ` Set.filter Q (set (smt_subterms t)))\<close>
 
 text \<open>The widths of the sorts of the declared symbols and of the definitions.\<close>
 definition smt_sort_widths :: \<open>SmtProblem \<Rightarrow> nat set\<close> where
   \<open>smt_sort_widths p \<equiv>
-     (\<Union>f \<in> set (SmtProblem_funs p). smt_width ` set (SmtFun_ret f # SmtFun_args f)) \<union>
-     (\<Union>d \<in> set (SmtProblem_defs p). smt_width ` set (SmtDef_ret d # SmtDef_params d))\<close>
+     (\<Union>f \<in> set (rvec_elems (SmtProblem_funs p)). smt_width ` set (SmtFun_ret f # rvec_elems (SmtFun_args f))) \<union>
+     (\<Union>d \<in> set (rvec_elems (SmtProblem_defs p)). smt_width ` set (SmtDef_ret d # rvec_elems (SmtDef_params d)))\<close>
 
 text \<open>The largest bit-vector width in a problem (0 if there is none).\<close>
 definition smt_max_width :: \<open>SmtProblem \<Rightarrow> nat\<close> where
@@ -802,7 +817,7 @@ definition smt_max_mul_width :: \<open>SmtProblem \<Rightarrow> nat\<close> wher
 
 text \<open>The arguments of an application of a theory function (none for other terms).\<close>
 fun smt_app_args :: \<open>SmtTerm \<Rightarrow> SmtTerm list\<close> where
-  \<open>smt_app_args (SmtTerm_App op args) = args\<close>
+  \<open>smt_app_args (SmtTerm_App op args) = rvec_elems args\<close>
 | \<open>smt_app_args _ = []\<close>
 
 text \<open>An application of \<open>distinct\<close>, whose usual encoding compares every pair of arguments.\<close>
@@ -816,6 +831,6 @@ definition smt_max_distinct :: \<open>SmtProblem \<Rightarrow> nat\<close> where
   \<open>smt_max_distinct p \<equiv>
      Max (insert 0 ((\<lambda>u. length (smt_app_args u)) `
        Set.filter smt_distinct
-         (\<Union>t \<in> set (map SmtDef_body (SmtProblem_defs p) @ SmtProblem_asserts p). set (smt_subterms t))))\<close>
+         (\<Union>t \<in> set (map SmtDef_body (rvec_elems (SmtProblem_defs p)) @ rvec_elems (SmtProblem_asserts p)). set (smt_subterms t))))\<close>
 
 end
