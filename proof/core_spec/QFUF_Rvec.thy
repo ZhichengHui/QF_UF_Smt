@@ -64,6 +64,11 @@ lemma rvec_cap_max_make [simp]:
   \<open>0 < s \<Longrightarrow> s \<le> 48 \<Longrightarrow> a \<le> 8 \<Longrightarrow> 2 ^ 57 \<le> rvec_cap_max (make_elem_layout s a)\<close>
   by (rule rvec_cap_max_ge) simp_all
 
+text \<open>A vector of fewer than \<open>2^56\<close> elements can be created (\<^verbatim>\<open>vec![x; n]\<close>, \<^verbatim>\<open>to_vec\<close>).\<close>
+lemma rvec_cap_max_make_le [simp]:
+  \<open>n < 2 ^ 56 \<Longrightarrow> 0 < s \<Longrightarrow> s \<le> 48 \<Longrightarrow> a \<le> 8 \<Longrightarrow> n \<le> rvec_cap_max (make_elem_layout s a)\<close>
+  by (rule order.trans[OF _ rvec_cap_max_make[of s a]]) simp_all
+
 subsection \<open>Creating a vector\<close>
 
 lemma rvec_from_elem_val_eq_Some [simp]:
@@ -85,6 +90,14 @@ lemma rvec_clone_val_components [simp]:
   \<open>rvec_elems (rvec_clone_val v) = rvec_elems v\<close>
   \<open>rvec_layout (rvec_clone_val v) = rvec_layout v\<close>
   by (simp_all add: rvec_clone_val_def)
+
+subsection \<open>Updating the elements\<close>
+
+text \<open>A write through \<^const>\<open>rvec_elems_focus\<close> (an assignment to an element) updates the elements
+  and keeps the capacity and the layout.\<close>
+lemma rvec_elems_focus_modify [simp]:
+  \<open>focus_modify rvec_elems_focus f v = update_rvec_elems f v\<close>
+  by (simp add: focus_modify_def' rvec_elems_focus_components rvec.expand)
 
 subsection \<open>Growing a vector\<close>
 

@@ -307,12 +307,12 @@ lemma clause_unit_spec:
 
 subsection \<open>Union-find\<close>
 
-definition merge_contract :: \<open>('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
+definition merge_contract :: \<open>('addr, 'gv, 64 word rvec) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
       64 word \<Rightarrow> 64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
   \<open>merge_contract rep g rs a b \<equiv>
-     let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star>
+     let pre = can_alloc_reference \<star> (\<Squnion>rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs\<rangle>) \<star>
         \<langle>unat a < length rs \<and> unat b < length rs \<and> length rs < 2^64\<rangle> in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>(merge_list rs (unat a) (unat b))) in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rep_v \<star> \<langle>rvec_elems rep_v = (merge_list rs (unat a) (unat b))\<rangle>) in
      make_function_contract pre post\<close>
 
 lemma merge_spec:
@@ -320,8 +320,8 @@ lemma merge_spec:
   apply (crush_boot f: merge_def contract: merge_contract_def)
   apply crush_base
   apply (ucincl_discharge\<open>
-    rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> (\<Squnion>g'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>(List.map
-                 (\<lambda>x. if x = rs ! unat a then rs ! unat b else x) (take i rs) @ drop i rs))\<close>
+    rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> (\<Squnion>g' rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rep_v \<star> \<langle>rvec_elems rep_v = (List.map
+                 (\<lambda>x. if x = rs ! unat a then rs ! unat b else x) (take i rs) @ drop i rs)\<rangle>)\<close>
       and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
       and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -357,12 +357,12 @@ lemma congruent_spec:
 
 subsection \<open>Congruence closure\<close>
 
-definition scan_row_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
+definition scan_row_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 word rvec) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
       64 word \<Rightarrow> (nat \<times> nat) set \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>scan_row_contract p rep g rs i E \<equiv>
-     let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star>
+     let pre = can_alloc_reference \<star> (\<Squnion>rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs\<rangle>) \<star>
         \<langle>cc_inv p E rs \<and> unat i < length (Problem_terms_l p)\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
+     let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g' rs' rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs'\<rangle> \<star>
         \<langle>cc_inv p E rs' \<and> refines rs rs' \<and> row_joined p rs rs' (unat i) (unat i) \<and>
          (if r then card (set rs') < card (set rs) else rs' = rs)\<rangle>) in
      make_function_contract pre post\<close>
@@ -371,9 +371,9 @@ lemma scan_row_spec:
   shows \<open>\<Gamma>; scan_row p rep i \<Turnstile>\<^sub>F scan_row_contract p rep g rs i E\<close>
   apply (crush_boot f: scan_row_def contract: scan_row_contract_def)
   apply (crush_base simp add: cc_inv_def sizes_ok_def)
-  subgoal for changed_ref
+  subgoal for rep_v changed_ref
     apply (ucincl_discharge\<open>
-      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c g' rs'. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
+      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c g' rs' rep_v. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs'\<rangle> \<star>
                  \<langle>cc_inv p E rs' \<and> refines rs rs' \<and> row_joined p rs rs' (unat i) k \<and>
                   (if c then card (set rs') < card (set rs) else rs' = rs)\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
@@ -390,11 +390,11 @@ lemma scan_row_spec:
     done
   done
 
-definition scan_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
+definition scan_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 word rvec) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
       (nat \<times> nat) set \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>scan_contract p rep g rs E \<equiv>
-     let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p E rs\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
+     let pre = can_alloc_reference \<star> (\<Squnion>rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs\<rangle>) \<star> \<langle>cc_inv p E rs\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g' rs' rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs'\<rangle> \<star>
         \<langle>cc_inv p E rs' \<and> consts_joined p rs' \<and>
          (if r then card (set rs') < card (set rs) else rs' = rs \<and> closed p rs)\<rangle>) in
      make_function_contract pre post\<close>
@@ -403,9 +403,9 @@ lemma scan_spec:
   shows \<open>\<Gamma>; scan p rep \<Turnstile>\<^sub>F scan_contract p rep g rs E\<close>
   apply (crush_boot f: scan_def contract: scan_contract_def)
   apply (crush_base simp add: cc_inv_def sizes_ok_def)
-  subgoal for changed_ref
+  subgoal for rep_v changed_ref
     apply (ucincl_discharge\<open>
-      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c g' rs'. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
+      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c g' rs' rep_v. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs'\<rangle> \<star>
                  \<langle>cc_inv p E rs' \<and> consts_below p rs' k \<and>
                   (if c then card (set rs') < card (set rs) else rs' = rs \<and> (\<forall>i < k. row_joined p rs rs i i))\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
@@ -420,11 +420,11 @@ lemma scan_spec:
     done
   done
 
-definition scan_apps_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
+definition scan_apps_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 word rvec) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
       (nat \<times> nat) set \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>scan_apps_contract p rep g rs E \<equiv>
-     let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p E rs \<and> consts_joined p rs\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
+     let pre = can_alloc_reference \<star> (\<Squnion>rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs\<rangle>) \<star> \<langle>cc_inv p E rs \<and> consts_joined p rs\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g' rs' rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs'\<rangle> \<star>
         \<langle>cc_inv p E rs' \<and> consts_joined p rs' \<and>
          (if r then card (set rs') < card (set rs) else rs' = rs \<and> closed p rs)\<rangle>) in
      make_function_contract pre post\<close>
@@ -433,9 +433,9 @@ lemma scan_apps_spec:
   shows \<open>\<Gamma>; scan_apps p rep \<Turnstile>\<^sub>F scan_apps_contract p rep g rs E\<close>
   apply (crush_boot f: scan_apps_def contract: scan_apps_contract_def)
   apply (crush_base simp add: cc_inv_def sizes_ok_def)
-  subgoal for changed_ref
+  subgoal for rep_v changed_ref
     apply (ucincl_discharge\<open>
-      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c g' rs'. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
+      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>gc c g' rs' rep_v. changed_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs'\<rangle> \<star>
                  \<langle>cc_inv p E rs' \<and> consts_joined p rs' \<and>
                   (if c then card (set rs') < card (set rs) else rs' = rs \<and> apps_below p rs k)\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
@@ -450,11 +450,11 @@ lemma scan_apps_spec:
     done
   done
 
-definition close_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
+definition close_contract :: \<open>Problem \<Rightarrow> ('addr, 'gv, 64 word rvec) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> 64 word list \<Rightarrow>
       (nat \<times> nat) set \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
   \<open>close_contract p rep g rs E \<equiv>
-     let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p E rs\<rangle> in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p E rs' \<and> closed p rs'\<rangle>) in
+     let pre = can_alloc_reference \<star> (\<Squnion>rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs\<rangle>) \<star> \<langle>cc_inv p E rs\<rangle> in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs' rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs'\<rangle> \<star> \<langle>cc_inv p E rs' \<and> closed p rs'\<rangle>) in
      make_function_contract pre post\<close>
 
 lemma close_spec:
@@ -462,10 +462,10 @@ lemma close_spec:
   apply (crush_boot f: close_def contract: close_contract_def)
   apply (crush_base specs add: scan_spec contracts add: scan_contract_def simp add: cc_inv_def sizes_ok_def)
   apply (ucincl_discharge\<open>
-    rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
+    rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>g' rs' rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs'\<rangle> \<star>
                \<langle>cc_inv p E rs' \<and> consts_joined p rs' \<and> card (set rs') + k \<le> length (Problem_terms_l p)\<rangle>)\<close>
       and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
-      and \<tau>=\<open>\<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star> \<langle>cc_inv p E rs' \<and> closed p rs'\<rangle>)\<close>
+      and \<tau>=\<open>\<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs' rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs'\<rangle> \<star> \<langle>cc_inv p E rs' \<and> closed p rs'\<rangle>)\<close>
       and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
     in wp_raw_for_loop_framedI'\<close>)
   apply (crush_base specs add: scan_apps_spec contracts add: scan_apps_contract_def
@@ -479,15 +479,16 @@ subsection \<open>Facts for the model, the theory check and the search\<close>
 text \<open>Placed after the congruence-closure contracts, so that they are not in the context of
   the earlier crush calls, which pick facts by relevance.\<close>
 
-definition entry_of :: \<open>Problem \<Rightarrow> 64 word list \<Rightarrow> nat \<Rightarrow> Entry\<close> where
-  \<open>entry_of p rs i \<equiv> make_Entry (Term_fun (Problem_terms_l p ! i))
-     (List.map (\<lambda>x. rs ! unat x) (Term_args_l (Problem_terms_l p ! i))) (rs ! i)\<close>
+definition entry_of :: \<open>Problem \<Rightarrow> 64 word list \<Rightarrow> nat \<Rightarrow> 64 word \<times> 64 word list \<times> 64 word\<close> where
+  \<open>entry_of p rs i \<equiv> (Term_fun (Problem_terms_l p ! i),
+     List.map (\<lambda>x. rs ! unat x) (Term_args_l (Problem_terms_l p ! i)), rs ! i)\<close>
 
 lemma model_of_eq:
-  assumes \<open>length es = length (Problem_terms_l p)\<close> \<open>\<forall>j < length (Problem_terms_l p). es ! j = entry_of p rs j\<close>
-  shows \<open>make_Model es = model_of p rs\<close>
+  assumes \<open>length es = length (Problem_terms_l p)\<close>
+      and \<open>\<forall>j < length (Problem_terms_l p). entry_view (es ! j) = entry_of p rs j\<close>
+  shows \<open>List.map entry_view es = model_of p rs\<close>
 proof -
-  have \<open>es = List.map (entry_of p rs) [0..<length (Problem_terms_l p)]\<close>
+  have \<open>List.map entry_view es = List.map (entry_of p rs) [0..<length (Problem_terms_l p)]\<close>
     using assms by (intro nth_equalityI) simp_all
   then show ?thesis by (simp add: model_of_def entry_of_def)
 qed
@@ -512,25 +513,28 @@ definition model_vals_ok :: \<open>Problem \<Rightarrow> Model \<Rightarrow> boo
      (\<exists>t \<in> set (Problem_terms_l p). length (Entry_args_l e) \<le> length (Term_args_l t)))\<close>
 
 lemma model_of_vals_ok:
-  assumes \<open>cc_inv p E rs\<close>
-  shows \<open>model_vals_ok p (model_of p rs)\<close>
+  assumes \<open>cc_inv p E rs\<close> and mv: \<open>model_view m = model_of p rs\<close>
+  shows \<open>model_vals_ok p m\<close>
 proof -
   have wf: \<open>wf_problem p\<close> and n: \<open>length rs = length (Problem_terms_l p)\<close> and r: \<open>reps_lt p rs\<close>
     using assms by (simp_all add: cc_inv_def rep_ok_def)
   have rs: \<open>unat (rs ! k) < length (Problem_terms_l p)\<close> if \<open>k < length (Problem_terms_l p)\<close> for k
     using r n that unfolding reps_lt_def by (metis nth_mem)
-  have l: \<open>length (Model_entries_l (model_of p rs)) \<le> length (Problem_terms_l p)\<close> by (simp add: model_of_def)
+  have l: \<open>length (Model_entries_l m) \<le> length (Problem_terms_l p)\<close>
+    using arg_cong[OF mv, of length] by (simp add: model_of_def model_view_def)
   have each: \<open>unat (Entry_val e) < length (Problem_terms_l p) \<and>
           (\<forall>a \<in> set (Entry_args_l e). unat a < length (Problem_terms_l p)) \<and>
           (\<exists>t \<in> set (Problem_terms_l p). length (Entry_args_l e) \<le> length (Term_args_l t))\<close>
-    if ein: \<open>e \<in> set (Model_entries_l (model_of p rs))\<close> for e
+    if ein: \<open>e \<in> set (Model_entries_l m)\<close> for e
   proof -
-    obtain i where i: \<open>i < length (Problem_terms_l p)\<close> and e: \<open>e = make_Entry (Term_fun (Problem_terms_l p ! i))
-        (List.map (\<lambda>x. rs ! unat x) (Term_args_l (Problem_terms_l p ! i))) (rs ! i)\<close>
-      using ein by (auto simp add: model_of_def)
+    have \<open>entry_view e \<in> set (model_of p rs)\<close>
+      using ein mv by (metis image_eqI list.set_map model_view_def)
+    then obtain i where i: \<open>i < length (Problem_terms_l p)\<close> and e: \<open>entry_view e = (Term_fun (Problem_terms_l p ! i),
+        List.map (\<lambda>x. rs ! unat x) (Term_args_l (Problem_terms_l p ! i)), rs ! i)\<close>
+      by (auto simp add: model_of_def)
     have t: \<open>\<exists>t \<in> set (Problem_terms_l p). length (Entry_args_l e) \<le> length (Term_args_l t)\<close>
-      using i by (auto simp add: e intro!: bexI[of _ \<open>Problem_terms_l p ! i\<close>])
-    show ?thesis using rs[OF i] rs wf_args_lt_length[OF wf i] t by (auto simp add: e)
+      using i e by (auto simp add: entry_view_def intro!: bexI[of _ \<open>Problem_terms_l p ! i\<close>])
+    show ?thesis using rs[OF i] rs wf_args_lt_length[OF wf i] t e by (auto simp add: entry_view_def)
   qed
   show ?thesis using l each by (simp add: model_vals_ok_def)
 qed
@@ -616,7 +620,8 @@ qed
 lemma theory_some:
   assumes \<open>cc_inv p (asserted p a (length (Problem_atoms_l p))) rs\<close> \<open>closed p rs\<close>
       \<open>length a = length (Problem_atoms_l p)\<close> \<open>diseqs_hold p a rs (length (Problem_atoms_l p))\<close>
-  shows \<open>atom_vals (model_interp (model_of p rs)) p = a\<close>
+      \<open>model_view m = model_of p rs\<close>
+  shows \<open>atom_vals (model_interp m) p = a\<close>
   using assms model_of_atom_vals unfolding cc_inv_def diseqs_hold_def by blast
 
 text \<open>The postcondition of \<^const>\<open>find_unit\<close>.\<close>
@@ -714,10 +719,10 @@ lemma search_leaf_some:
   \<open>wf_problem p \<Longrightarrow> prop_true p a \<Longrightarrow> atom_vals I p = a \<Longrightarrow> problem_true I p\<close>
   using problem_true_prop_true by metis
 
-definition rep_args_contract :: \<open>64 word list \<Rightarrow> 64 word list \<Rightarrow> ('s, 64 word list, 'abort) function_contract\<close> where
+definition rep_args_contract :: \<open>64 word list \<Rightarrow> 64 word list \<Rightarrow> ('s, 64 word rvec, 'abort) function_contract\<close> where
   \<open>rep_args_contract rs xs \<equiv>
-     let pre = can_alloc_reference \<star> \<langle>(\<forall>x \<in> set xs. unat x < length rs) \<and> length xs < 2^64\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r = List.map (\<lambda>x. rs ! unat x) xs\<rangle> in
+     let pre = can_alloc_reference \<star> \<langle>(\<forall>x \<in> set xs. unat x < length rs) \<and> length xs < 2^56\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>rvec_elems r = List.map (\<lambda>x. rs ! unat x) xs\<rangle> in
      make_function_contract pre post\<close>
 
 lemma rep_args_spec:
@@ -726,7 +731,7 @@ lemma rep_args_spec:
   apply crush_base
   subgoal for out_ref
     apply (ucincl_discharge\<open>
-      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>g' ys. out_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>ys \<star>
+      rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>g' ys out_ref_v. out_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>out_ref_v \<star> \<langle>rvec_elems out_ref_v = ys\<rangle> \<star>
                  \<langle>ys = List.map (\<lambda>x. rs ! unat x) (take k xs) @ drop k xs\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -740,7 +745,7 @@ lemma rep_args_spec:
 definition build_model_contract :: \<open>Problem \<Rightarrow> 64 word list \<Rightarrow> ('s, Model, 'abort) function_contract\<close> where
   \<open>build_model_contract p rs \<equiv>
      let pre = can_alloc_reference \<star> \<langle>wf_problem p \<and> sizes_ok p \<and> length rs = length (Problem_terms_l p)\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r = model_of p rs\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>model_view r = model_of p rs\<rangle> in
      make_function_contract pre post\<close>
 
 lemma build_model_spec:
@@ -749,16 +754,18 @@ lemma build_model_spec:
   apply (crush_base simp add: sizes_ok_def)
   subgoal for entries_ref
     apply (ucincl_discharge\<open>
-      rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> (\<Squnion>g' es. entries_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>es \<star>
-                 \<langle>length es = length (Problem_terms_l p) \<and> (\<forall>j < i. es ! j = entry_of p rs j)\<rangle>)\<close>
+      rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> (\<Squnion>g' es entries_ref_v. entries_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>entries_ref_v \<star> \<langle>rvec_elems entries_ref_v = es\<rangle> \<star>
+                 \<langle>length es = length (Problem_terms_l p) \<and> (\<forall>j < i. entry_view (es ! j) = entry_of p rs j)\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
         and \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_raw_for_loop_framedI'\<close>)
     apply (crush_base specs add: rep_args_spec contracts add: rep_args_contract_def
         simp add: unat_of_nat_eq less_Suc_eq)
-    apply (auto simp add: entry_of_def intro: args_len_lt wf_args_lt_length model_of_eq)
+    apply (auto simp add: entry_of_def entry_view_def model_view_def small_ok_def
+        intro: args_len_lt wf_args_lt_length model_of_eq[unfolded entry_of_def])
     done
+  apply (simp add: small_ok_def unat_of_nat_eq)
   done
 
 subsection \<open>Facts used by the theory check\<close>
@@ -791,10 +798,10 @@ lemma cc_inv_assert_insert:
 
 subsection \<open>The theory check\<close>
 
-definition init_rep_contract :: \<open>64 word \<Rightarrow> ('s, 64 word list, 'abort) function_contract\<close> where
+definition init_rep_contract :: \<open>64 word \<Rightarrow> ('s, 64 word rvec, 'abort) function_contract\<close> where
   \<open>init_rep_contract n \<equiv>
-     let pre = can_alloc_reference in
-     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r = List.map word_of_nat [0..<unat n]\<rangle> in
+     let pre = can_alloc_reference \<star> \<langle>unat n < 2^56\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>rvec_elems r = List.map word_of_nat [0..<unat n]\<rangle> in
      make_function_contract pre post\<close>
 
 lemma init_rep_spec:
@@ -804,7 +811,7 @@ lemma init_rep_spec:
   apply crush_base
   subgoal for rep_ref
     apply (ucincl_discharge\<open>
-      rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> (\<Squnion>g' xs. rep_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>xs \<star>
+      rule_tac INV=\<open>\<lambda>_ i. can_alloc_reference \<star> (\<Squnion>g' xs rep_ref_v. rep_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>rep_ref_v \<star> \<langle>rvec_elems rep_ref_v = xs\<rangle> \<star>
                  \<langle>length xs = unat n \<and> (\<forall>j < i. xs ! j = word_of_nat j)\<rangle>)\<close>
         and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
         and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -815,12 +822,12 @@ lemma init_rep_spec:
     done
   done
 
-definition assert_eqs_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow>
+definition assert_eqs_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word \<Rightarrow> ('addr, 'gv, 64 word rvec) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow>
       64 word list \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
   \<open>assert_eqs_contract p a m rep g rs \<equiv>
-     let pre = can_alloc_reference \<star> rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star>
+     let pre = can_alloc_reference \<star> (\<Squnion>rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs\<rangle>) \<star>
         \<langle>cc_inv p {} rs \<and> length a = length (Problem_atoms_l p) \<and> unat m \<le> length (Problem_atoms_l p)\<rangle> in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' rs' rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs'\<rangle> \<star>
         \<langle>cc_inv p (asserted p a (unat m)) rs'\<rangle>) in
      make_function_contract pre post\<close>
 
@@ -832,7 +839,7 @@ lemma assert_eqs_spec:
   apply (crush_boot f: assert_eqs_def contract: assert_eqs_contract_def)
   apply (crush_base simp add: unat_of_nat_lt63 cc_inv_def sizes_ok_def)
   apply (ucincl_discharge\<open>
-    rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>g' rs'. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rs' \<star>
+    rule_tac INV=\<open>\<lambda>_ k. can_alloc_reference \<star> (\<Squnion>g' rs' rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g'\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs'\<rangle> \<star>
                \<langle>cc_inv p (asserted p a k) rs'\<rangle>)\<close>
       and BRK=\<open>\<lambda>_ _. \<langle>False\<rangle>\<close>
       and \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -842,13 +849,14 @@ lemma assert_eqs_spec:
   apply (crush_base specs add: merge_spec contracts add: merge_contract_def
       simp add: unat_of_nat_lt63 unat_of_nat_eq less_Suc_eq unat_idx_lt63[of _ \<open>Problem_atoms_l p\<close>]
         asserted_Suc unat_map_upt_nth63)
-  subgoal for i g' rs'
-    apply (rule aexists_entailsR[where x=g'], rule aexists_entailsR[where x=rs'])
+  subgoal for rv i g' rv'
+    apply (rule aexists_entailsR[where x=g'], rule aexists_entailsR[where x=\<open>rvec_elems rv'\<close>],
+        rule aexists_entailsR[where x=rv'])
     apply (crush_base simp add: unat_of_nat_lt63 unat_of_nat_eq less_Suc_eq unat_idx_lt63[of _ \<open>Problem_atoms_l p\<close>]
         asserted_Suc unat_map_upt_nth63)
     done
-  subgoal for i g' rs'
-    apply (crush_base specs add: merge_spec[where g=g' and rs=rs'] contracts add: merge_contract_def
+  subgoal for rv i g' rv'
+    apply (crush_base specs add: merge_spec[where g=g' and rs=\<open>rvec_elems rv'\<close>] contracts add: merge_contract_def
         simp add: unat_of_nat_lt63 unat_of_nat_eq less_Suc_eq unat_idx_lt63[of _ \<open>Problem_atoms_l p\<close>]
         asserted_Suc unat_map_upt_nth63)
     supply [[crush_allow_schematics = true]]
@@ -899,15 +907,15 @@ definition theory_check_contract :: \<open>Problem \<Rightarrow> bool list \<Rig
 text \<open>The state of \<open>rep\<close> is existentially quantified inside the contract: the caller gets it from
   the existential postcondition of \<^const>\<open>close\<close>, and a contract parameter would be instantiated
   before that existential is opened.\<close>
-definition finish_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow>
+definition finish_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> ('addr, 'gv, 64 word rvec) Global_Store.ref \<Rightarrow>
       ('s, Model option, 'abort) function_contract\<close> where
   \<open>finish_contract p a rep \<equiv>
      let pre = can_alloc_reference \<star>
-        (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star>
+        (\<Squnion>g rs rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs\<rangle> \<star>
           \<langle>cc_inv p (asserted p a (length (Problem_atoms_l p))) rs \<and> closed p rs \<and>
            length rs = length (Problem_terms_l p)\<rangle>) \<star>
         \<langle>length a = length (Problem_atoms_l p) \<and> wf_problem p \<and> sizes_ok p\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs) \<star>
+     let post = \<lambda>r. can_alloc_reference \<star> (\<Squnion>g rs rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs\<rangle>) \<star>
         \<langle>case r of
            None \<Rightarrow> \<forall>I :: nat \<Rightarrow> nat list \<Rightarrow> nat. atom_vals I p \<noteq> a
          | Some m \<Rightarrow> atom_vals (model_interp m) p = a \<and> model_vals_ok p m\<rangle> in
@@ -929,7 +937,7 @@ lemma theory_check_spec:
   apply (crush_base specs add: init_rep_spec assert_eqs_spec close_spec finish_spec
       contracts add: init_rep_contract_def assert_eqs_contract_def close_contract_def finish_contract_def
       simp add: unat_of_nat_lt63 unat_of_nat_eq)
-  apply (auto intro: cc_inv_init64 cc_inv_init cc_inv_length simp add: sizes_ok_def unat_of_nat_lt63)
+  apply (auto intro: cc_inv_init64 cc_inv_init cc_inv_length simp add: sizes_ok_def small_ok_def unat_of_nat_lt63)
   done
 
 definition first_joined_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> 64 word list \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
@@ -959,14 +967,14 @@ lemma first_joined_spec:
 
 text \<open>The contract keeps the invariant of \<open>rep\<close>: theory propagation (\<^const>\<open>cc_propagate\<close>)
   reads \<open>rep\<close> again afterwards.\<close>
-definition false_joined_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> ('addr, 'gv, 64 word list) Global_Store.ref \<Rightarrow>
+definition false_joined_contract :: \<open>Problem \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> ('addr, 'gv, 64 word rvec) Global_Store.ref \<Rightarrow>
       ('s, 64 word, 'abort) function_contract\<close> where
   \<open>false_joined_contract p t f rep \<equiv>
      let pre = can_alloc_reference \<star>
-        (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p (asserted p t (length (Problem_atoms_l p))) rs\<rangle>) \<star>
+        (\<Squnion>g rs rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs\<rangle> \<star> \<langle>cc_inv p (asserted p t (length (Problem_atoms_l p))) rs\<rangle>) \<star>
         \<langle>wf_problem p \<and> length t = length (Problem_atoms_l p) \<and> length f = length (Problem_atoms_l p)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
-        (\<Squnion>g rs. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rs \<star> \<langle>cc_inv p (asserted p t (length (Problem_atoms_l p))) rs\<rangle>) \<star>
+        (\<Squnion>g rs rep_v. rep \<mapsto>\<langle>\<top>\<rangle> g\<down>rep_v \<star> \<langle>rvec_elems rep_v = rs\<rangle> \<star> \<langle>cc_inv p (asserted p t (length (Problem_atoms_l p))) rs\<rangle>) \<star>
         \<langle>conflict_result p t f r\<rangle> in
      make_function_contract pre post\<close>
 

@@ -91,16 +91,25 @@ text \<open>\<^const>\<open>wf_problem\<close> has three parts:
   Rust panics on an out-of-bounds index, and the contract excludes aborts, so the indices must be in
   bounds.\<close>
 
+definition small_ok :: \<open>Problem \<Rightarrow> bool\<close> where
+  \<open>small_ok p \<equiv>
+     length (Problem_terms_l p) < 2^56 \<and> (\<forall>t \<in> set (Problem_terms_l p). length (Term_args_l t) < 2^56) \<and>
+     length (Problem_atoms_l p) < 2^56 \<and>
+     length (Problem_clauses_l p) < 2^56 \<and> (\<forall>c \<in> set (Problem_clauses_l p). length (Clause_lits_l c) < 2^56)\<close>
+
 definition sizes_ok :: \<open>Problem \<Rightarrow> bool\<close> where
   \<open>sizes_ok p \<equiv>
      length (Problem_terms_l p) < 2^63 \<and> (\<forall>t \<in> set (Problem_terms_l p). length (Term_args_l t) < 2^63) \<and>
      length (Problem_atoms_l p) < 2^63 \<and>
-     length (Problem_clauses_l p) < 2^63 \<and> (\<forall>c \<in> set (Problem_clauses_l p). length (Clause_lits_l c) < 2^63)\<close>
+     length (Problem_clauses_l p) < 2^63 \<and> (\<forall>c \<in> set (Problem_clauses_l p). length (Clause_lits_l c) < 2^63) \<and>
+     small_ok p\<close>
 
-text \<open>\<^const>\<open>sizes_ok\<close>: every \<^verbatim>\<open>Vec\<close> in the problem has fewer than \<open>2^63\<close> elements. Rust ensures
-  this for a \<^verbatim>\<open>Vec\<close> of non-zero-sized elements, because an allocation has at most
-  \<^verbatim>\<open>isize::MAX\<close> bytes. The translation represents a \<^verbatim>\<open>Vec\<close> as a HOL list, which has no such
-  bound, so the contract states it.\<close>
+text \<open>\<^const>\<open>sizes_ok\<close>: every \<^verbatim>\<open>Vec\<close> in the problem has fewer than \<open>2^56\<close> elements
+  (\<^const>\<open>small_ok\<close>; the bound \<open>2^63\<close> that Rust ensures for every \<^verbatim>\<open>Vec\<close> of non-zero-sized
+  elements follows, and is stated as well because most proofs use it). The solver creates vectors
+  of these lengths and grows vectors to them; within \<open>2^56\<close> elements their capacity cannot
+  overflow (\<^verbatim>\<open>QFUF_Rvec\<close>). \<^verbatim>\<open>check_sat\<close> calls \<^verbatim>\<open>solve\<close> only on problems within its size bound,
+  far below this one.\<close>
 
 subsection \<open>The contract\<close>
 
